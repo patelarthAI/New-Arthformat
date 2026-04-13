@@ -1,0 +1,47 @@
+{
+  "name": "precision-resume-formatter",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "vite build",
+    "start": "tsx server.ts",
+    "lint": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@google/genai": "^1.42.0",
+    "@supabase/supabase-js": "^2.98.0",
+    "@types/lodash": "^4.17.24",
+    "@types/pdfmake": "^0.3.1",
+    "axios": "^1.13.6",
+    "docx": "^9.5.3",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "file-saver": "^2.0.5",
+    "framer-motion": "^12.34.3",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.0",
+    "lodash": "^4.17.23",
+    "lucide-react": "^0.575.0",
+    "mammoth": "1.11.0",
+    "multer": "^2.0.2",
+    "pdfjs-dist": "^5.5.207",
+    "pdfmake": "^0.3.5",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tsx": "^4.21.0",
+    "word-extractor": "^1.0.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^25.3.0",
+    "@vitejs/plugin-react": "^5.1.4",
+    "tailwindcss": "^4.2.1",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
+  }
+}
