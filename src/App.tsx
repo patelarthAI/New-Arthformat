@@ -420,7 +420,7 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#04060f] text-slate-200 font-sans selection:bg-indigo-500/30 overflow-x-hidden">
+    <div className={`bg-[#04060f] text-slate-200 font-sans selection:bg-indigo-500/30 overflow-x-hidden ${appState === AppState.REVIEW ? 'lg:h-screen lg:overflow-hidden min-h-screen' : 'min-h-screen'}`}>
       {/* Ambient Background with slow-pulsing color rings */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[70%] h-[70%] rounded-full bg-indigo-600/[0.08] blur-[150px] animate-pulse" style={{ animationDuration: '8s' }} />
@@ -428,7 +428,7 @@ const App: React.FC = () => {
         <div className="absolute top-[25%] left-[25%] w-[50%] h-[50%] rounded-full bg-violet-500/[0.05] blur-[130px] animate-pulse" style={{ animationDuration: '12s' }} />
       </div>
 
-      <div className={`relative z-10 flex flex-col items-center px-4 sm:px-6 lg:px-8 ${appState === AppState.REVIEW ? 'py-4 h-screen overflow-hidden' : 'py-12 min-h-screen'}`}>
+      <div className={`relative z-10 flex flex-col items-center px-4 sm:px-6 lg:px-8 w-full ${appState === AppState.REVIEW ? 'py-4 lg:h-full lg:overflow-hidden min-h-screen' : 'py-12 min-h-screen'}`}>
         {/* Header - Brand Bar */}
         <div className={`w-full max-w-7xl flex items-center justify-between ${appState === AppState.REVIEW ? 'mb-4' : 'mb-8 sm:mb-14'}`}>
           <div 
@@ -606,7 +606,7 @@ const App: React.FC = () => {
             )}
 
         {/* Main Content Area */}
-        <div className={`w-full ${appState === AppState.REVIEW ? 'max-w-7xl flex-1 min-h-0 flex flex-col' : 'max-w-5xl'}`}>
+        <div className={`w-full ${appState === AppState.REVIEW ? 'max-w-7xl flex-1 lg:min-h-0 flex flex-col lg:overflow-hidden' : 'max-w-5xl'}`}>
           <AnimatePresence mode="wait">
             {(appState === AppState.IDLE || appState === AppState.ERROR) && (
               <motion.div 
@@ -778,7 +778,7 @@ const App: React.FC = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
-                className="h-full w-full flex flex-col min-h-0"
+                className="lg:h-full w-full flex flex-col lg:min-h-0"
               >
                 <ResumePreview 
                   key={fileName}

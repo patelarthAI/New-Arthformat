@@ -344,15 +344,15 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   const score = calculateScore();
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 w-full h-full min-h-0 mx-auto">
+    <div className="flex flex-col lg:flex-row gap-6 w-full lg:h-full lg:min-h-0 mx-auto">
       <style>{`
         #resume-preview-content ul li::marker {
           font-size: 13px;
         }
       `}</style>
       {/* Left Column: Resume Preview */}
-      <div className="flex-1 min-w-0 font-sans flex flex-col h-full min-h-0">
-        <div className="glassmorphic-card rounded-2xl p-5 flex flex-col h-full min-h-0 overflow-hidden">
+      <div className="flex-1 min-w-0 font-sans flex flex-col lg:h-full lg:min-h-0">
+        <div className="glassmorphic-card rounded-2xl p-5 flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
             {/* Toolbar */}
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-4 pb-4 border-b border-white/[0.06] flex-shrink-0">
                 <div className="flex items-center gap-3">
@@ -807,7 +807,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
       </div>
 
       {/* Right Column: Change Log / Recruiter Dashboard */}
-      <div className="w-full lg:w-80 flex-shrink-0 flex flex-col h-full min-h-0 space-y-4 overflow-hidden">
+      <div className="w-full lg:w-80 flex-shrink-0 flex flex-col lg:h-full lg:min-h-0 space-y-4 lg:overflow-hidden">
         
         {/* Contact Info Retention Selection Panel */}
         <motion.div 
@@ -870,7 +870,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
             <motion.div 
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="glassmorphic-card rounded-[24px] p-4 flex flex-col flex-1 min-h-0 overflow-hidden"
+                className="glassmorphic-card rounded-[24px] p-4 flex flex-col lg:flex-1 lg:min-h-0 lg:overflow-hidden"
             >
                 <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/[0.06] flex-shrink-0">
                     <div className="flex items-center gap-2">
@@ -937,7 +937,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
             <motion.div 
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="glassmorphic-card rounded-[24px] p-4 flex flex-col flex-1 min-h-0 overflow-hidden"
+                className="glassmorphic-card rounded-[24px] p-4 flex flex-col lg:flex-1 lg:min-h-0 lg:overflow-hidden"
             >
                 <div className="flex items-center gap-2 mb-4 pb-2 border-b border-white/[0.06] flex-shrink-0">
                     <History className="w-4.5 h-4.5 text-indigo-400" />
