@@ -458,321 +458,325 @@ const App: React.FC = () => {
           <AdminDashboard />
         ) : (
           <>
-            {(appState === AppState.IDLE || appState === AppState.ERROR) && (
-              <motion.div 
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                className="text-center mb-12 sm:mb-16 max-w-3xl flex flex-col items-center"
-              >
-                <div className="mb-6 hover:scale-105 transition-transform duration-500 cursor-pointer">
-                  <InteractiveLogo size="hero" />
-                </div>
-                <h1 className="font-display text-5xl md:text-7xl font-extrabold tracking-tight mb-5 text-white">
-                  Arth<span className="text-gradient-rainbow font-extrabold">Format</span> <span className="text-white">AI</span>
-                </h1>
-                
-                <p className="text-base sm:text-lg text-slate-400 font-light tracking-wide max-w-xl mx-auto">
-                  "Resumes Reimagined, Precision Personified."
-                </p>
-              </motion.div>
-            )}
-
-            {/* Format Selection (Main Page) */}
-            {appState === AppState.IDLE && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1, duration: 0.6 }}
-                className="flex flex-col items-center mb-10 w-full max-w-xl"
-              >
-                <label className="text-slate-400 text-xs mb-4 font-bold uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300">
-                  Select Target Template Style
-                </label>
-                <div className="grid grid-cols-2 gap-4 w-full">
-                  <button 
-                    onClick={() => setSelectedFormat(ResumeFormat.CLASSIC_PROFESSIONAL)}
-                    className={`px-5 py-5 rounded-2xl transition-all duration-300 flex flex-col items-center gap-3 cursor-pointer text-center relative overflow-hidden group ${
-                      selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL 
-                        ? 'bg-indigo-500/10 border border-indigo-500/50 text-white shadow-[0_0_25px_rgba(99,102,241,0.25)]' 
-                        : 'bg-white/[0.01] border border-white/[0.04] text-slate-400 hover:bg-white/[0.04] hover:border-white/[0.12] hover:text-white'
-                    }`}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 to-violet-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    <LayoutTemplate className={`w-5 h-5 relative z-10 transition-colors ${selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL ? 'text-indigo-400 font-bold' : 'text-slate-500 group-hover:text-slate-300'}`} />
-                    <span className="text-sm font-bold relative z-10 font-display">Classic Professional</span>
-                  </button>
-                  <button 
-                    onClick={() => setSelectedFormat(ResumeFormat.MODERN_EXECUTIVE)}
-                    className={`px-5 py-5 rounded-2xl transition-all duration-300 flex flex-col items-center gap-3 cursor-pointer text-center relative overflow-hidden group ${
-                      selectedFormat === ResumeFormat.MODERN_EXECUTIVE 
-                        ? 'bg-purple-500/10 border border-purple-500/50 text-white shadow-[0_0_25px_rgba(168,85,247,0.25)]' 
-                        : 'bg-white/[0.01] border border-white/[0.04] text-slate-400 hover:bg-white/[0.04] hover:border-white/[0.12] hover:text-white'
-                    }`}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    <Sparkles className={`w-5 h-5 relative z-10 transition-colors ${selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? 'text-purple-400 font-bold' : 'text-slate-500 group-hover:text-slate-300'}`} />
-                    <span className="text-sm font-bold relative z-10 font-display">Modern Executive</span>
-                  </button>
-                </div>
-
-                <div className="mt-8 flex justify-center w-full">
-                  <button
-                    onClick={() => setUsePro(!usePro)}
-                    className={`group relative flex items-center gap-3 px-6 py-3 rounded-full border transition-all duration-500 cursor-pointer overflow-hidden ${
-                       usePro 
-                        ? 'bg-amber-500/[0.08] border-amber-500/40 text-amber-200 shadow-[0_0_25px_rgba(245,158,11,0.15)]' 
-                        : 'bg-white/[0.01] border-white/[0.04] text-slate-400 hover:bg-white/[0.04] hover:border-indigo-500/30 hover:text-white'
-                     }`}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 to-orange-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    <Database className={`w-4 h-4 transition-transform group-hover:scale-110 relative z-10 ${usePro ? 'text-amber-400' : 'text-slate-500 group-hover:text-indigo-400'}`} />
-                    <span className="text-xs font-bold uppercase tracking-wider relative z-10 font-display">
-                      {usePro ? "Pro Engine (Gemini 3.1 Pro Intelligence)" : "Standard Engine (Gemini 3 Flash Speed)"}
-                    </span>
-                  </button>
-                </div>
-
-                {/* Contact Retention Options (Landing Screen) */}
-                <div 
-                  className={`mt-8 w-full flex flex-col sm:flex-row items-center justify-between gap-4 py-3 px-5 border rounded-2xl backdrop-blur-xl relative overflow-hidden transition-all duration-500 shadow-lg ${
-                    retainedFields.location || retainedFields.phone || retainedFields.email
-                      ? 'border-indigo-500/20 bg-slate-900/50 shadow-[0_0_20px_rgba(99,102,241,0.03)]'
-                      : 'border-white/[0.04] bg-slate-900/30'
-                  }`}
-                >
-                  {/* Subtle futuristic circuit grid background overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/[0.02] via-transparent to-purple-500/[0.02] pointer-events-none" />
+            {appState !== AppState.REVIEW ? (
+              <div className="w-full max-w-6xl flex-1 flex flex-col justify-center py-4 lg:py-6">
+                <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-center">
                   
-                  <div className="flex items-center gap-3 relative z-10 select-none">
-                    <div className={`relative flex items-center justify-center p-2 rounded-xl transition-all duration-500 ${
-                      retainedFields.location || retainedFields.phone || retainedFields.email
-                        ? 'bg-indigo-500/15 border border-indigo-500/30 text-indigo-400'
-                        : 'bg-white/5 border border-white/10 text-slate-400'
-                    }`}>
-                      <ShieldCheck className={`w-4 h-4 transition-transform duration-500 ${retainedFields.location || retainedFields.phone || retainedFields.email ? 'scale-110 rotate-360' : ''}`} />
-                      <span className="absolute -inset-0.5 rounded-xl bg-indigo-500/10 blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    </div>
-                    <div className="flex flex-col text-left">
-                      <span className="text-[13px] font-bold text-white tracking-wider font-display uppercase">Field Retention</span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2.5 justify-center relative z-10">
-                    <button
-                      id="landing-retain-location"
-                      onClick={() => setRetainedFields(prev => ({ ...prev, location: !prev.location }))}
-                      className={`group/btn flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs transition-all duration-300 cursor-pointer select-none ${
-                        retainedFields.location
-                          ? 'border-indigo-500/40 text-indigo-100 bg-indigo-500/10 shadow-[0_0_15px_rgba(99,102,241,0.12)]'
-                          : 'border-white/[0.05] bg-white/[0.02] text-slate-400 hover:text-white hover:bg-white/[0.05] hover:border-white/15'
-                      }`}
+                  {/* Left Column: Title and Configurations */}
+                  <div className="lg:col-span-5 flex flex-col items-center lg:items-start text-center lg:text-left">
+                    <motion.div 
+                      initial={{ opacity: 0, y: -20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                      className="flex flex-col items-center lg:items-start mb-6 lg:mb-8"
                     >
-                      <MapPin className={`w-3.5 h-3.5 transition-colors duration-300 ${retainedFields.location ? 'text-indigo-400' : 'text-slate-500 group-hover/btn:text-slate-300'}`} />
-                      <span className="font-semibold text-[11px] tracking-wide font-sans">Location</span>
-                      <span className={`w-1.5 h-1.5 rounded-full ml-1 transition-all duration-300 ${retainedFields.location ? 'bg-indigo-400 shadow-[0_0_8px_rgba(99,102,241,1)] scale-125' : 'bg-slate-700 scale-90'}`} />
-                    </button>
-                    
-                    <button
-                      id="landing-retain-phone"
-                      onClick={() => setRetainedFields(prev => ({ ...prev, phone: !prev.phone }))}
-                      className={`group/btn flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs transition-all duration-300 cursor-pointer select-none ${
-                        retainedFields.phone
-                          ? 'border-indigo-500/40 text-indigo-100 bg-indigo-500/10 shadow-[0_0_15px_rgba(99,102,241,0.12)]'
-                          : 'border-white/[0.05] bg-white/[0.02] text-slate-400 hover:text-white hover:bg-white/[0.05] hover:border-white/15'
-                      }`}
-                    >
-                      <Phone className={`w-3.5 h-3.5 transition-colors duration-300 ${retainedFields.phone ? 'text-indigo-400' : 'text-slate-500 group-hover/btn:text-slate-300'}`} />
-                      <span className="font-semibold text-[11px] tracking-wide font-sans">Phone</span>
-                      <span className={`w-1.5 h-1.5 rounded-full ml-1 transition-all duration-300 ${retainedFields.phone ? 'bg-indigo-400 shadow-[0_0_8px_rgba(99,102,241,1)] scale-125' : 'bg-slate-700 scale-90'}`} />
-                    </button>
-
-                    <button
-                      id="landing-retain-email"
-                      onClick={() => setRetainedFields(prev => ({ ...prev, email: !prev.email }))}
-                      className={`group/btn flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs transition-all duration-300 cursor-pointer select-none ${
-                        retainedFields.email
-                          ? 'border-indigo-500/40 text-indigo-100 bg-indigo-500/10 shadow-[0_0_15px_rgba(99,102,241,0.12)]'
-                          : 'border-white/[0.05] bg-white/[0.02] text-slate-400 hover:text-white hover:bg-white/[0.05] hover:border-white/15'
-                      }`}
-                    >
-                      <Mail className={`w-3.5 h-3.5 transition-colors duration-300 ${retainedFields.email ? 'text-indigo-400' : 'text-slate-500 group-hover/btn:text-slate-300'}`} />
-                      <span className="font-semibold text-[11px] tracking-wide font-sans">Email</span>
-                      <span className={`w-1.5 h-1.5 rounded-full ml-1 transition-all duration-300 ${retainedFields.email ? 'bg-indigo-400 shadow-[0_0_8px_rgba(99,102,241,1)] scale-125' : 'bg-slate-700 scale-90'}`} />
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-        {/* Main Content Area */}
-        <div className={`w-full ${appState === AppState.REVIEW ? 'max-w-7xl flex-1 lg:min-h-0 flex flex-col lg:overflow-hidden' : 'max-w-5xl'}`}>
-          <AnimatePresence mode="wait">
-            {(appState === AppState.IDLE || appState === AppState.ERROR) && (
-              <motion.div 
-                key="upload"
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                className="relative group w-full"
-              >
-                <div 
-                  className={`
-                    relative overflow-hidden rounded-[32px] p-12 sm:p-20 md:p-24
-                    flex flex-col items-center justify-center text-center glassmorphic-card min-h-[390px] cursor-pointer
-                    ${dragActive 
-                      ? 'border-indigo-500/80 bg-indigo-500/10 shadow-[0_0_60px_rgba(99,102,241,0.35)] scale-[1.01]' 
-                      : 'border-white/[0.04]'
-                    }
-                  `}
-                  onDragEnter={onDragEnter}
-                  onDragLeave={onDragLeave}
-                  onDragOver={onDragOver}
-                  onDrop={onDrop}
-                >
-                  <input
-                    type="file"
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                    onChange={(e) => e.target.files && handleFileChange(e.target.files[0])}
-                    accept=".pdf,.docx,.txt,.rtf,.png,.jpg,.jpeg,.webp"
-                  />
-                  
-                  {/* Glowing dynamic background flare */}
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-indigo-500/[0.06] rounded-full blur-[110px] pointer-events-none -z-10 group-hover:bg-indigo-500/[0.12] transition-colors duration-500" />
-                  
-                  <div className="relative z-10 mb-8">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-[1.5px] shadow-xl shadow-indigo-500/10">
-                      <div className="w-full h-full rounded-2xl bg-[#080d24] flex items-center justify-center">
-                        <UploadCloud className="w-9 h-9 sm:w-11 sm:h-11 text-indigo-400 group-hover:translate-y-[-3px] group-hover:text-pink-400 transition-all duration-300" />
+                      <div className="mb-4 hover:scale-105 transition-transform duration-500 cursor-pointer">
+                        <InteractiveLogo size="lg" />
                       </div>
-                    </div>
-                  </div>
-                  
-                  <h3 className="text-2xl sm:text-3xl font-bold text-white mb-3 tracking-tight font-display">
-                    Drop your resume here
-                  </h3>
-                  
-                  <p className="text-slate-400 mb-8 max-w-sm sm:max-w-md mx-auto font-light leading-relaxed text-sm sm:text-base">
-                    Supports Word (.docx, .doc), PDF, Text, or Images. We'll handle the rest with pixel-perfect structural precision.
-                  </p>
-                  
-                  <div className="btn-2026-neon px-8 py-4 font-bold text-sm tracking-wide rounded-xl shadow-xl transition-all duration-300 flex items-center justify-center gap-2.5 group-hover:scale-[1.03]">
-                    Browse Files <ArrowRight className="w-4 h-4 text-white group-hover:translate-x-0.5 transition-transform" />
-                  </div>
-                </div>
+                      <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight mb-4 text-white">
+                        Arth<span className="text-gradient-rainbow font-extrabold">Format</span> <span className="text-white">AI</span>
+                      </h1>
+                      
+                      <p className="text-sm sm:text-base text-slate-400 font-light tracking-wide leading-relaxed max-w-md">
+                        "Resumes Reimagined, Precision Personified."
+                      </p>
+                    </motion.div>
 
-                {errorMsg && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-6 p-6 bg-red-500/10 border border-red-500/20 rounded-2xl flex flex-col gap-4 backdrop-blur-md"
-                  >
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" />
-                      <div className="flex flex-col gap-1">
-                        <h4 className="font-bold text-red-200">Processing Issue</h4>
-                        <p className="text-sm text-red-100/80 leading-relaxed">{errorMsg}</p>
-                      </div>
-                    </div>
-                    <div className="flex justify-end">
-                      <button 
-                        onClick={handleReset}
-                        className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs font-bold uppercase tracking-widest rounded-lg transition-colors border border-red-500/30"
+                    {/* Format Selection (Only shown when not processing or staged) */}
+                    {appState === AppState.IDLE && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1, duration: 0.6 }}
+                        className="flex flex-col items-center lg:items-start w-full"
                       >
-                        Try Another File
-                      </button>
+                        <label className="text-slate-400 text-xs mb-3 font-bold uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300">
+                          Select Target Template Style
+                        </label>
+                        <div className="grid grid-cols-2 gap-3 w-full max-w-md">
+                          <button 
+                            onClick={() => setSelectedFormat(ResumeFormat.CLASSIC_PROFESSIONAL)}
+                            className={`px-4 py-4 rounded-xl transition-all duration-300 flex flex-col items-center gap-2 cursor-pointer text-center relative overflow-hidden group ${
+                              selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL 
+                                ? 'bg-indigo-500/10 border border-indigo-500/50 text-white shadow-[0_0_20px_rgba(99,102,241,0.2)]' 
+                                : 'bg-white/[0.01] border border-white/[0.04] text-slate-400 hover:bg-white/[0.04] hover:border-white/[0.12] hover:text-white'
+                            }`}
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 to-violet-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                            <LayoutTemplate className={`w-4 h-4 relative z-10 transition-colors ${selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL ? 'text-indigo-400 font-bold' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                            <span className="text-xs font-bold relative z-10 font-display">Classic Professional</span>
+                          </button>
+                          <button 
+                            onClick={() => setSelectedFormat(ResumeFormat.MODERN_EXECUTIVE)}
+                            className={`px-4 py-4 rounded-xl transition-all duration-300 flex flex-col items-center gap-2 cursor-pointer text-center relative overflow-hidden group ${
+                              selectedFormat === ResumeFormat.MODERN_EXECUTIVE 
+                                ? 'bg-purple-500/10 border border-purple-500/50 text-white shadow-[0_0_20px_rgba(168,85,247,0.2)]' 
+                                : 'bg-white/[0.01] border border-white/[0.04] text-slate-400 hover:bg-white/[0.04] hover:border-white/[0.12] hover:text-white'
+                            }`}
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                            <Sparkles className={`w-4 h-4 relative z-10 transition-colors ${selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? 'text-purple-400 font-bold' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                            <span className="text-xs font-bold relative z-10 font-display">Modern Executive</span>
+                          </button>
+                        </div>
+
+                        <div className="mt-5 flex justify-center lg:justify-start w-full">
+                          <button
+                            onClick={() => setUsePro(!usePro)}
+                            className={`group relative flex items-center gap-2 px-4 py-2 rounded-full border transition-all duration-500 cursor-pointer overflow-hidden ${
+                               usePro 
+                                ? 'bg-amber-500/[0.08] border-amber-500/40 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.1)]' 
+                                : 'bg-white/[0.01] border-white/[0.04] text-slate-400 hover:bg-white/[0.04] hover:border-indigo-500/30 hover:text-white'
+                             }`}
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 to-orange-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                            <Database className={`w-3.5 h-3.5 transition-transform group-hover:scale-110 relative z-10 ${usePro ? 'text-amber-400' : 'text-slate-500 group-hover:text-indigo-400'}`} />
+                            <span className="text-[10px] font-bold uppercase tracking-wider relative z-10 font-display">
+                              {usePro ? "Pro Engine (Gemini 3.1 Pro)" : "Standard Engine (Gemini 3 Flash)"}
+                            </span>
+                          </button>
+                        </div>
+
+                        {/* Contact Retention Options */}
+                        <div 
+                          className={`mt-6 w-full max-w-md flex flex-col sm:flex-row items-center justify-between gap-4 py-2.5 px-4 border rounded-2xl backdrop-blur-xl relative overflow-hidden transition-all duration-500 shadow-lg ${
+                            retainedFields.location || retainedFields.phone || retainedFields.email
+                              ? 'border-indigo-500/20 bg-slate-900/50 shadow-[0_0_20px_rgba(99,102,241,0.03)]'
+                              : 'border-white/[0.04] bg-slate-900/30'
+                          }`}
+                        >
+                          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/[0.02] via-transparent to-purple-500/[0.02] pointer-events-none" />
+                          
+                          <div className="flex items-center gap-2 relative z-10 select-none">
+                            <div className={`relative flex items-center justify-center p-1.5 rounded-xl transition-all duration-500 ${
+                              retainedFields.location || retainedFields.phone || retainedFields.email
+                                ? 'bg-indigo-500/15 border border-indigo-500/30 text-indigo-400'
+                                : 'bg-white/5 border border-white/10 text-slate-400'
+                            }`}>
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                            </div>
+                            <span className="text-[11px] font-bold text-white tracking-wider font-display uppercase">Retention</span>
+                          </div>
+
+                          <div className="flex items-center gap-2 justify-center relative z-10">
+                            <button
+                              id="landing-retain-location"
+                              onClick={() => setRetainedFields(prev => ({ ...prev, location: !prev.location }))}
+                              className={`group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] transition-all duration-300 cursor-pointer select-none ${
+                                retainedFields.location
+                                  ? 'border-indigo-500/40 text-indigo-100 bg-indigo-500/10 shadow-[0_0_10px_rgba(99,102,241,0.08)]'
+                                  : 'border-white/[0.05] bg-white/[0.02] text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              <MapPin className={`w-3 h-3 ${retainedFields.location ? 'text-indigo-400' : 'text-slate-500 group-hover/btn:text-slate-300'}`} />
+                              <span className="font-semibold">Location</span>
+                            </button>
+                            
+                            <button
+                              id="landing-retain-phone"
+                              onClick={() => setRetainedFields(prev => ({ ...prev, phone: !prev.phone }))}
+                              className={`group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] transition-all duration-300 cursor-pointer select-none ${
+                                retainedFields.phone
+                                  ? 'border-indigo-500/40 text-indigo-100 bg-indigo-500/10 shadow-[0_0_10px_rgba(99,102,241,0.08)]'
+                                  : 'border-white/[0.05] bg-white/[0.02] text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              <Phone className={`w-3 h-3 ${retainedFields.phone ? 'text-indigo-400' : 'text-slate-500 group-hover/btn:text-slate-300'}`} />
+                              <span className="font-semibold">Phone</span>
+                            </button>
+
+                            <button
+                              id="landing-retain-email"
+                              onClick={() => setRetainedFields(prev => ({ ...prev, email: !prev.email }))}
+                              className={`group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] transition-all duration-300 cursor-pointer select-none ${
+                                retainedFields.email
+                                  ? 'border-indigo-500/40 text-indigo-100 bg-indigo-500/10 shadow-[0_0_10px_rgba(99,102,241,0.08)]'
+                                  : 'border-white/[0.05] bg-white/[0.02] text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              <Mail className={`w-3 h-3 ${retainedFields.email ? 'text-indigo-400' : 'text-slate-500 group-hover/btn:text-slate-300'}`} />
+                              <span className="font-semibold">Email</span>
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </div>
+
+                  {/* Right Column: Interactive Upload / Processing Card */}
+                  <div className="lg:col-span-7 w-full flex flex-col justify-center">
+                    <div className="w-full max-w-xl mx-auto">
+                      <AnimatePresence mode="wait">
+                        {(appState === AppState.IDLE || appState === AppState.ERROR) && (
+                          <motion.div 
+                            key="upload"
+                            initial={{ opacity: 0, scale: 0.98 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.98 }}
+                            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                            className="relative group w-full"
+                          >
+                            <div 
+                              className={`
+                                relative overflow-hidden rounded-[24px] p-10 sm:p-14
+                                flex flex-col items-center justify-center text-center glassmorphic-card min-h-[340px] cursor-pointer
+                                ${dragActive 
+                                  ? 'border-indigo-500/80 bg-indigo-500/10 shadow-[0_0_40px_rgba(99,102,241,0.25)] scale-[1.01]' 
+                                  : 'border-white/[0.04]'
+                                }
+                              `}
+                              onDragEnter={onDragEnter}
+                              onDragLeave={onDragLeave}
+                              onDragOver={onDragOver}
+                              onDrop={onDrop}
+                            >
+                              <input
+                                type="file"
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                                onChange={(e) => e.target.files && handleFileChange(e.target.files[0])}
+                                accept=".pdf,.docx,.txt,.rtf,.png,.jpg,.jpeg,.webp"
+                              />
+                              
+                              {/* Glowing dynamic background flare */}
+                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500/[0.05] rounded-full blur-[90px] pointer-events-none -z-10 group-hover:bg-indigo-500/[0.1] transition-colors duration-500" />
+                              
+                              <div className="relative z-10 mb-6">
+                                <div className="w-16 h-16 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-[1.5px] shadow-lg shadow-indigo-500/10">
+                                  <div className="w-full h-full rounded-xl bg-[#080d24] flex items-center justify-center">
+                                    <UploadCloud className="w-8 h-8 text-indigo-400 group-hover:translate-y-[-2px] group-hover:text-pink-400 transition-all duration-300" />
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <h3 className="text-xl sm:text-2xl font-bold text-white mb-2 tracking-tight font-display">
+                                Drop your resume here
+                              </h3>
+                              
+                              <p className="text-slate-400 mb-6 max-w-xs sm:max-w-sm mx-auto font-light leading-relaxed text-xs sm:text-sm">
+                                Supports Word (.docx, .doc), PDF, Text, or Images. We'll handle the rest with pixel-perfect structural precision.
+                              </p>
+                              
+                              <div className="btn-2026-neon px-6 py-3 font-bold text-xs tracking-wide rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-2 group-hover:scale-[1.02]">
+                                Browse Files <ArrowRight className="w-3.5 h-3.5 text-white group-hover:translate-x-0.5 transition-transform" />
+                              </div>
+                            </div>
+
+                            {errorMsg && (
+                              <motion.div 
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="mt-5 p-5 bg-red-500/10 border border-red-500/20 rounded-2xl flex flex-col gap-3 backdrop-blur-md"
+                              >
+                                <div className="flex items-start gap-2.5">
+                                  <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                                  <div className="flex flex-col gap-1 text-left">
+                                    <h4 className="font-bold text-red-200 text-xs uppercase tracking-wider">Processing Issue</h4>
+                                    <p className="text-xs text-red-100/80 leading-relaxed">{errorMsg}</p>
+                                  </div>
+                                </div>
+                                <div className="flex justify-end">
+                                  <button 
+                                    onClick={handleReset}
+                                    className="px-3.5 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-200 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-colors border border-red-500/30"
+                                  >
+                                    Try Another File
+                                  </button>
+                                </div>
+                              </motion.div>
+                            )}
+                          </motion.div>
+                        )}
+
+                        {appState === AppState.STAGING && (
+                          <motion.div 
+                            key="staging"
+                            initial={{ opacity: 0, scale: 0.96 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.96 }}
+                            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                            className="glassmorphic-card rounded-[24px] p-8 sm:p-12 flex flex-col items-center text-center w-full"
+                          >
+                            <div className="w-14 h-14 bg-emerald-500/10 rounded-xl flex items-center justify-center mb-5 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+                              <CheckCircle className="w-7 h-7 text-emerald-400" />
+                            </div>
+                            <h2 className="text-xl font-bold text-white mb-2 font-display">File Successfully Loaded</h2>
+                            <p className="text-slate-400 mb-6 text-xs leading-relaxed max-w-sm">
+                              We've successfully staged <span className="text-indigo-400 font-mono font-medium">"{fileName}"</span>. Ready to extract and reformat with absolute style representation.
+                            </p>
+                            
+                            <div className="flex gap-3 w-full justify-center">
+                              <button 
+                                onClick={handleReset}
+                                className="btn-2026-secondary px-5 py-3 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button 
+                                onClick={handleSubmitForApproval}
+                                className="btn-2026-neon px-6 py-3 text-white font-bold text-[10px] uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <ArrowRight className="w-3.5 h-3.5" />
+                                Format Resume
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+
+                        {appState === AppState.WAITING_APPROVAL && (
+                          <motion.div 
+                            key="waiting"
+                            initial={{ opacity: 0, scale: 0.96 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.96 }}
+                            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                            className="glassmorphic-card rounded-[24px] p-8 sm:p-12 flex flex-col items-center text-center w-full"
+                          >
+                            <div className="w-14 h-14 bg-amber-500/10 rounded-xl flex items-center justify-center mb-5 border border-amber-500/25 shadow-[0_0_15px_rgba(245,158,11,0.15)]">
+                              <Clock className="w-7 h-7 text-amber-400" />
+                            </div>
+                            <h2 className="text-xl font-bold text-white mb-2 font-display">Awaiting Authorization</h2>
+                            <p className="text-slate-400 mb-6 text-xs leading-relaxed max-w-sm">
+                              Your formatted resume is staged and pending an administrator review. The processing will trigger instantly after confirmation.
+                              <br /><br />
+                              <span className="text-amber-400/90 text-[10px] font-bold uppercase tracking-wider bg-amber-500/[0.06] px-3.5 py-2 rounded-full border border-amber-500/20 inline-block">Please keep this browser window open</span>
+                            </p>
+                            <button 
+                              onClick={handleReset}
+                              className="btn-2026-secondary px-5 py-3 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                            >
+                              Submit Alternative File
+                            </button>
+                          </motion.div>
+                        )}
+
+                        {appState === AppState.PROCESSING && (
+                          <motion.div 
+                            key="processing"
+                            initial={{ opacity: 0, scale: 0.96 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.96 }}
+                            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                            className="glassmorphic-card rounded-[24px] p-12 sm:p-16 flex flex-col items-center justify-center text-center min-h-[340px] w-full"
+                          >
+                             <div className="relative mb-6">
+                                <div className="w-20 h-20 border-4 border-indigo-500/20 border-t-indigo-500 border-r-pink-500 rounded-full animate-spin"></div>
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <FileText className="w-7 h-7 text-indigo-400" />
+                                </div>
+                             </div>
+                             <h2 className="text-xl font-bold text-white mb-2 font-display">Reformatting Document</h2>
+                             <p className="text-slate-400/90 max-w-xs font-light text-xs animate-pulse leading-relaxed mx-auto mt-2">
+                               Analyzing structure, adjusting typography, and optimizing spacing for modern elite layout. Just a moment...
+                             </p>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
-                  </motion.div>
-                )}
-              </motion.div>
-            )}
+                  </div>
 
-            {appState === AppState.STAGING && (
-              <motion.div 
-                key="staging"
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                className="glassmorphic-card rounded-[32px] p-10 sm:p-14 flex flex-col items-center text-center w-full max-w-xl mx-auto"
-              >
-                <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mb-6 border border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.15)]">
-                  <CheckCircle className="w-8 h-8 text-emerald-400" />
                 </div>
-                <h2 className="text-2xl font-bold text-white mb-2 font-display">File Successfully Loaded</h2>
-                <p className="text-slate-400 mb-8 text-sm leading-relaxed max-w-md">
-                  We've successfully staged <span className="text-indigo-400 font-mono font-medium">"{fileName}"</span>. Ready to extract and reformat with absolute style representation.
-                </p>
-                
-                <div className="flex gap-4 w-full justify-center">
-                  <button 
-                    onClick={handleReset}
-                    className="btn-2026-secondary px-6 py-3.5 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    onClick={handleSubmitForApproval}
-                    className="btn-2026-neon px-8 py-3.5 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    <ArrowRight className="w-4 h-4" />
-                    Format Resume
-                  </button>
-                </div>
-              </motion.div>
-            )}
-
-            {appState === AppState.WAITING_APPROVAL && (
-              <motion.div 
-                key="waiting"
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                className="glassmorphic-card rounded-[32px] p-10 sm:p-14 flex flex-col items-center text-center w-full max-w-xl mx-auto"
-              >
-                <div className="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center mb-6 border border-amber-500/25 shadow-[0_0_20px_rgba(245,158,11,0.15)]">
-                  <Clock className="w-8 h-8 text-amber-400" />
-                </div>
-                <h2 className="text-2xl font-bold text-white mb-2 font-display">Awaiting Authorization</h2>
-                <p className="text-slate-400 mb-8 text-sm leading-relaxed max-w-md">
-                  Your formatted resume is staged and pending an administrator review. The processing will trigger instantly after confirmation.
-                  <br /><br />
-                  <span className="text-amber-400/90 text-xs font-bold uppercase tracking-wider bg-amber-500/[0.06] px-4 py-2.5 rounded-full border border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.05)] inline-block">Please keep this browser window open</span>
-                </p>
-                <button 
-                  onClick={handleReset}
-                  className="btn-2026-secondary px-6 py-3.5 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
-                >
-                  Submit Alternative File
-                </button>
-              </motion.div>
-            )}
-
-            {appState === AppState.PROCESSING && (
-              <motion.div 
-                key="processing"
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                className="glassmorphic-card rounded-[32px] p-16 sm:p-24 flex flex-col items-center justify-center text-center min-h-[460px] w-full max-w-2xl mx-auto"
-              >
-                 <div className="relative mb-8">
-                    <div className="w-24 h-24 border-4 border-indigo-500/20 border-t-indigo-500 border-r-pink-500 rounded-full animate-spin"></div>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <FileText className="w-8 h-8 text-indigo-400" />
-                    </div>
-                 </div>
-                 <h2 className="text-2xl font-bold text-white mb-2 font-display">Reformatting Document</h2>
-                 <p className="text-slate-400/90 max-w-sm font-light text-sm animate-pulse leading-relaxed mx-auto mt-2">
-                   Analyzing structure, adjusting typography, and optimizing spacing for modern elite layout. Just a moment...
-                 </p>
-              </motion.div>
-            )}
-
-            {appState === AppState.REVIEW && resumeData && (
+              </div>
+            ) : resumeData ? (
               <motion.div 
                 key="review"
                 initial={{ opacity: 0, y: 20 }}
@@ -792,27 +796,25 @@ const App: React.FC = () => {
                   setRetainedFields={setRetainedFields}
                 />
               </motion.div>
+            ) : null}
+
+            {/* Footer */}
+            {appState !== AppState.REVIEW && (
+              <footer className="w-full max-w-6xl mt-8 lg:mt-12 pt-6 border-t border-white/5">
+                <div className="flex items-center justify-between gap-4 text-slate-500 text-xs">
+                  <p className="font-light tracking-wide">© 2026 <span className="font-medium text-slate-400">ArthFormat</span> • Resumes Reimagined</p>
+                  <div className="flex items-center gap-4">
+                    <button 
+                      onClick={() => setShowAdmin(!showAdmin)}
+                      className="opacity-25 hover:opacity-100 transition-opacity p-1 text-slate-400"
+                      title="System Console"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </footer>
             )}
-          </AnimatePresence>
-        </div>
-        
-        {/* Footer */}
-        {appState !== AppState.REVIEW && (
-          <footer className="w-full max-w-5xl mt-20 pt-8 border-t border-white/5">
-            <div className="flex items-center justify-between gap-4 text-slate-500 text-xs">
-              <p className="font-light tracking-wide">© 2026 <span className="font-medium text-slate-400">ArthFormat</span> • Resumes Reimagined</p>
-              <div className="flex items-center gap-4">
-                <button 
-                  onClick={() => setShowAdmin(!showAdmin)}
-                  className="opacity-25 hover:opacity-100 transition-opacity p-1 text-slate-400"
-                  title="System Console"
-                >
-                  <Lock className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </footer>
-        )}
           </>
         )}
       </div>
