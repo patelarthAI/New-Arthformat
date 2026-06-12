@@ -428,9 +428,9 @@ const App: React.FC = () => {
         <div className="absolute top-[25%] left-[25%] w-[50%] h-[50%] rounded-full bg-violet-500/[0.05] blur-[130px] animate-pulse" style={{ animationDuration: '12s' }} />
       </div>
 
-      <div className="relative z-10 flex flex-col items-center px-4 sm:px-6 lg:px-8 w-full py-4 lg:py-6 lg:h-full lg:overflow-hidden min-h-screen">
+      <div className="relative z-10 flex flex-col items-center w-full min-h-screen lg:h-full lg:overflow-hidden px-4 sm:px-6 lg:px-[48px] max-w-[1280px] mx-auto pt-6 lg:pt-[88px] pb-12 lg:pb-[72px]">
         {/* Header - Brand Bar */}
-        <div className="w-full max-w-7xl flex items-center justify-between mb-4 lg:mb-6">
+        <div className="w-full flex items-center justify-between mb-4 lg:mb-6">
           <div 
             onClick={() => setShowAdmin(!showAdmin)}
             className="flex items-center gap-3 cursor-pointer select-none group focus:outline-none"
@@ -459,22 +459,28 @@ const App: React.FC = () => {
         ) : (
           <>
             {appState !== AppState.REVIEW ? (
-              <div className="w-full max-w-6xl flex-1 flex flex-col justify-center py-2 lg:py-4">
-                <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-center">
+              <div className="w-full flex-1 flex flex-col justify-start">
+                <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-[40px] items-start">
                   
                   {/* Left Column: Title and Configurations */}
-                  <div className="lg:col-span-4 flex flex-col items-center lg:items-start text-center lg:text-left gap-4 lg:gap-5">
+                  <div className="lg:col-span-5 w-full max-w-[500px] flex flex-col items-center lg:items-start text-center lg:text-left">
                     <motion.div 
                       initial={{ opacity: 0, y: -20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                      className="flex flex-col items-center lg:items-start text-center lg:text-left"
+                      className="flex flex-col items-center lg:items-start text-center lg:text-left lg:mt-[56px]"
                     >
-                      <h1 className="font-display text-4xl sm:text-5xl lg:text-[44px] font-extrabold tracking-tight mb-2 text-white leading-none">
+                      {/* Premium AI Tech Badge */}
+                      <div className="mb-4 flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/20 bg-indigo-500/[0.05] text-[10px] font-bold text-indigo-300 uppercase tracking-widest shadow-[0_0_15px_rgba(99,102,241,0.1)]">
+                        <Sparkles className="w-3 h-3 text-indigo-400 animate-pulse" />
+                        AI-Powered Precision Formatter
+                      </div>
+
+                      <h1 className="font-display text-4xl sm:text-5xl lg:text-[56px] font-extrabold tracking-tight mb-4 text-white leading-[1.05] tracking-tight">
                         Arth<span className="text-gradient-rainbow font-extrabold">Format</span> <span className="text-white">AI</span>
                       </h1>
                       
-                      <p className="text-xs sm:text-sm text-slate-400 font-light tracking-wide leading-relaxed max-w-[360px]">
+                      <p className="text-[19px] lg:text-[20px] text-slate-400 font-light tracking-wide leading-relaxed max-w-[430px]">
                         Resumes Reimagined, Precision Personified. Instantly scan, format, and align your resume to modern executive standards.
                       </p>
                     </motion.div>
@@ -485,7 +491,7 @@ const App: React.FC = () => {
                         initial={{ opacity: 0, y: 15 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2, duration: 0.6 }}
-                        className="w-full max-w-md bg-white/[0.02] border border-white/[0.05] rounded-3xl p-5 backdrop-blur-2xl shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)] flex flex-col gap-5"
+                        className="w-full max-w-[500px] bg-white/[0.02] border border-white/[0.05] rounded-[24px] p-[28px] lg:p-[32px] backdrop-blur-2xl shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)] flex flex-col gap-5 mt-[28px] lg:mt-[32px]"
                       >
                         {/* Style Selector */}
                         <div className="flex flex-col gap-2.5">
@@ -599,8 +605,8 @@ const App: React.FC = () => {
                   </div>
 
                   {/* Right Column: Interactive Upload / Processing Card */}
-                  <div className="lg:col-span-8 w-full flex flex-col justify-center">
-                    <div className="w-full max-w-2xl mx-auto">
+                  <div className="lg:col-span-7 w-full flex flex-col justify-start">
+                    <div className="w-full max-w-[760px] mx-auto">
                       <AnimatePresence mode="wait">
                         {(appState === AppState.IDLE || appState === AppState.ERROR) && (
                           <motion.div 
@@ -613,8 +619,8 @@ const App: React.FC = () => {
                           >
                             <div 
                               className={`
-                                relative overflow-hidden rounded-[24px] p-8 sm:p-10 lg:p-8
-                                flex flex-col items-center justify-center text-center glassmorphic-card min-h-[300px] lg:min-h-[320px] cursor-pointer
+                                relative overflow-hidden rounded-[24px] p-[36px] lg:p-[44px]
+                                flex flex-col items-center justify-center text-center glassmorphic-card min-h-[340px] lg:min-h-[380px] cursor-pointer
                                 ${dragActive 
                                   ? 'border-indigo-500/80 bg-indigo-500/10 shadow-[0_0_40px_rgba(99,102,241,0.25)] scale-[1.01]' 
                                   : 'border-white/[0.04]'
@@ -635,24 +641,27 @@ const App: React.FC = () => {
                               {/* Glowing dynamic background flare */}
                               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500/[0.05] rounded-full blur-[90px] pointer-events-none -z-10 group-hover:bg-indigo-500/[0.1] transition-colors duration-500" />
                               
-                              <div className="relative z-10 mb-4 lg:mb-5">
-                                <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-[1.5px] shadow-lg shadow-indigo-500/10">
-                                  <div className="w-full h-full rounded-xl bg-[#080d24] flex items-center justify-center">
-                                    <UploadCloud className="w-6 h-6 lg:w-7 lg:h-7 text-indigo-400 group-hover:translate-y-[-2px] group-hover:text-pink-400 transition-all duration-300" />
+                              {/* Constrained and Vertically Centered Internal Content Block */}
+                              <div className="w-full max-w-[460px] mx-auto flex flex-col items-center justify-center flex-1 py-4">
+                                <div className="relative z-10 mb-4 lg:mb-5">
+                                  <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-[1.5px] shadow-lg shadow-indigo-500/10">
+                                    <div className="w-full h-full rounded-xl bg-[#080d24] flex items-center justify-center">
+                                      <UploadCloud className="w-6 h-6 lg:w-7 lg:h-7 text-indigo-400 group-hover:translate-y-[-2px] group-hover:text-pink-400 transition-all duration-300" />
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                              
-                              <h3 className="text-lg sm:text-xl font-bold text-white mb-2 tracking-tight font-display">
-                                Drop your resume here
-                              </h3>
-                              
-                              <p className="text-slate-400 mb-5 max-w-xs sm:max-w-sm mx-auto font-light leading-relaxed text-xs">
-                                Supports Word (.docx, .doc), PDF, Text, or Images. We'll handle the rest with pixel-perfect structural precision.
-                              </p>
-                              
-                              <div className="btn-2026-neon px-6 py-2.5 font-bold text-xs tracking-wide rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-2 group-hover:scale-[1.02]">
-                                Browse Files <ArrowRight className="w-3.5 h-3.5 text-white group-hover:translate-x-0.5 transition-transform" />
+                                
+                                <h3 className="text-lg sm:text-xl font-bold text-white mb-2 tracking-tight font-display">
+                                  Drop your resume here
+                                </h3>
+                                
+                                <p className="text-slate-400 mb-5 max-w-xs sm:max-w-sm mx-auto font-light leading-relaxed text-xs">
+                                  Supports Word (.docx, .doc), PDF, Text, or Images. We'll handle the rest with pixel-perfect structural precision.
+                                </p>
+                                
+                                <div className="btn-2026-neon px-6 py-2.5 font-bold text-xs tracking-wide rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-2 group-hover:scale-[1.02]">
+                                  Browse Files <ArrowRight className="w-3.5 h-3.5 text-white group-hover:translate-x-0.5 transition-transform" />
+                                </div>
                               </div>
                             </div>
 
@@ -689,30 +698,32 @@ const App: React.FC = () => {
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.96 }}
                             transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                            className="glassmorphic-card rounded-[24px] p-8 sm:p-12 flex flex-col items-center text-center w-full"
+                            className="glassmorphic-card rounded-[24px] p-[36px] lg:p-[44px] flex flex-col items-center justify-center text-center w-full min-h-[340px] lg:min-h-[380px]"
                           >
-                            <div className="w-14 h-14 bg-emerald-500/10 rounded-xl flex items-center justify-center mb-5 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
-                              <CheckCircle className="w-7 h-7 text-emerald-400" />
-                            </div>
-                            <h2 className="text-xl font-bold text-white mb-2 font-display">File Successfully Loaded</h2>
-                            <p className="text-slate-400 mb-6 text-xs leading-relaxed max-w-sm">
-                              We've successfully staged <span className="text-indigo-400 font-mono font-medium">"{fileName}"</span>. Ready to extract and reformat with absolute style representation.
-                            </p>
-                            
-                            <div className="flex gap-3 w-full justify-center">
-                              <button 
-                                onClick={handleReset}
-                                className="btn-2026-secondary px-5 py-3 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
-                              >
-                                Cancel
-                              </button>
-                              <button 
-                                onClick={handleSubmitForApproval}
-                                className="btn-2026-neon px-6 py-3 text-white font-bold text-[10px] uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
-                              >
-                                <ArrowRight className="w-3.5 h-3.5" />
-                                Format Resume
-                              </button>
+                            <div className="w-full max-w-[460px] mx-auto flex flex-col items-center justify-center flex-1 py-4">
+                              <div className="w-14 h-14 bg-emerald-500/10 rounded-xl flex items-center justify-center mb-5 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+                                <CheckCircle className="w-7 h-7 text-emerald-400" />
+                              </div>
+                              <h2 className="text-xl font-bold text-white mb-2 font-display">File Successfully Loaded</h2>
+                              <p className="text-slate-400 mb-6 text-xs leading-relaxed max-w-sm">
+                                We've successfully staged <span className="text-indigo-400 font-mono font-medium">"{fileName}"</span>. Ready to extract and reformat with absolute style representation.
+                              </p>
+                              
+                              <div className="flex gap-3 w-full justify-center">
+                                <button 
+                                  onClick={handleReset}
+                                  className="btn-2026-secondary px-5 py-3 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <button 
+                                  onClick={handleSubmitForApproval}
+                                  className="btn-2026-neon px-6 py-3 text-white font-bold text-[10px] uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                  Format Resume
+                                </button>
+                              </div>
                             </div>
                           </motion.div>
                         )}
@@ -724,23 +735,25 @@ const App: React.FC = () => {
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.96 }}
                             transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                            className="glassmorphic-card rounded-[24px] p-8 sm:p-12 flex flex-col items-center text-center w-full"
+                            className="glassmorphic-card rounded-[24px] p-[36px] lg:p-[44px] flex flex-col items-center justify-center text-center w-full min-h-[340px] lg:min-h-[380px]"
                           >
-                            <div className="w-14 h-14 bg-amber-500/10 rounded-xl flex items-center justify-center mb-5 border border-amber-500/25 shadow-[0_0_15px_rgba(245,158,11,0.15)]">
-                              <Clock className="w-7 h-7 text-amber-400" />
+                            <div className="w-full max-w-[460px] mx-auto flex flex-col items-center justify-center flex-1 py-4">
+                              <div className="w-14 h-14 bg-amber-500/10 rounded-xl flex items-center justify-center mb-5 border border-amber-500/25 shadow-[0_0_15px_rgba(245,158,11,0.15)]">
+                                <Clock className="w-7 h-7 text-amber-400" />
+                              </div>
+                              <h2 className="text-xl font-bold text-white mb-2 font-display">Awaiting Authorization</h2>
+                              <p className="text-slate-400 mb-6 text-xs leading-relaxed max-w-sm">
+                                Your formatted resume is staged and pending an administrator review. The processing will trigger instantly after confirmation.
+                                <br /><br />
+                                <span className="text-amber-400/90 text-[10px] font-bold uppercase tracking-wider bg-amber-500/[0.06] px-3.5 py-2 rounded-full border border-amber-500/20 inline-block">Please keep this browser window open</span>
+                              </p>
+                              <button 
+                                onClick={handleReset}
+                                className="btn-2026-secondary px-5 py-3 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                              >
+                                Submit Alternative File
+                              </button>
                             </div>
-                            <h2 className="text-xl font-bold text-white mb-2 font-display">Awaiting Authorization</h2>
-                            <p className="text-slate-400 mb-6 text-xs leading-relaxed max-w-sm">
-                              Your formatted resume is staged and pending an administrator review. The processing will trigger instantly after confirmation.
-                              <br /><br />
-                              <span className="text-amber-400/90 text-[10px] font-bold uppercase tracking-wider bg-amber-500/[0.06] px-3.5 py-2 rounded-full border border-amber-500/20 inline-block">Please keep this browser window open</span>
-                            </p>
-                            <button 
-                              onClick={handleReset}
-                              className="btn-2026-secondary px-5 py-3 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
-                            >
-                              Submit Alternative File
-                            </button>
                           </motion.div>
                         )}
 
@@ -751,18 +764,20 @@ const App: React.FC = () => {
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.96 }}
                             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                            className="glassmorphic-card rounded-[24px] p-12 sm:p-16 flex flex-col items-center justify-center text-center min-h-[340px] w-full"
+                            className="glassmorphic-card rounded-[24px] p-[36px] lg:p-[44px] flex flex-col items-center justify-center text-center min-h-[340px] lg:min-h-[380px] w-full"
                           >
-                             <div className="relative mb-6">
-                                <div className="w-20 h-20 border-4 border-indigo-500/20 border-t-indigo-500 border-r-pink-500 rounded-full animate-spin"></div>
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                  <FileText className="w-7 h-7 text-indigo-400" />
-                                </div>
-                             </div>
-                             <h2 className="text-xl font-bold text-white mb-2 font-display">Reformatting Document</h2>
-                             <p className="text-slate-400/90 max-w-xs font-light text-xs animate-pulse leading-relaxed mx-auto mt-2">
-                               Analyzing structure, adjusting typography, and optimizing spacing for modern elite layout. Just a moment...
-                             </p>
+                            <div className="w-full max-w-[460px] mx-auto flex flex-col items-center justify-center flex-1 py-4">
+                              <div className="relative mb-6">
+                                 <div className="w-20 h-20 border-4 border-indigo-500/20 border-t-indigo-500 border-r-pink-500 rounded-full animate-spin"></div>
+                                 <div className="absolute inset-0 flex items-center justify-center">
+                                   <FileText className="w-7 h-7 text-indigo-400" />
+                                 </div>
+                              </div>
+                              <h2 className="text-xl font-bold text-white mb-2 font-display">Reformatting Document</h2>
+                              <p className="text-slate-400/90 max-w-xs font-light text-xs animate-pulse leading-relaxed mx-auto mt-2">
+                                Analyzing structure, adjusting typography, and optimizing spacing for modern elite layout. Just a moment...
+                              </p>
+                            </div>
                           </motion.div>
                         )}
                       </AnimatePresence>
