@@ -463,140 +463,137 @@ const App: React.FC = () => {
                 <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-center">
                   
                   {/* Left Column: Title and Configurations */}
-                  <div className="lg:col-span-5 flex flex-col items-center lg:items-start text-center lg:text-left">
+                  <div className="lg:col-span-5 flex flex-col items-center lg:items-start text-center lg:text-left gap-6 lg:gap-8">
                     <motion.div 
                       initial={{ opacity: 0, y: -20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                      className="flex flex-col items-center lg:items-start mb-6 lg:mb-8"
+                      className="flex flex-col items-center lg:items-start"
                     >
-                      <div className="mb-4 hover:scale-105 transition-transform duration-500 cursor-pointer">
-                        <InteractiveLogo size="lg" />
+                      {/* Premium AI Tech Badge */}
+                      <div className="mb-4 flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/20 bg-indigo-500/[0.05] text-[10px] font-bold text-indigo-300 uppercase tracking-widest shadow-[0_0_15px_rgba(99,102,241,0.1)]">
+                        <Sparkles className="w-3 h-3 text-indigo-400 animate-pulse" />
+                        AI-Powered Precision Formatter
                       </div>
-                      <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight mb-4 text-white">
+                      
+                      <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight mb-4 text-white leading-none">
                         Arth<span className="text-gradient-rainbow font-extrabold">Format</span> <span className="text-white">AI</span>
                       </h1>
                       
-                      <p className="text-sm sm:text-base text-slate-400 font-light tracking-wide leading-relaxed max-w-md">
-                        "Resumes Reimagined, Precision Personified."
+                      <p className="text-sm sm:text-base text-slate-400 font-light tracking-wide leading-relaxed max-w-sm">
+                        Resumes Reimagined, Precision Personified. Instantly scan, format, and align your resume to modern executive standards.
                       </p>
                     </motion.div>
 
                     {/* Format Selection (Only shown when not processing or staged) */}
                     {appState === AppState.IDLE && (
                       <motion.div 
-                        initial={{ opacity: 0, y: 10 }}
+                        initial={{ opacity: 0, y: 15 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1, duration: 0.6 }}
-                        className="flex flex-col items-center lg:items-start w-full"
+                        transition={{ delay: 0.2, duration: 0.6 }}
+                        className="w-full max-w-md bg-white/[0.02] border border-white/[0.05] rounded-3xl p-6 backdrop-blur-2xl shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)] flex flex-col gap-6"
                       >
-                        <label className="text-slate-400 text-xs mb-3 font-bold uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300">
-                          Select Target Template Style
-                        </label>
-                        <div className="grid grid-cols-2 gap-3 w-full max-w-md">
-                          <button 
-                            onClick={() => setSelectedFormat(ResumeFormat.CLASSIC_PROFESSIONAL)}
-                            className={`px-4 py-4 rounded-xl transition-all duration-300 flex flex-col items-center gap-2 cursor-pointer text-center relative overflow-hidden group ${
-                              selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL 
-                                ? 'bg-indigo-500/10 border border-indigo-500/50 text-white shadow-[0_0_20px_rgba(99,102,241,0.2)]' 
-                                : 'bg-white/[0.01] border border-white/[0.04] text-slate-400 hover:bg-white/[0.04] hover:border-white/[0.12] hover:text-white'
-                            }`}
-                          >
-                            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 to-violet-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                            <LayoutTemplate className={`w-4 h-4 relative z-10 transition-colors ${selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL ? 'text-indigo-400 font-bold' : 'text-slate-500 group-hover:text-slate-300'}`} />
-                            <span className="text-xs font-bold relative z-10 font-display">Classic Professional</span>
-                          </button>
-                          <button 
-                            onClick={() => setSelectedFormat(ResumeFormat.MODERN_EXECUTIVE)}
-                            className={`px-4 py-4 rounded-xl transition-all duration-300 flex flex-col items-center gap-2 cursor-pointer text-center relative overflow-hidden group ${
-                              selectedFormat === ResumeFormat.MODERN_EXECUTIVE 
-                                ? 'bg-purple-500/10 border border-purple-500/50 text-white shadow-[0_0_20px_rgba(168,85,247,0.2)]' 
-                                : 'bg-white/[0.01] border border-white/[0.04] text-slate-400 hover:bg-white/[0.04] hover:border-white/[0.12] hover:text-white'
-                            }`}
-                          >
-                            <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                            <Sparkles className={`w-4 h-4 relative z-10 transition-colors ${selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? 'text-purple-400 font-bold' : 'text-slate-500 group-hover:text-slate-300'}`} />
-                            <span className="text-xs font-bold relative z-10 font-display">Modern Executive</span>
-                          </button>
-                        </div>
-
-                        <div className="mt-5 flex justify-center lg:justify-start w-full">
-                          <button
-                            onClick={() => setUsePro(!usePro)}
-                            className={`group relative flex items-center gap-2 px-4 py-2 rounded-full border transition-all duration-500 cursor-pointer overflow-hidden ${
-                               usePro 
-                                ? 'bg-amber-500/[0.08] border-amber-500/40 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.1)]' 
-                                : 'bg-white/[0.01] border-white/[0.04] text-slate-400 hover:bg-white/[0.04] hover:border-indigo-500/30 hover:text-white'
-                             }`}
-                          >
-                            <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 to-orange-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                            <Database className={`w-3.5 h-3.5 transition-transform group-hover:scale-110 relative z-10 ${usePro ? 'text-amber-400' : 'text-slate-500 group-hover:text-indigo-400'}`} />
-                            <span className="text-[10px] font-bold uppercase tracking-wider relative z-10 font-display">
-                              {usePro ? "Pro Engine (Gemini 3.1 Pro)" : "Standard Engine (Gemini 3 Flash)"}
-                            </span>
-                          </button>
-                        </div>
-
-                        {/* Contact Retention Options */}
-                        <div 
-                          className={`mt-6 w-full max-w-md flex flex-col sm:flex-row items-center justify-between gap-4 py-2.5 px-4 border rounded-2xl backdrop-blur-xl relative overflow-hidden transition-all duration-500 shadow-lg ${
-                            retainedFields.location || retainedFields.phone || retainedFields.email
-                              ? 'border-indigo-500/20 bg-slate-900/50 shadow-[0_0_20px_rgba(99,102,241,0.03)]'
-                              : 'border-white/[0.04] bg-slate-900/30'
-                          }`}
-                        >
-                          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/[0.02] via-transparent to-purple-500/[0.02] pointer-events-none" />
-                          
-                          <div className="flex items-center gap-2 relative z-10 select-none">
-                            <div className={`relative flex items-center justify-center p-1.5 rounded-xl transition-all duration-500 ${
-                              retainedFields.location || retainedFields.phone || retainedFields.email
-                                ? 'bg-indigo-500/15 border border-indigo-500/30 text-indigo-400'
-                                : 'bg-white/5 border border-white/10 text-slate-400'
-                            }`}>
-                              <ShieldCheck className="w-3.5 h-3.5" />
-                            </div>
-                            <span className="text-[11px] font-bold text-white tracking-wider font-display uppercase">Retention</span>
-                          </div>
-
-                          <div className="flex items-center gap-2 justify-center relative z-10">
-                            <button
-                              id="landing-retain-location"
-                              onClick={() => setRetainedFields(prev => ({ ...prev, location: !prev.location }))}
-                              className={`group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] transition-all duration-300 cursor-pointer select-none ${
-                                retainedFields.location
-                                  ? 'border-indigo-500/40 text-indigo-100 bg-indigo-500/10 shadow-[0_0_10px_rgba(99,102,241,0.08)]'
-                                  : 'border-white/[0.05] bg-white/[0.02] text-slate-400 hover:text-white'
+                        {/* Style Selector */}
+                        <div className="flex flex-col gap-3">
+                          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest text-left">
+                            1. Target Template Style
+                          </span>
+                          <div className="grid grid-cols-2 gap-3">
+                            <button 
+                              onClick={() => setSelectedFormat(ResumeFormat.CLASSIC_PROFESSIONAL)}
+                              className={`px-4 py-4 rounded-xl border text-center transition-all duration-300 relative overflow-hidden group cursor-pointer flex flex-col items-center gap-2 ${
+                                selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL 
+                                  ? 'border-indigo-500/40 text-white bg-indigo-500/10 shadow-[0_0_15px_rgba(99,102,241,0.15)] font-semibold' 
+                                  : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:bg-white/[0.04] hover:border-white/10'
                               }`}
                             >
-                              <MapPin className={`w-3 h-3 ${retainedFields.location ? 'text-indigo-400' : 'text-slate-500 group-hover/btn:text-slate-300'}`} />
-                              <span className="font-semibold">Location</span>
+                              <LayoutTemplate className={`w-4.5 h-4.5 ${selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL ? 'text-indigo-400' : 'text-slate-500'}`} />
+                              <span className="text-xs font-medium font-display">Classic Professional</span>
                             </button>
+                            <button 
+                              onClick={() => setSelectedFormat(ResumeFormat.MODERN_EXECUTIVE)}
+                              className={`px-4 py-4 rounded-xl border text-center transition-all duration-300 relative overflow-hidden group cursor-pointer flex flex-col items-center gap-2 ${
+                                selectedFormat === ResumeFormat.MODERN_EXECUTIVE 
+                                  ? 'border-purple-500/40 text-white bg-purple-500/10 shadow-[0_0_15px_rgba(168,85,247,0.15)] font-semibold' 
+                                  : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:bg-white/[0.04] hover:border-white/10'
+                              }`}
+                            >
+                              <Sparkles className={`w-4.5 h-4.5 ${selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? 'text-purple-400' : 'text-slate-500'}`} />
+                              <span className="text-xs font-medium font-display">Modern Executive</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="h-[1px] bg-white/[0.06]" />
+
+                        {/* Engine and Retention Row */}
+                        <div className="flex flex-col gap-4">
+                          {/* Engine Selector */}
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex flex-col text-left">
+                              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                2. AI Intelligence Engine
+                              </span>
+                              <span className="text-[11px] text-slate-500 mt-0.5">
+                                {usePro ? "Gemini 3.1 Pro (Heavy reasoning)" : "Gemini 3 Flash (Fast & reliable)"}
+                              </span>
+                            </div>
                             
                             <button
-                              id="landing-retain-phone"
-                              onClick={() => setRetainedFields(prev => ({ ...prev, phone: !prev.phone }))}
-                              className={`group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] transition-all duration-300 cursor-pointer select-none ${
-                                retainedFields.phone
-                                  ? 'border-indigo-500/40 text-indigo-100 bg-indigo-500/10 shadow-[0_0_10px_rgba(99,102,241,0.08)]'
-                                  : 'border-white/[0.05] bg-white/[0.02] text-slate-400 hover:text-white'
+                              onClick={() => setUsePro(!usePro)}
+                              className={`relative w-28 py-2 border rounded-full text-[10px] font-bold uppercase tracking-wider transition-all duration-500 cursor-pointer overflow-hidden text-center ${
+                                usePro 
+                                  ? 'bg-amber-500/[0.08] border-amber-500/40 text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.15)]' 
+                                  : 'bg-white/[0.01] border-white/[0.06] text-slate-400 hover:text-white hover:bg-white/[0.04]'
                               }`}
                             >
-                              <Phone className={`w-3 h-3 ${retainedFields.phone ? 'text-indigo-400' : 'text-slate-500 group-hover/btn:text-slate-300'}`} />
-                              <span className="font-semibold">Phone</span>
+                              {usePro ? "Pro Active" : "Standard"}
                             </button>
+                          </div>
 
-                            <button
-                              id="landing-retain-email"
-                              onClick={() => setRetainedFields(prev => ({ ...prev, email: !prev.email }))}
-                              className={`group/btn flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] transition-all duration-300 cursor-pointer select-none ${
-                                retainedFields.email
-                                  ? 'border-indigo-500/40 text-indigo-100 bg-indigo-500/10 shadow-[0_0_10px_rgba(99,102,241,0.08)]'
-                                  : 'border-white/[0.05] bg-white/[0.02] text-slate-400 hover:text-white'
-                              }`}
-                            >
-                              <Mail className={`w-3 h-3 ${retainedFields.email ? 'text-indigo-400' : 'text-slate-500 group-hover/btn:text-slate-300'}`} />
-                              <span className="font-semibold">Email</span>
-                            </button>
+                          {/* Retention Selector */}
+                          <div className="flex flex-col gap-3 mt-1 text-left">
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                              3. Data Shield Retention
+                            </span>
+                            <div className="grid grid-cols-3 gap-2">
+                              <button
+                                onClick={() => setRetainedFields(prev => ({ ...prev, location: !prev.location }))}
+                                className={`group/btn flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] transition-all duration-300 cursor-pointer select-none ${
+                                  retainedFields.location
+                                    ? 'border-indigo-500/40 text-white bg-indigo-500/10 shadow-[0_0_10px_rgba(99,102,241,0.08)] font-semibold'
+                                    : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10'
+                                }`}
+                              >
+                                <MapPin className={`w-3 h-3 ${retainedFields.location ? 'text-indigo-400' : 'text-slate-500'}`} />
+                                <span>Location</span>
+                              </button>
+                              
+                              <button
+                                onClick={() => setRetainedFields(prev => ({ ...prev, phone: !prev.phone }))}
+                                className={`group/btn flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] transition-all duration-300 cursor-pointer select-none ${
+                                  retainedFields.phone
+                                    ? 'border-indigo-500/40 text-white bg-indigo-500/10 shadow-[0_0_10px_rgba(99,102,241,0.08)] font-semibold'
+                                    : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10'
+                                }`}
+                              >
+                                <Phone className={`w-3 h-3 ${retainedFields.phone ? 'text-indigo-400' : 'text-slate-500'}`} />
+                                <span>Phone</span>
+                              </button>
+
+                              <button
+                                onClick={() => setRetainedFields(prev => ({ ...prev, email: !prev.email }))}
+                                className={`group/btn flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border text-[10px] transition-all duration-300 cursor-pointer select-none ${
+                                  retainedFields.email
+                                    ? 'border-indigo-500/40 text-white bg-indigo-500/10 shadow-[0_0_10px_rgba(99,102,241,0.08)] font-semibold'
+                                    : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10'
+                                }`}
+                              >
+                                <Mail className={`w-3 h-3 ${retainedFields.email ? 'text-indigo-400' : 'text-slate-500'}`} />
+                                <span>Email</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </motion.div>
