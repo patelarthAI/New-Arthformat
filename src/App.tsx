@@ -463,24 +463,18 @@ const App: React.FC = () => {
                 <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-center">
                   
                   {/* Left Column: Title and Configurations */}
-                  <div className="lg:col-span-5 flex flex-col items-center lg:items-start text-center lg:text-left gap-4 lg:gap-6">
+                  <div className="lg:col-span-4 flex flex-col items-center lg:items-start text-center lg:text-left gap-4 lg:gap-5">
                     <motion.div 
                       initial={{ opacity: 0, y: -20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                      className="flex flex-col items-center lg:items-start"
+                      className="flex flex-col items-center lg:items-start text-center lg:text-left"
                     >
-                      {/* Premium AI Tech Badge */}
-                      <div className="mb-4 flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/20 bg-indigo-500/[0.05] text-[10px] font-bold text-indigo-300 uppercase tracking-widest shadow-[0_0_15px_rgba(99,102,241,0.1)]">
-                        <Sparkles className="w-3 h-3 text-indigo-400 animate-pulse" />
-                        AI-Powered Precision Formatter
-                      </div>
-                      
-                      <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight mb-4 text-white leading-none">
+                      <h1 className="font-display text-4xl sm:text-5xl lg:text-[44px] font-extrabold tracking-tight mb-2 text-white leading-none">
                         Arth<span className="text-gradient-rainbow font-extrabold">Format</span> <span className="text-white">AI</span>
                       </h1>
                       
-                      <p className="text-sm sm:text-base text-slate-400 font-light tracking-wide leading-relaxed max-w-sm">
+                      <p className="text-xs sm:text-sm text-slate-400 font-light tracking-wide leading-relaxed max-w-[360px]">
                         Resumes Reimagined, Precision Personified. Instantly scan, format, and align your resume to modern executive standards.
                       </p>
                     </motion.div>
@@ -605,8 +599,8 @@ const App: React.FC = () => {
                   </div>
 
                   {/* Right Column: Interactive Upload / Processing Card */}
-                  <div className="lg:col-span-7 w-full flex flex-col justify-center">
-                    <div className="w-full max-w-xl mx-auto">
+                  <div className="lg:col-span-8 w-full flex flex-col justify-center">
+                    <div className="w-full max-w-2xl mx-auto">
                       <AnimatePresence mode="wait">
                         {(appState === AppState.IDLE || appState === AppState.ERROR) && (
                           <motion.div 
