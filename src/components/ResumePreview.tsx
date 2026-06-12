@@ -344,17 +344,17 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   const score = calculateScore();
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8 w-full max-w-7xl mx-auto">
+    <div className="flex flex-col lg:flex-row gap-6 w-full h-full min-h-0 mx-auto">
       <style>{`
         #resume-preview-content ul li::marker {
           font-size: 13px;
         }
       `}</style>
       {/* Left Column: Resume Preview */}
-      <div className="flex-1 min-w-0 font-sans">
-        <div className="glassmorphic-card rounded-[32px] p-6 md:p-8">
+      <div className="flex-1 min-w-0 font-sans flex flex-col h-full min-h-0">
+        <div className="glassmorphic-card rounded-2xl p-5 flex flex-col h-full min-h-0 overflow-hidden">
             {/* Toolbar */}
-            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 mb-8 pb-6 border-b border-white/[0.06]">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-4 pb-4 border-b border-white/[0.06] flex-shrink-0">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.15)] shrink-0">
                         <FileText className="w-5 h-5 text-indigo-400" />
@@ -405,7 +405,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
             {/* Resume Content */}
             <div 
               id="resume-preview-content"
-              className="overflow-y-auto max-h-[85vh] custom-scrollbar" 
+              className="overflow-y-auto flex-1 custom-scrollbar" 
               style={{ 
                 fontFamily: styles.fontFamily, 
                 color: black, 
@@ -807,19 +807,19 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
       </div>
 
       {/* Right Column: Change Log / Recruiter Dashboard */}
-      <div className="w-full lg:w-80 flex-shrink-0 space-y-5">
+      <div className="w-full lg:w-80 flex-shrink-0 flex flex-col h-full min-h-0 space-y-4 overflow-hidden">
         
         {/* Contact Info Retention Selection Panel */}
         <motion.div 
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`glassmorphic-card rounded-2xl p-4 border text-left relative z-10 transition-all duration-500 shadow-lg ${
+            className={`glassmorphic-card rounded-2xl p-4 border text-left relative z-10 transition-all duration-500 shadow-lg flex-shrink-0 ${
                 retainedFields.location || retainedFields.phone || retainedFields.email
                     ? 'border-indigo-500/20 bg-slate-900/50 shadow-[0_0_15px_rgba(99,102,241,0.03)]'
                     : 'border-white/[0.05] bg-slate-900/40'
             }`}
         >
-            <div className="flex items-center gap-2 mb-3 pb-1.5 border-b border-white/[0.04]">
+            <div className="flex items-center gap-2 mb-3 pb-1.5 border-b border-white/[0.04] flex-shrink-0">
                 <ShieldCheck className={`w-4 h-4 transition-transform duration-500 ${retainedFields.location || retainedFields.phone || retainedFields.email ? 'text-indigo-400 rotate-12 scale-110' : 'text-slate-400'}`} />
                 <h3 className="text-xs font-bold text-slate-200 tracking-wider uppercase font-display">Field Retention</h3>
             </div>
@@ -865,15 +865,14 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                 </button>
             </div>
         </motion.div>
-
-        {/* Grammar Issues Panel */}
+             {/* Grammar Issues Panel */}
         {issues.length > 0 && (
             <motion.div 
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="glassmorphic-card rounded-[24px] p-5"
+                className="glassmorphic-card rounded-[24px] p-4 flex flex-col flex-1 min-h-0 overflow-hidden"
             >
-                <div className="flex items-center justify-between mb-5 pb-3 border-b border-white/[0.06]">
+                <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/[0.06] flex-shrink-0">
                     <div className="flex items-center gap-2">
                         <AlertCircle className="w-4.5 h-4.5 text-rose-400" />
                         <h3 className="text-sm font-bold text-white tracking-tight">Parser Signals ({issues.length})</h3>
@@ -885,8 +884,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                         Fix All
                     </button>
                 </div>
-
-                <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="space-y-2.5 overflow-y-auto flex-1 pr-1 custom-scrollbar">
                     {issues.map((issue) => (
                         <div 
                             key={issue.id} 
@@ -939,14 +937,14 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
             <motion.div 
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="glassmorphic-card rounded-[24px] p-5"
+                className="glassmorphic-card rounded-[24px] p-4 flex flex-col flex-1 min-h-0 overflow-hidden"
             >
-                <div className="flex items-center gap-2 mb-5 pb-3 border-b border-white/[0.06]">
+                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-white/[0.06] flex-shrink-0">
                     <History className="w-4.5 h-4.5 text-indigo-400" />
                     <h3 className="text-sm font-bold text-white tracking-tight">Refiner Logs</h3>
                 </div>
 
-                <div className="space-y-3.5 max-h-[380px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="space-y-3.5 overflow-y-auto flex-1 pr-1 custom-scrollbar">
                     {changeLog.map((log) => (
                         <div key={log.id} className="p-3.5 rounded-xl bg-white/[0.01] border border-white/[0.03] hover:border-white/[0.08] hover:bg-white/[0.02] transition-colors group">
                             <div className="flex items-center justify-between mb-2">

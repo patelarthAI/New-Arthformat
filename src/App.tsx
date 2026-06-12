@@ -428,9 +428,9 @@ const App: React.FC = () => {
         <div className="absolute top-[25%] left-[25%] w-[50%] h-[50%] rounded-full bg-violet-500/[0.05] blur-[130px] animate-pulse" style={{ animationDuration: '12s' }} />
       </div>
 
-      <div className="relative z-10 flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8 min-h-screen">
+      <div className={`relative z-10 flex flex-col items-center px-4 sm:px-6 lg:px-8 ${appState === AppState.REVIEW ? 'py-4 h-screen overflow-hidden' : 'py-12 min-h-screen'}`}>
         {/* Header - Brand Bar */}
-        <div className="w-full max-w-7xl flex items-center justify-between mb-8 sm:mb-14">
+        <div className={`w-full max-w-7xl flex items-center justify-between ${appState === AppState.REVIEW ? 'mb-4' : 'mb-8 sm:mb-14'}`}>
           <div 
             onClick={() => setShowAdmin(!showAdmin)}
             className="flex items-center gap-3 cursor-pointer select-none group focus:outline-none"
@@ -458,23 +458,25 @@ const App: React.FC = () => {
           <AdminDashboard />
         ) : (
           <>
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-              className="text-center mb-12 sm:mb-16 max-w-3xl flex flex-col items-center"
-            >
-              <div className="mb-6 hover:scale-105 transition-transform duration-500 cursor-pointer">
-                <InteractiveLogo size="hero" />
-              </div>
-              <h1 className="font-display text-5xl md:text-7xl font-extrabold tracking-tight mb-5 text-white">
-                Arth<span className="text-gradient-rainbow font-extrabold">Format</span> <span className="text-white">AI</span>
-              </h1>
-              
-              <p className="text-base sm:text-lg text-slate-400 font-light tracking-wide max-w-xl mx-auto">
-                "Resumes Reimagined, Precision Personified."
-              </p>
-            </motion.div>
+            {(appState === AppState.IDLE || appState === AppState.ERROR) && (
+              <motion.div 
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                className="text-center mb-12 sm:mb-16 max-w-3xl flex flex-col items-center"
+              >
+                <div className="mb-6 hover:scale-105 transition-transform duration-500 cursor-pointer">
+                  <InteractiveLogo size="hero" />
+                </div>
+                <h1 className="font-display text-5xl md:text-7xl font-extrabold tracking-tight mb-5 text-white">
+                  Arth<span className="text-gradient-rainbow font-extrabold">Format</span> <span className="text-white">AI</span>
+                </h1>
+                
+                <p className="text-base sm:text-lg text-slate-400 font-light tracking-wide max-w-xl mx-auto">
+                  "Resumes Reimagined, Precision Personified."
+                </p>
+              </motion.div>
+            )}
 
             {/* Format Selection (Main Page) */}
             {appState === AppState.IDLE && (
@@ -604,7 +606,7 @@ const App: React.FC = () => {
             )}
 
         {/* Main Content Area */}
-        <div className="w-full max-w-5xl">
+        <div className={`w-full ${appState === AppState.REVIEW ? 'max-w-7xl flex-1 min-h-0 flex flex-col' : 'max-w-5xl'}`}>
           <AnimatePresence mode="wait">
             {(appState === AppState.IDLE || appState === AppState.ERROR) && (
               <motion.div 
@@ -776,6 +778,7 @@ const App: React.FC = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
+                className="h-full w-full flex flex-col min-h-0"
               >
                 <ResumePreview 
                   key={fileName}
@@ -794,20 +797,22 @@ const App: React.FC = () => {
         </div>
         
         {/* Footer */}
-        <footer className="w-full max-w-5xl mt-20 pt-8 border-t border-white/5">
-          <div className="flex items-center justify-between gap-4 text-slate-500 text-xs">
-            <p className="font-light tracking-wide">© 2026 <span className="font-medium text-slate-400">ArthFormat</span> • Resumes Reimagined</p>
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setShowAdmin(!showAdmin)}
-                className="opacity-25 hover:opacity-100 transition-opacity p-1 text-slate-400"
-                title="System Console"
-              >
-                <Lock className="w-3.5 h-3.5" />
-              </button>
+        {appState !== AppState.REVIEW && (
+          <footer className="w-full max-w-5xl mt-20 pt-8 border-t border-white/5">
+            <div className="flex items-center justify-between gap-4 text-slate-500 text-xs">
+              <p className="font-light tracking-wide">© 2026 <span className="font-medium text-slate-400">ArthFormat</span> • Resumes Reimagined</p>
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={() => setShowAdmin(!showAdmin)}
+                  className="opacity-25 hover:opacity-100 transition-opacity p-1 text-slate-400"
+                  title="System Console"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
-          </div>
-        </footer>
+          </footer>
+        )}
           </>
         )}
       </div>
