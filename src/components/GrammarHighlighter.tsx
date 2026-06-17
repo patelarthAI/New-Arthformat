@@ -10,6 +10,7 @@ interface GrammarHighlighterProps {
   onIgnore: (issue: GrammarIssue) => void;
   style?: React.CSSProperties;
   className?: string;
+  onEdit?: (newText: string) => void;
 }
 
 const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({ 
@@ -19,7 +20,8 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
   onAccept, 
   onIgnore,
   style,
-  className 
+  className,
+  onEdit
 }) => {
   const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<'top' | 'bottom'>('bottom');
@@ -32,7 +34,27 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
   const fieldIssues = issues.filter(i => normalizePath(i.path) === normalizePath(path));
 
   if (fieldIssues.length === 0) {
-    return <span className={className} style={style}>{text}</span>;
+    return (
+      <span 
+        className={`${className || ""} hover:bg-slate-100 focus:bg-slate-150 focus:outline-none px-1 rounded transition-colors duration-150`} 
+        style={{ ...style, cursor: onEdit ? 'text' : 'inherit' }}
+        contentEditable={!!onEdit}
+        suppressContentEditableWarning
+        onBlur={(e) => {
+          if (onEdit) {
+            onEdit(e.currentTarget.textContent || "");
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
+      >
+        {text}
+      </span>
+    );
   }
 
   // Sort issues by their position in the text to render them in order

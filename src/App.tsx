@@ -476,32 +476,36 @@ const App: React.FC = () => {
       </div>
 
       <div className={`relative z-10 flex flex-col items-center w-full min-h-screen ${
-        appState === AppState.REVIEW ? 'lg:h-full lg:overflow-hidden' : ''
-      } px-4 sm:px-6 lg:px-[48px] max-w-[1280px] mx-auto pt-6 lg:pt-[88px] pb-12 lg:pb-[72px]`}>
+        appState === AppState.REVIEW 
+          ? 'lg:h-screen lg:overflow-hidden w-full max-w-full px-0 pt-0 pb-0' 
+          : 'px-4 sm:px-6 lg:px-[48px] max-w-[1280px] mx-auto pt-6 lg:pt-[88px] pb-12 lg:pb-[72px]'
+      }`}>
         {/* Header - Brand Bar */}
-        <div className="w-full flex items-center justify-between mb-4 lg:mb-6">
-          <div 
-            onClick={() => setShowAdmin(!showAdmin)}
-            className="flex items-center gap-3 cursor-pointer select-none group focus:outline-none"
-            title="Double-click or tap to toggle view mode securely"
-          >
-            <InteractiveLogo size="sm" />
-            <span className="text-xl font-bold tracking-tight text-white hidden sm:inline-block">
-              Arth<span className="text-gradient-rainbow font-extrabold">Format</span>
-            </span>
-          </div>
+        {appState !== AppState.REVIEW && (
+          <div className="w-full flex items-center justify-between mb-4 lg:mb-6">
+            <div 
+              onClick={() => setShowAdmin(!showAdmin)}
+              className="flex items-center gap-3 cursor-pointer select-none group focus:outline-none"
+              title="Double-click or tap to toggle view mode securely"
+            >
+              <InteractiveLogo size="sm" />
+              <span className="text-xl font-bold tracking-tight text-white hidden sm:inline-block">
+                Arth<span className="text-gradient-rainbow font-extrabold">Format</span>
+              </span>
+            </div>
 
-          <div className="flex items-center gap-3">
-            {showAdmin && (
-              <button
-                onClick={() => setShowAdmin(false)}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-semibold tracking-wide uppercase transition-all"
-              >
-                Exit Workspace
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {showAdmin && (
+                <button
+                  onClick={() => setShowAdmin(false)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-semibold tracking-wide uppercase transition-all"
+                >
+                  Exit Workspace
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {showAdmin ? (
           <AdminDashboard />
@@ -843,6 +847,7 @@ const App: React.FC = () => {
                   usePro={usePro}
                   retainedFields={retainedFields}
                   setRetainedFields={setRetainedFields}
+                  originalText={stagedContent?.text}
                 />
               </motion.div>
             ) : null}
