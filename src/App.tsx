@@ -83,6 +83,51 @@ const App: React.FC = () => {
       });
   }, []);
 
+  // Preload heavy document parsing libraries in the background to eliminate initial drag & drop latency
+  useEffect(() => {
+    const preloadParsers = async () => {
+      try {
+        console.log("[Optimization] Preloading mammoth and pdfjs-dist in the background...");
+        
+        // Asynchronously load mammoth
+        const mammothPromise = import('mammoth').then(() => {
+          console.log("[Optimization] Mammoth parser preloaded successfully.");
+        }).catch(err => {
+          console.warn("[Optimization] Failed to preload Mammoth:", err);
+        });
+
+        // Asynchronously load pdfjs-dist and its worker
+        const pdfjsPromise = import('pdfjs-dist').then(async (pdfjsLib) => {
+          try {
+            const pdfWorker = (await import('pdfjs-dist/build/pdf.worker.mjs?url')).default;
+            pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+            console.log("[Optimization] PDFjs parser and worker preloaded successfully.");
+          } catch (workerErr) {
+            console.warn("[Optimization] Failed to preload PDFJS worker:", workerErr);
+          }
+        }).catch(err => {
+          console.warn("[Optimization] Failed to preload PDFJS:", err);
+        });
+
+        await Promise.all([mammothPromise, pdfjsPromise]);
+        console.log("[Optimization] Background parser preloading complete.");
+      } catch (err) {
+        console.warn("[Optimization] Parser preloading encountered an error:", err);
+      }
+    };
+
+    // Use requestIdleCallback if available, otherwise fallback to setTimeout to avoid blocking main thread initialization
+    if (typeof window !== 'undefined') {
+      if ('requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(() => {
+          preloadParsers();
+        });
+      } else {
+        setTimeout(preloadParsers, 1000);
+      }
+    }
+  }, []);
+
   // Poll for approval status
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
