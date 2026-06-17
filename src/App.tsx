@@ -470,6 +470,7 @@ const App: React.FC = () => {
     }`}>
       {/* Ambient Background with slow-pulsing color rings */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="grid-bg-mesh" />
         <div className="absolute top-[-10%] left-[-10%] w-[70%] h-[70%] rounded-full bg-indigo-600/[0.08] blur-[150px] animate-pulse" style={{ animationDuration: '8s' }} />
         <div className="absolute bottom-[-10%] right-[-10%] w-[70%] h-[70%] rounded-full bg-purple-600/[0.08] blur-[150px] animate-pulse" style={{ animationDuration: '10s' }} />
         <div className="absolute top-[25%] left-[25%] w-[50%] h-[50%] rounded-full bg-violet-500/[0.05] blur-[130px] animate-pulse" style={{ animationDuration: '12s' }} />
@@ -478,11 +479,11 @@ const App: React.FC = () => {
       <div className={`relative z-10 flex flex-col items-center w-full min-h-screen ${
         appState === AppState.REVIEW 
           ? 'lg:h-screen lg:overflow-hidden w-full max-w-full px-0 pt-0 pb-0' 
-          : 'px-4 sm:px-6 lg:px-[48px] max-w-[1280px] mx-auto pt-6 lg:pt-[88px] pb-12 lg:pb-[72px]'
+          : 'px-4 sm:px-6 lg:px-[48px] max-w-[1280px] mx-auto pt-4 lg:pt-[44px] pb-6'
       }`}>
         {/* Header - Brand Bar */}
         {appState !== AppState.REVIEW && (
-          <div className="w-full flex items-center justify-between mb-4 lg:mb-6">
+          <div className="w-full flex items-center justify-between mb-2 lg:mb-4">
             <div 
               onClick={() => setShowAdmin(!showAdmin)}
               className="flex items-center gap-3 cursor-pointer select-none group focus:outline-none"
@@ -512,163 +513,155 @@ const App: React.FC = () => {
         ) : (
           <>
             {appState !== AppState.REVIEW ? (
-              <div className="w-full flex-1 flex flex-col justify-start items-center text-center gap-6 lg:gap-[28px] py-4">
+              <div className="w-full flex-1 flex flex-col justify-start items-center text-center gap-5 lg:gap-[20px] py-2">
                 
                 {/* Hero Text */}
                 <motion.div 
-                  initial={{ opacity: 0, y: -20 }}
+                  initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                   className="flex flex-col items-center text-center w-full"
                 >
                   {/* Premium AI Tech Badge */}
-                  <div className="mb-4 flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/20 bg-indigo-500/[0.05] text-[10px] font-bold text-indigo-300 uppercase tracking-widest shadow-[0_0_15px_rgba(99,102,241,0.1)]">
+                  <div className="mb-2 flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/20 bg-indigo-500/[0.05] text-[10px] font-bold text-indigo-300 uppercase tracking-widest shadow-[0_0_15px_rgba(99,102,241,0.1)]">
                     <Sparkles className="w-3 h-3 text-indigo-400 animate-pulse" />
                     AI-Powered Precision Formatter
                   </div>
 
-                  <h1 className="font-display text-4xl sm:text-5xl lg:text-[56px] font-extrabold tracking-tight mb-3 text-white leading-[1.05] tracking-tight">
+                  <h1 className="font-display text-3xl sm:text-4xl lg:text-[44px] font-extrabold tracking-tight mb-1.5 text-white leading-none">
                     Arth<span className="text-gradient-rainbow font-extrabold">Format</span> <span className="text-white">AI</span>
                   </h1>
                   
-                  <p className="text-[19px] lg:text-[20px] text-slate-400 font-light tracking-wide leading-relaxed max-w-[600px] mx-auto">
+                  <p className="text-xs sm:text-sm text-slate-400 font-light tracking-wide leading-relaxed max-w-[500px] mx-auto">
                     Resumes Reimagined, Precision Personified. Instantly scan, format, and align your resume to modern executive standards.
                   </p>
                 </motion.div>
 
-                {/* Format Selection (Only shown when not processing or staged) */}
-                {appState === AppState.IDLE && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2, duration: 0.6 }}
-                    className="w-full bg-white/[0.02] border border-white/[0.05] rounded-[24px] p-6 lg:p-[28px] backdrop-blur-2xl shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)]"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 items-center text-left">
-                      {/* Style Selector */}
-                      <div className="flex flex-col gap-2.5">
-                        <span className="text-[12px] lg:text-[13px] font-bold text-slate-500 uppercase tracking-widest">
-                          1. Target Template Style
-                        </span>
-                        <div className="relative flex p-1 bg-white/[0.02] border border-white/[0.06] rounded-xl h-[48px] md:h-[52px]">
-                          {/* Sliding Background */}
-                          <div 
-                            className={`absolute top-1 bottom-1 transition-all duration-300 ease-out bg-indigo-500/10 border border-indigo-500/30 rounded-lg shadow-[0_0_12px_rgba(99,102,241,0.15)] ${
-                              selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL 
-                                ? 'left-1 w-[calc(50%-4px)]' 
-                                : 'left-[50%] w-[calc(50%-4px)]'
-                            }`}
-                          />
-                          
-                          <button 
-                            onClick={() => setSelectedFormat(ResumeFormat.CLASSIC_PROFESSIONAL)}
-                            className={`relative z-10 flex-1 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors duration-300 cursor-pointer ${
-                              selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL ? 'text-white' : 'text-slate-400 hover:text-slate-200'
-                            }`}
-                          >
-                            <LayoutTemplate className="w-3.5 h-3.5" />
-                            <span className="font-display">Classic Professional</span>
-                          </button>
-                          
-                          <button 
-                            onClick={() => setSelectedFormat(ResumeFormat.MODERN_EXECUTIVE)}
-                            className={`relative z-10 flex-1 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors duration-300 cursor-pointer ${
-                              selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? 'text-white' : 'text-slate-400 hover:text-slate-200'
-                            }`}
-                          >
-                            <Sparkles className="w-3.5 h-3.5" />
-                            <span className="font-display">Modern Executive</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* AI Engine Selector */}
-                      <div className="flex flex-col gap-2.5">
-                        <span className="text-[12px] lg:text-[13px] font-bold text-slate-500 uppercase tracking-widest">
-                          2. AI Engine
-                        </span>
-                        <button
-                          onClick={() => setUsePro(!usePro)}
-                          className={`relative w-full h-[48px] md:h-[52px] border rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all duration-500 cursor-pointer overflow-hidden text-center flex items-center justify-center gap-1.5 ${
-                            usePro 
-                              ? 'bg-amber-500/[0.08] border-amber-500/40 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.15)] font-semibold' 
-                              : 'bg-white/[0.01] border-white/[0.06] text-slate-400 hover:text-white hover:bg-white/[0.04]'
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${usePro ? 'bg-amber-400 animate-pulse' : 'bg-slate-500'}`} />
-                          <span>{usePro ? "Pro Active" : "Standard"}</span>
-                        </button>
-                      </div>
-
-                      {/* Data Shield Selector */}
-                      <div className="flex flex-col gap-2.5">
-                        <span className="text-[12px] lg:text-[13px] font-bold text-slate-500 uppercase tracking-widest">
-                          3. Data Shield
-                        </span>
-                        <div className="flex gap-1.5 w-full">
-                          <button
-                            onClick={() => setRetainedFields(prev => ({ ...prev, location: !prev.location }))}
-                            className={`flex-1 h-[48px] md:h-[52px] flex items-center justify-center gap-1 rounded-xl border text-[9px] transition-all duration-300 cursor-pointer select-none ${
-                              retainedFields.location
-                                ? 'border-indigo-500/40 text-white bg-indigo-500/10 shadow-[0_0_8px_rgba(99,102,241,0.08)] font-semibold'
-                                : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10'
-                            }`}
-                            title="Retain Location"
-                          >
-                            <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span>Loc</span>
-                          </button>
-                          
-                          <button
-                            onClick={() => setRetainedFields(prev => ({ ...prev, phone: !prev.phone }))}
-                            className={`flex-1 h-[48px] md:h-[52px] flex items-center justify-center gap-1 rounded-xl border text-[9px] transition-all duration-300 cursor-pointer select-none ${
-                              retainedFields.phone
-                                ? 'border-indigo-500/40 text-white bg-indigo-500/10 shadow-[0_0_8px_rgba(99,102,241,0.08)] font-semibold'
-                                : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10'
-                            }`}
-                            title="Retain Phone"
-                          >
-                            <Phone className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span>Phone</span>
-                          </button>
-
-                          <button
-                            onClick={() => setRetainedFields(prev => ({ ...prev, email: !prev.email }))}
-                            className={`flex-1 h-[48px] md:h-[52px] flex items-center justify-center gap-1 rounded-xl border text-[9px] transition-all duration-300 cursor-pointer select-none ${
-                              retainedFields.email
-                                ? 'border-indigo-500/40 text-white bg-indigo-500/10 shadow-[0_0_8px_rgba(99,102,241,0.08)] font-semibold'
-                                : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10'
-                            }`}
-                            title="Retain Email"
-                          >
-                            <Mail className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span>Email</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Upload / Processing Zone */}
-                <div className="w-full">
+                {/* Upload / Combined Option selector Zone */}
+                <div className="w-full max-w-[800px] z-10">
                   <AnimatePresence mode="wait">
                     {(appState === AppState.IDLE || appState === AppState.ERROR) && (
                       <motion.div 
-                        key="upload"
+                        key="upload-options"
                         initial={{ opacity: 0, scale: 0.98 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.98 }}
                         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                        className="relative group w-full"
+                        className="glassmorphic-card rounded-[24px] p-6 lg:p-7 flex flex-col gap-5 text-left"
                       >
+                        {/* Selector Row */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-center pb-4 border-b border-white/[0.05]">
+                          {/* Style Selector */}
+                          <div className="flex flex-col gap-2">
+                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                              1. Target Template Style
+                            </span>
+                            <div className="relative flex p-1 bg-white/[0.02] border border-white/[0.06] rounded-xl h-[42px]">
+                              {/* Sliding Background */}
+                              <div 
+                                className={`absolute top-1 bottom-1 transition-all duration-300 ease-out bg-indigo-500/10 border border-indigo-500/30 rounded-lg shadow-[0_0_12px_rgba(99,102,241,0.15)] ${
+                                  selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL 
+                                    ? 'left-1 w-[calc(50%-4px)]' 
+                                    : 'left-[50%] w-[calc(50%-4px)]'
+                                }`}
+                              />
+                              
+                              <button 
+                                onClick={() => setSelectedFormat(ResumeFormat.CLASSIC_PROFESSIONAL)}
+                                className={`relative z-10 flex-1 py-1.5 text-[11px] font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 cursor-pointer ${
+                                  selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                                }`}
+                              >
+                                <LayoutTemplate className="w-3.5 h-3.5" />
+                                <span className="font-display">Classic</span>
+                              </button>
+                              
+                              <button 
+                                onClick={() => setSelectedFormat(ResumeFormat.MODERN_EXECUTIVE)}
+                                className={`relative z-10 flex-1 py-1.5 text-[11px] font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 cursor-pointer ${
+                                  selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                                }`}
+                              >
+                                <Sparkles className="w-3.5 h-3.5" />
+                                <span className="font-display">Modern</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* AI Engine Selector */}
+                          <div className="flex flex-col gap-2">
+                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                              2. AI Engine
+                            </span>
+                            <button
+                              onClick={() => setUsePro(!usePro)}
+                              className={`relative w-full h-[42px] border rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all duration-500 cursor-pointer overflow-hidden text-center flex items-center justify-center gap-1.5 ${
+                                usePro 
+                                  ? 'bg-amber-500/[0.08] border-amber-500/40 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.15)] font-semibold' 
+                                  : 'bg-white/[0.01] border-white/[0.06] text-slate-400 hover:text-white hover:bg-white/[0.04]'
+                              }`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${usePro ? 'bg-amber-400 animate-pulse' : 'bg-slate-500'}`} />
+                              <span>{usePro ? "Pro Active" : "Standard"}</span>
+                            </button>
+                          </div>
+
+                          {/* Data Shield Selector */}
+                          <div className="flex flex-col gap-2">
+                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                              3. Data Shield
+                            </span>
+                            <div className="flex gap-1.5 w-full">
+                              <button
+                                onClick={() => setRetainedFields(prev => ({ ...prev, location: !prev.location }))}
+                                className={`flex-1 h-[42px] flex items-center justify-center gap-1 rounded-xl border text-[9px] transition-all duration-300 cursor-pointer select-none ${
+                                  retainedFields.location
+                                    ? 'border-indigo-500/40 text-white bg-indigo-500/10 shadow-[0_0_8px_rgba(99,102,241,0.08)] font-semibold'
+                                    : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10'
+                                }`}
+                                title="Retain Location"
+                              >
+                                <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                                <span>Loc</span>
+                              </button>
+                              
+                              <button
+                                onClick={() => setRetainedFields(prev => ({ ...prev, phone: !prev.phone }))}
+                                className={`flex-1 h-[42px] flex items-center justify-center gap-1 rounded-xl border text-[9px] transition-all duration-300 cursor-pointer select-none ${
+                                  retainedFields.phone
+                                    ? 'border-indigo-500/40 text-white bg-indigo-500/10 shadow-[0_0_8px_rgba(99,102,241,0.08)] font-semibold'
+                                    : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10'
+                                }`}
+                                title="Retain Phone"
+                              >
+                                <Phone className="w-3.5 h-3.5 flex-shrink-0" />
+                                <span>Phone</span>
+                              </button>
+
+                              <button
+                                onClick={() => setRetainedFields(prev => ({ ...prev, email: !prev.email }))}
+                                className={`flex-1 h-[42px] flex items-center justify-center gap-1 rounded-xl border text-[9px] transition-all duration-300 cursor-pointer select-none ${
+                                  retainedFields.email
+                                    ? 'border-indigo-500/40 text-white bg-indigo-500/10 shadow-[0_0_8px_rgba(99,102,241,0.08)] font-semibold'
+                                    : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10'
+                                }`}
+                                title="Retain Email"
+                              >
+                                <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+                                <span>Email</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Drag and Drop box */}
                         <div 
                           className={`
-                            relative overflow-hidden rounded-[24px] p-8 lg:p-10
-                            flex flex-col items-center justify-center text-center glassmorphic-card min-h-[220px] lg:min-h-[260px] cursor-pointer
+                            relative overflow-hidden rounded-[16px] p-6 lg:p-7
+                            flex flex-col items-center justify-center text-center border border-dashed border-white/[0.06] bg-white/[0.01] hover:bg-white/[0.02] min-h-[150px] lg:min-h-[170px] cursor-pointer transition-all duration-300
                             ${dragActive 
-                              ? 'border-indigo-500/80 bg-indigo-500/10 shadow-[0_0_40px_rgba(99,102,241,0.25)] scale-[1.01]' 
-                              : 'border-white/[0.04]'
+                              ? 'border-indigo-500/80 bg-indigo-500/5 shadow-[0_0_30px_rgba(99,102,241,0.15)] scale-[1.01]' 
+                              : 'border-white/[0.06]'
                             }
                           `}
                           onDragEnter={onDragEnter}
@@ -684,28 +677,27 @@ const App: React.FC = () => {
                           />
                           
                           {/* Glowing dynamic background flare */}
-                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500/[0.05] rounded-full blur-[90px] pointer-events-none -z-10 group-hover:bg-indigo-500/[0.1] transition-colors duration-500" />
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-indigo-500/[0.03] rounded-full blur-[70px] pointer-events-none -z-10 group-hover:bg-indigo-500/[0.07] transition-colors duration-500" />
                           
-                          {/* Constrained and Vertically Centered Internal Content Block */}
-                          <div className="w-full max-w-[600px] mx-auto flex flex-col items-center justify-center flex-1 py-2">
-                            <div className="relative z-10 mb-4">
-                              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-[1.5px] shadow-lg shadow-indigo-500/10">
+                          <div className="w-full flex flex-col items-center justify-center flex-1 py-1">
+                            <div className="mb-2.5">
+                              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-[1px] shadow-lg shadow-indigo-500/5">
                                 <div className="w-full h-full rounded-xl bg-[#080d24] flex items-center justify-center">
-                                  <UploadCloud className="w-6 h-6 text-indigo-400 group-hover:translate-y-[-2px] group-hover:text-pink-400 transition-all duration-300" />
+                                  <UploadCloud className="w-5 h-5 text-indigo-400 group-hover:translate-y-[-2px] transition-transform duration-300" />
                                 </div>
                               </div>
                             </div>
                             
-                            <h3 className="text-xl sm:text-2xl font-bold text-white mb-2 tracking-tight font-display">
+                            <h3 className="text-base font-bold text-white mb-0.5 tracking-tight font-display">
                               Drop your resume here
                             </h3>
                             
-                            <p className="text-slate-400 mb-5 max-w-sm sm:max-w-md mx-auto font-light leading-relaxed text-xs">
-                              Supports Word (.docx, .doc), PDF, Text, or Images. We'll handle the rest with pixel-perfect structural precision.
+                            <p className="text-slate-400 mb-3 max-w-sm mx-auto font-light leading-relaxed text-[11px]">
+                              Supports Word (.docx, .doc), PDF, Text, or Images. We'll handle the rest with precision.
                             </p>
                             
-                            <div className="btn-2026-neon px-8 py-2.5 font-bold text-xs tracking-wide rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-2 group-hover:scale-[1.02]">
-                              Browse Files <ArrowRight className="w-3.5 h-3.5 text-white group-hover:translate-x-0.5 transition-transform" />
+                            <div className="btn-2026-neon px-5 py-2 font-bold text-[9px] uppercase tracking-wider rounded-lg shadow-md transition-all duration-300 flex items-center justify-center gap-1.5 hover:scale-[1.02]">
+                              Browse Files <ArrowRight className="w-3.5 h-3.5 text-white" />
                             </div>
                           </div>
                         </div>
@@ -714,19 +706,19 @@ const App: React.FC = () => {
                           <motion.div 
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="mt-5 p-5 bg-red-500/10 border border-red-500/20 rounded-2xl flex flex-col gap-3 backdrop-blur-md"
+                            className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex flex-col gap-2.5 backdrop-blur-md"
                           >
-                            <div className="flex items-start gap-2.5">
-                              <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                              <div className="flex flex-col gap-1 text-left">
-                                <h4 className="font-bold text-red-200 text-xs uppercase tracking-wider">Processing Issue</h4>
-                                <p className="text-xs text-red-100/80 leading-relaxed">{errorMsg}</p>
+                            <div className="flex items-start gap-2 text-left">
+                              <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                              <div className="flex flex-col gap-0.5">
+                                <h4 className="font-bold text-red-200 text-[10px] uppercase tracking-wider">Processing Issue</h4>
+                                <p className="text-[11px] text-red-100/80 leading-relaxed">{errorMsg}</p>
                               </div>
                             </div>
                             <div className="flex justify-end">
                               <button 
                                 onClick={handleReset}
-                                className="px-3.5 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-200 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-colors border border-red-500/30"
+                                className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 text-[9px] font-bold uppercase tracking-widest rounded-md transition-colors border border-red-500/30"
                               >
                                 Try Another File
                               </button>

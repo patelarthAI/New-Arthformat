@@ -49,6 +49,41 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   const [isChecking, setIsChecking] = useState(false);
   const [issues, setIssues] = useState<GrammarIssue[]>([]);
   
+  // Highlight state for linked checklist click
+  const [highlightedSection, setHighlightedSection] = useState<string | null>(null);
+  
+  // Page fit checker state
+  const [pageFitInfo, setPageFitInfo] = useState({ pages: 1, overflowLines: 0, percentUsed: 100 });
+
+  useEffect(() => {
+    const checkHeight = () => {
+      const el = document.getElementById("resume-preview-content");
+      if (el) {
+        const height = el.scrollHeight;
+        const pageHeight = 1140; // A4 print height threshold
+        const pages = Math.ceil(height / pageHeight);
+        const percentUsed = Math.round((height / pageHeight) * 100);
+        const excess = height % pageHeight;
+        const overflowLines = excess > 0 && height > pageHeight ? Math.round(excess / 22) : 0;
+        setPageFitInfo({ pages, overflowLines, percentUsed });
+      }
+    };
+    
+    const timer = setTimeout(checkHeight, 350);
+    return () => clearTimeout(timer);
+  }, [data, selectedFormat, comparisonMode, sidebarOpen]); // Re-run when layout or data changes
+
+  const triggerHighlight = (sectionId: string) => {
+    setHighlightedSection(sectionId);
+    const el = document.getElementById(`resume-section-${sectionId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    setTimeout(() => {
+      setHighlightedSection(null);
+    }, 2500);
+  };
+  
   // Revision Snapshot states for Version History
   const [historyStack, setHistoryStack] = useState<{ id: string; timestamp: number; data: ResumeData; description: string }[]>([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1);
@@ -747,7 +782,12 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
               {isChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-indigo-400" />}
               Check Grammar
             </button>
-            
+          </div>
+          
+          <div className="h-4 w-[1px] bg-white/10" />
+          
+          {/* Export Operations */}
+          <div className="flex items-center gap-2">
             <button
               onClick={handleDownloadDOCX}
               className="btn-2026-neon px-4 h-9 text-[10px] font-bold uppercase tracking-wider rounded-lg flex items-center gap-1.5 cursor-pointer"
@@ -818,14 +858,18 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
             >
               
               {/* 1. Name */}
-              <div style={{ textAlign: styles.nameAlign, marginBottom: styles.marginBottom }}>
+              <div 
+                id="resume-section-contact" 
+                className={`transition-all duration-300 p-1 rounded ${highlightedSection === 'contact' ? 'flash-highlight-active' : ''}`}
+                style={{ textAlign: styles.nameAlign, marginBottom: styles.marginBottom }}
+              >
                 <h1 
                   contentEditable
                   suppressContentEditableWarning
                   onBlur={(e) => handleEditFullName(e.currentTarget.textContent || "")}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                  style={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: styles.fontSizeName, color: styles.headingColor === "#000000" ? black : styles.headingColor, margin: 0, outline: 'none' }}
-                  className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text"
+                  style={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: styles.fontSizeName, color: styles.headingColor === "#000000" ? black : styles.headingColor, margin: 0 }}
+                  className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                 >
                   {data.fullName}
                 </h1>
@@ -870,7 +914,11 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
 
               {/* 2. Summary */}
               {data.summary && (
-                <div style={{ marginBottom: styles.marginBottom }}>
+                <div 
+                  id="resume-section-summary"
+                  className={`transition-all duration-300 p-1 rounded ${highlightedSection === 'summary' ? 'flash-highlight-active' : ''}`}
+                  style={{ marginBottom: styles.marginBottom }}
+                >
                   <h3 style={{ 
                       fontWeight: 'bold', 
                       textTransform: styles.headingTransform, 
@@ -948,7 +996,11 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
 
               {/* 3. Experience */}
               {data.experience && data.experience.length > 0 && (
-                <div style={{ marginBottom: styles.marginBottom }}>
+                <div 
+                  id="resume-section-experience"
+                  className={`transition-all duration-300 p-1 rounded ${highlightedSection === 'experience' ? 'flash-highlight-active' : ''}`}
+                  style={{ marginBottom: styles.marginBottom }}
+                >
                   <h3 style={{ 
                       fontWeight: 'bold', 
                       textTransform: styles.headingTransform, 
@@ -974,7 +1026,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                       suppressContentEditableWarning
                                       onBlur={(e) => handleEditExpDates(idx, e.currentTarget.textContent || "")}
                                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                      className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
+                                      className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                     >
                                       {formatModernDate(exp.dates)}
                                     </span>
@@ -986,7 +1038,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                       suppressContentEditableWarning
                                       onBlur={(e) => handleEditExpCompany(idx, e.currentTarget.textContent || "")}
                                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                      className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
+                                      className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                     >
                                       {stripTrailingDate(exp.company)}
                                     </span>
@@ -998,7 +1050,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                           suppressContentEditableWarning
                                           onBlur={(e) => handleEditExpLocation(idx, e.currentTarget.textContent || "")}
                                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                          className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
+                                          className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                         >
                                           {formatLocation(exp.location)}
                                         </span>
@@ -1011,7 +1063,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                       suppressContentEditableWarning
                                       onBlur={(e) => handleEditExpTitle(idx, e.currentTarget.textContent || "")}
                                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                      className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
+                                      className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                     >
                                       {stripTrailingDate(exp.title)}
                                     </span>
@@ -1026,7 +1078,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                       suppressContentEditableWarning
                                       onBlur={(e) => handleEditExpCompany(idx, e.currentTarget.textContent || "")}
                                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                      className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
+                                      className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                     >
                                       {stripTrailingDate(exp.company)}
                                     </span>
@@ -1038,7 +1090,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                           suppressContentEditableWarning
                                           onBlur={(e) => handleEditExpLocation(idx, e.currentTarget.textContent || "")}
                                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                          className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
+                                          className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                         >
                                           {formatLocation(exp.location)}
                                         </span>
@@ -1052,7 +1104,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                         suppressContentEditableWarning
                                         onBlur={(e) => handleEditExpDates(idx, e.currentTarget.textContent || "")}
                                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                        className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
+                                        className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                       >
                                         {formatModernDate(exp.dates)}
                                       </span>
@@ -1065,7 +1117,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                     suppressContentEditableWarning
                                     onBlur={(e) => handleEditExpTitle(idx, e.currentTarget.textContent || "")}
                                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                    className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
+                                    className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                   >
                                     {stripTrailingDate(exp.title)}
                                   </span>
@@ -1240,7 +1292,11 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
 
               {/* 5. Education */}
               {data.education && data.education.length > 0 && (
-                <div style={{ marginBottom: styles.marginBottom }}>
+                <div 
+                  id="resume-section-education"
+                  className={`transition-all duration-300 p-1 rounded ${highlightedSection === 'education' ? 'flash-highlight-active' : ''}`}
+                  style={{ marginBottom: styles.marginBottom }}
+                >
                   <h3 style={{ 
                       fontWeight: 'bold', 
                       textTransform: styles.headingTransform, 
@@ -1263,7 +1319,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                               suppressContentEditableWarning
                               onBlur={(e) => handleEditEduInstitution(idx, e.currentTarget.textContent || "")}
                               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                              className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
+                              className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                             >
                               {stripTrailingDate(edu.institution)}
                             </span>
@@ -1275,7 +1331,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                   suppressContentEditableWarning
                                   onBlur={(e) => handleEditEduLocation(idx, e.currentTarget.textContent || "")}
                                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                  className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
+                                  className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                 >
                                   {formatLocation(edu.location)}
                                 </span>
@@ -1287,9 +1343,10 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                               <span
                                 contentEditable
                                 suppressContentEditableWarning
+                                // Wait, let's keep the date edit handler
                                 onBlur={(e) => handleEditEduDates(idx, e.currentTarget.textContent || "")}
                                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
+                                className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                               >
                                 {formatModernDate(edu.dates)}
                               </span>
@@ -1302,7 +1359,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                             suppressContentEditableWarning
                             onBlur={(e) => handleEditEduDegree(idx, e.currentTarget.textContent || "")}
                             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                            className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
+                            className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                           >
                             {stripTrailingDate(edu.degree)}
                           </span>
@@ -1324,7 +1381,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                            </ul>
                         )}
                       </div>
-                    ))}
+                     ))}
                   </div>
                 </div>
               )}
@@ -1337,7 +1394,16 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                    const useColumns = isGridCandidate && !hasLongItems && section.items && section.items.length > 2;
 
                    return (
-                     <div key={idx} style={{ marginBottom: styles.marginBottom }}>
+                     <div 
+                       key={idx} 
+                       id={idx === 0 ? "resume-section-skills" : `resume-section-custom-${idx}`}
+                       className={`transition-all duration-300 p-1 rounded ${
+                         (idx === 0 && highlightedSection === 'skills') 
+                           ? 'flash-highlight-active' 
+                           : (highlightedSection === `custom-${idx}` ? 'flash-highlight-active' : '')
+                       }`}
+                       style={{ marginBottom: styles.marginBottom }}
+                     >
                        <h3 
                          contentEditable
                          suppressContentEditableWarning
@@ -1351,10 +1417,9 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                              fontSize: styles.fontSizeBody, 
                              color: styles.headingColor,
                              borderBottom: styles.headingBorder,
-                             paddingBottom: styles.headingBorder !== 'none' ? '2px' : '0',
-                             outline: 'none'
+                             paddingBottom: styles.headingBorder !== 'none' ? '2px' : '0'
                          }}
-                         className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text inline-block"
+                         className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text inline-block"
                        >
                          {formatTitle(section.title)}
                        </h3>
@@ -1425,6 +1490,29 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
               })}
 
             </div>
+
+            {/* Live A4 Page-Fit Optimizer status bar */}
+            <div className="w-full max-w-[820px] mt-2 mb-6 flex-shrink-0 flex items-center justify-between px-4 py-2.5 bg-[#090d24]/60 border border-white/[0.05] rounded-xl text-slate-400 text-xs backdrop-blur-md">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${pageFitInfo.pages > 1 ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+                <span className="font-medium text-slate-350">
+                  A4 Spacing Fit: {pageFitInfo.pages} {pageFitInfo.pages > 1 ? 'pages' : 'page'} used ({pageFitInfo.percentUsed}%)
+                </span>
+              </div>
+              <div className="text-[11px]">
+                {pageFitInfo.pages > 1 ? (
+                  <span className="text-amber-400 font-medium flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    Overflow Warning: Exceeds 1 page limit by approx {pageFitInfo.overflowLines} lines. Consider shortening summary or bullet points.
+                  </span>
+                ) : (
+                  <span className="text-emerald-400 font-medium">
+                    Perfect single-page length for automated recruiter screening.
+                  </span>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -1532,36 +1620,54 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                     <div className="space-y-3">
                       <h4 className="text-xs font-bold text-slate-400 tracking-wider uppercase font-display">Recruiter Optimization Checklist</h4>
                       <div className="space-y-2.5">
-                        {scoreData.suggestions.map((s) => (
-                          <div 
-                            key={s.id} 
-                            className={`p-3 rounded-xl border flex items-start gap-3 transition-colors ${
-                              s.type === 'success' 
-                                ? 'bg-emerald-500/[0.02] border-emerald-500/10' 
-                                : s.type === 'warning'
-                                  ? 'bg-rose-500/[0.02] border-rose-500/10'
-                                  : 'bg-white/[0.01] border-white/[0.04]'
-                            }`}
-                          >
-                            <span className="mt-1 flex-shrink-0">
-                              {s.type === 'success' ? (
-                                <Check className="w-4 h-4 text-emerald-400" />
-                              ) : s.type === 'warning' ? (
-                                <AlertCircle className="w-4 h-4 text-rose-450" />
-                              ) : (
-                                <Info className="w-4 h-4 text-slate-400" />
-                              )}
-                            </span>
-                            <div className="flex-1 flex flex-col text-left">
-                              <span className={`text-[10px] font-bold uppercase tracking-wider leading-none mb-1 ${
-                                s.type === 'success' ? 'text-emerald-400' : s.type === 'warning' ? 'text-rose-400' : 'text-slate-400'
-                              }`}>
-                                {s.category}
+                        {scoreData.suggestions.map((s) => {
+                          const mapCategoryToSection = (cat: string) => {
+                            switch (cat) {
+                              case 'Contact Details': return 'contact';
+                              case 'Executive Summary': return 'summary';
+                              case 'Performance Metrics': return 'experience';
+                              case 'Action Verbs': return 'experience';
+                              case 'Bullet Density': return 'experience';
+                              case 'Experience': return 'experience';
+                              case 'Education': return 'education';
+                              case 'Skills': return 'skills';
+                              default: return 'contact';
+                            }
+                          };
+                          
+                          return (
+                            <div 
+                              key={s.id} 
+                              onClick={() => triggerHighlight(mapCategoryToSection(s.category))}
+                              className={`p-3 rounded-xl border flex items-start gap-3 transition-all cursor-pointer hover:bg-white/[0.03] active:scale-[0.99] ${
+                                s.type === 'success' 
+                                  ? 'bg-emerald-500/[0.02] border-emerald-500/10 hover:border-emerald-500/20' 
+                                  : s.type === 'warning'
+                                    ? 'bg-rose-500/[0.02] border-rose-500/10 hover:border-rose-500/20'
+                                    : 'bg-white/[0.01] border-white/[0.04] hover:border-white/[0.08]'
+                              }`}
+                              title="Click to locate this section"
+                            >
+                              <span className="mt-1 flex-shrink-0">
+                                {s.type === 'success' ? (
+                                  <Check className="w-4 h-4 text-emerald-400" />
+                                ) : s.type === 'warning' ? (
+                                  <AlertCircle className="w-4 h-4 text-rose-450" />
+                                ) : (
+                                  <Info className="w-4 h-4 text-slate-400" />
+                                )}
                               </span>
-                              <p className="text-xs text-slate-300 font-light leading-relaxed">{s.text}</p>
+                              <div className="flex-1 flex flex-col text-left">
+                                <span className={`text-[10px] font-bold uppercase tracking-wider leading-none mb-1 ${
+                                  s.type === 'success' ? 'text-emerald-400' : s.type === 'warning' ? 'text-rose-400' : 'text-slate-400'
+                                }`}>
+                                  {s.category}
+                                </span>
+                                <p className="text-xs text-slate-300 font-light leading-relaxed">{s.text}</p>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   </div>

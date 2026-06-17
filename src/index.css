@@ -223,3 +223,65 @@
   -webkit-background-clip: text;
   animation: gradient-flow 12s linear infinite;
 }
+
+/* Dynamic grid mesh background */
+.grid-bg-mesh {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    radial-gradient(circle at 1px 1px, rgba(99, 102, 241, 0.02) 1.5px, transparent 0),
+    linear-gradient(rgba(99, 102, 241, 0.006) 1px, transparent 0),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.006) 1px, transparent 0);
+  background-size: 24px 24px, 48px 48px, 48px 48px;
+  background-position: center center;
+  animation: mesh-drift 180s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes mesh-drift {
+  from { background-position: 0 0, 0 0, 0 0; }
+  to { background-position: 1000px 1000px, 500px 500px, 500px 500px; }
+}
+
+/* Edit affordance styles for inline fields */
+.editable-field-cue {
+  outline: 2px solid transparent;
+  outline-offset: 3px;
+  transition: all 0.2s ease;
+}
+
+.editable-field-cue:hover {
+  outline: 1.5px dashed rgba(99, 102, 241, 0.35) !important;
+  outline-offset: 3px;
+  background-color: rgba(99, 102, 241, 0.02) !important;
+  border-radius: 4px;
+}
+
+.editable-field-cue:focus {
+  outline: 2px solid #6366f1 !important;
+  outline-offset: 3px;
+  background-color: rgba(99, 102, 241, 0.06) !important;
+  border-radius: 4px;
+}
+
+/* Flash highlight animation for linked checklist click */
+@keyframes border-glow-flash {
+  0%, 100% {
+    outline: 2px solid transparent;
+    box-shadow: none;
+    background-color: transparent;
+  }
+  15%, 85% {
+    outline: 2px solid #8b5cf6;
+    outline-offset: 4px;
+    box-shadow: 0 0 35px rgba(139, 92, 246, 0.3);
+    background-color: rgba(139, 92, 246, 0.06);
+    border-radius: 6px;
+  }
+}
+
+.flash-highlight-active {
+  animation: border-glow-flash 2.5s ease-out 1 !important;
+}
+

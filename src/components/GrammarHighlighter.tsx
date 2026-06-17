@@ -36,7 +36,7 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
   if (fieldIssues.length === 0) {
     return (
       <span 
-        className={`${className || ""} hover:bg-slate-100 focus:bg-slate-150 focus:outline-none px-1 rounded transition-colors duration-150`} 
+        className={`${className || ""} editable-field-cue focus:outline-none px-1 rounded transition-colors duration-150`} 
         style={{ ...style, cursor: onEdit ? 'text' : 'inherit' }}
         contentEditable={!!onEdit}
         suppressContentEditableWarning
