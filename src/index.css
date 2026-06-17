@@ -14,6 +14,47 @@
   }
 }
 
+@media (max-height: 820px) and (min-width: 1024px) {
+  /* Scale down hero logo and gaps on shorter screens to prevent scroll/clipping */
+  .hero-logo-container {
+    transform: scale(0.85);
+    margin-bottom: 0.1rem !important;
+  }
+  .hero-title {
+    font-size: 1.85rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+  .hero-tagline {
+    font-size: 10.5px !important;
+    margin-bottom: 0.25rem !important;
+    letter-spacing: 0.12em !important;
+  }
+  .hero-desc {
+    font-size: 10.5px !important;
+    max-width: 400px !important;
+    margin-bottom: 0.1rem !important;
+  }
+  .main-hero-container {
+    gap: 0.5rem !important;
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+  }
+  .hero-card-container {
+    padding: 0.75rem !important;
+    gap: 0.5rem !important;
+  }
+  .hero-card-selector-row {
+    padding-bottom: 0.5rem !important;
+  }
+  .hero-dropzone-container {
+    min-height: 100px !important;
+    padding: 0.75rem !important;
+  }
+  .hero-dropzone-icon-container {
+    margin-bottom: 0.25rem !important;
+  }
+}
+
 /* Keyframe Animations */
 @keyframes gradient-flow {
   0% { background-position: 0% 50%; }
@@ -62,16 +103,16 @@
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* Color-shifting Glass Plate */
 .glassmorphic-card {
   position: relative;
-  background: rgba(9, 13, 26, 0.4);
+  background: rgba(10, 12, 28, 0.55);
   backdrop-filter: blur(32px) saturate(180%);
   -webkit-backdrop-filter: blur(32px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(99, 102, 241, 0.12);
   box-shadow: 
-    0 15px 40px -15px rgba(0, 0, 0, 0.6),
-    inset 0 1px 1px rgba(255, 255, 255, 0.1);
+    0 20px 50px -20px rgba(0, 0, 0, 0.7),
+    0 0 40px -15px rgba(99, 102, 241, 0.1),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
   transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 

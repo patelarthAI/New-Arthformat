@@ -508,32 +508,34 @@ const App: React.FC = () => {
         ) : (
           <>
             {appState !== AppState.REVIEW ? (
-              <div className="w-full flex-1 flex flex-col justify-center items-center text-center gap-4 lg:gap-[16px] py-2">
+              <div className="main-hero-container w-full flex-1 flex flex-col justify-center items-center text-center gap-4 lg:gap-[20px] py-2">
                 
                 {/* Hero Text */}
                 <motion.div 
-                  initial={{ opacity: 0, y: -10 }}
+                  initial={{ opacity: 0, y: -15 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                  className="flex flex-col items-center text-center w-full mb-0.5"
+                  className="flex flex-col items-center text-center w-full mb-1"
                 >
                   {/* Center Logo Hero Element */}
-                  <div className="mb-2 transform scale-90 hover:scale-95 transition-transform duration-500">
-                    <InteractiveLogo size="md" />
+                  <div className="hero-logo-container mb-3.5 relative group transition-all duration-500 hover:scale-[1.03] active:scale-[0.98]">
+                    {/* Glowing background aura */}
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-indigo-500/10 via-purple-500/10 to-pink-500/10 blur-3xl opacity-75 pointer-events-none" />
+                    <InteractiveLogo size="hero" />
                   </div>
 
                   {/* Brand Title in Center Hero */}
-                  <h1 className="font-display text-xl sm:text-2xl lg:text-[25px] font-bold text-white tracking-tight leading-none mb-1">
-                    Arth<span className="text-gradient-rainbow font-extrabold">Format</span> <span className="text-white">AI</span>
+                  <h1 className="hero-title font-display text-3xl sm:text-4xl lg:text-[40px] font-extrabold text-white tracking-tight leading-none mb-2 select-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+                    Arth<span className="text-gradient-rainbow font-black drop-shadow-[0_0_30px_rgba(168,85,247,0.25)]">Format</span> <span className="text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.15)]">AI</span>
                   </h1>
 
                   {/* Tagline */}
-                  <h2 className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-350 mb-1">
-                    Resumes Reimagined, <span className="text-gradient-rainbow">Precision Personified.</span>
+                  <h2 className="hero-tagline text-[11px] sm:text-xs lg:text-[13px] font-semibold uppercase tracking-[0.2em] text-indigo-200/90 mb-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)] select-none">
+                    Resumes Reimagined, <span className="text-gradient-rainbow font-extrabold">Precision Personified.</span>
                   </h2>
                   
                   {/* Description */}
-                  <p className="text-[10px] sm:text-[10.5px] text-slate-400 font-light tracking-wide leading-relaxed max-w-[380px] mx-auto">
+                  <p className="hero-desc text-[10px] sm:text-[11px] lg:text-[12.5px] text-slate-400 font-light tracking-wide leading-relaxed max-w-[440px] mx-auto opacity-90 select-none">
                     Transform any resume into a polished, professional document in seconds.
                   </p>
                 </motion.div>
@@ -548,19 +550,19 @@ const App: React.FC = () => {
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.98 }}
                         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                        className="glassmorphic-card rounded-[24px] p-3 lg:p-4 flex flex-col gap-3 text-left"
+                        className="glassmorphic-card hero-card-container rounded-[24px] p-3.5 lg:p-4.5 flex flex-col gap-3.5 text-left"
                       >
                         {/* Selector Row */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center pb-2.5 border-b border-white/[0.05]">
+                        <div className="hero-card-selector-row grid grid-cols-1 md:grid-cols-3 gap-3.5 items-center pb-3 border-b border-white/[0.05]">
                           {/* Style Selector */}
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                            <span className="text-[10px] lg:text-[10.5px] font-bold text-slate-400 uppercase tracking-widest select-none">
                               1. Target Template Style
                             </span>
-                            <div className="relative flex p-1 bg-white/[0.02] border border-white/[0.06] rounded-xl h-[36px]">
+                            <div className="relative flex p-1 bg-white/[0.01] border border-white/[0.05] hover:border-white/10 rounded-xl h-[38px] transition-colors duration-300">
                               {/* Sliding Background */}
                               <div 
-                                className={`absolute top-1 bottom-1 transition-all duration-300 ease-out bg-indigo-500/10 border border-indigo-500/30 rounded-lg shadow-[0_0_12px_rgba(99,102,241,0.15)] ${
+                                className={`absolute top-1 bottom-1 transition-all duration-300 ease-out bg-indigo-500/15 border border-indigo-500/40 rounded-lg shadow-[0_0_12px_rgba(99,102,241,0.25)] ${
                                   selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL 
                                     ? 'left-1 w-[calc(50%-4px)]' 
                                     : 'left-[50%] w-[calc(50%-4px)]'
@@ -569,21 +571,21 @@ const App: React.FC = () => {
                               
                               <button 
                                 onClick={() => setSelectedFormat(ResumeFormat.CLASSIC_PROFESSIONAL)}
-                                className={`relative z-10 flex-1 py-1 text-[10px] font-semibold rounded-lg flex items-center justify-center gap-1 transition-colors duration-300 cursor-pointer ${
+                                className={`relative z-10 flex-1 py-1 text-[10.5px] font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 cursor-pointer ${
                                   selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL ? 'text-white' : 'text-slate-400 hover:text-slate-200'
                                 }`}
                               >
-                                <LayoutTemplate className="w-3 h-3" />
+                                <LayoutTemplate className="w-3.5 h-3.5 text-indigo-400" />
                                 <span className="font-display">Classic</span>
                               </button>
                               
                               <button 
                                 onClick={() => setSelectedFormat(ResumeFormat.MODERN_EXECUTIVE)}
-                                className={`relative z-10 flex-1 py-1 text-[10px] font-semibold rounded-lg flex items-center justify-center gap-1 transition-colors duration-300 cursor-pointer ${
+                                className={`relative z-10 flex-1 py-1 text-[10.5px] font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 cursor-pointer ${
                                   selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? 'text-white' : 'text-slate-400 hover:text-slate-200'
                                 }`}
                               >
-                                <Sparkles className="w-3 h-3" />
+                                <Sparkles className="w-3.5 h-3.5 text-pink-400" />
                                 <span className="font-display">Modern</span>
                               </button>
                             </div>
@@ -591,36 +593,36 @@ const App: React.FC = () => {
 
                           {/* AI Engine Selector */}
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                            <span className="text-[10px] lg:text-[10.5px] font-bold text-slate-400 uppercase tracking-widest select-none">
                               2. AI Engine
                             </span>
-                            <div className="relative flex p-1 bg-white/[0.02] border border-white/[0.06] rounded-xl h-[36px] cursor-pointer" onClick={() => setUsePro(!usePro)}>
+                            <div className="relative flex p-1 bg-white/[0.01] border border-white/[0.05] hover:border-white/10 rounded-xl h-[38px] cursor-pointer transition-colors duration-300" onClick={() => setUsePro(!usePro)}>
                               {/* Sliding Background */}
                               <div 
                                 className={`absolute top-1 bottom-1 transition-all duration-300 ease-out rounded-lg ${
                                   usePro 
-                                    ? 'left-[50%] w-[calc(50%-4px)] bg-amber-500/10 border border-amber-500/30 shadow-[0_0_12px_rgba(245,158,11,0.15)]' 
-                                    : 'left-1 w-[calc(50%-4px)] bg-indigo-500/10 border border-indigo-500/30 shadow-[0_0_12px_rgba(99,102,241,0.15)]'
+                                    ? 'left-[50%] w-[calc(50%-4px)] bg-amber-500/15 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]' 
+                                    : 'left-1 w-[calc(50%-4px)] bg-indigo-500/15 border border-indigo-500/40 shadow-[0_0_12px_rgba(99,102,241,0.25)]'
                                 }`}
                               />
                               
                               <button 
                                 type="button"
-                                className={`relative z-10 flex-1 text-[9px] font-bold uppercase rounded-lg flex items-center justify-center gap-1 transition-colors duration-300 ${
+                                className={`relative z-10 flex-1 text-[10px] font-bold uppercase rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 ${
                                   !usePro ? 'text-white' : 'text-slate-400 hover:text-slate-200'
                                 }`}
                               >
-                                <span className={`w-1 h-1 rounded-full ${!usePro ? 'bg-indigo-400 animate-pulse' : 'bg-slate-500'}`} />
+                                <span className={`w-1.5 h-1.5 rounded-full ${!usePro ? 'bg-indigo-400 animate-pulse' : 'bg-slate-500'}`} />
                                 <span className="font-display">Standard</span>
                               </button>
                               
                               <button 
                                 type="button"
-                                className={`relative z-10 flex-1 text-[9px] font-bold uppercase rounded-lg flex items-center justify-center gap-1 transition-colors duration-300 ${
+                                className={`relative z-10 flex-1 text-[10px] font-bold uppercase rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 ${
                                   usePro ? 'text-amber-200' : 'text-slate-400 hover:text-slate-200'
                                 }`}
                               >
-                                <span className={`w-1 h-1 rounded-full ${usePro ? 'bg-amber-400 animate-pulse' : 'bg-slate-500'}`} />
+                                <span className={`w-1.5 h-1.5 rounded-full ${usePro ? 'bg-amber-400 animate-pulse' : 'bg-slate-500'}`} />
                                 <span className="font-display">Pro</span>
                               </button>
                             </div>
@@ -628,46 +630,46 @@ const App: React.FC = () => {
 
                           {/* Data Shield Selector */}
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                            <span className="text-[10px] lg:text-[10.5px] font-bold text-slate-400 uppercase tracking-widest select-none">
                               3. Data Shield
                             </span>
                             <div className="flex gap-1.5 w-full">
                               <button
                                 onClick={() => setRetainedFields(prev => ({ ...prev, location: !prev.location }))}
-                                className={`flex-1 h-[36px] flex items-center justify-center gap-1 rounded-xl border text-[8.5px] font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer select-none ${
+                                className={`flex-1 h-[38px] flex items-center justify-center gap-1.5 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer select-none ${
                                   retainedFields.location
-                                    ? 'border-indigo-500/40 text-white bg-indigo-500/10 shadow-[0_0_12px_rgba(99,102,241,0.2)]'
-                                    : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10'
+                                    ? 'border-indigo-500/40 text-white bg-indigo-500/15 shadow-[0_0_12px_rgba(99,102,241,0.25)]'
+                                    : 'border-white/[0.05] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10 hover:bg-white/[0.02]'
                                 }`}
                                 title="Retain Location"
                               >
-                                <MapPin className={`w-3 h-3 flex-shrink-0 ${retainedFields.location ? 'text-indigo-400' : 'text-slate-500'}`} />
+                                <MapPin className={`w-3.5 h-3.5 flex-shrink-0 ${retainedFields.location ? 'text-indigo-400' : 'text-slate-500'}`} />
                                 <span>Location</span>
                               </button>
                               
                               <button
                                 onClick={() => setRetainedFields(prev => ({ ...prev, phone: !prev.phone }))}
-                                className={`flex-1 h-[36px] flex items-center justify-center gap-1 rounded-xl border text-[8.5px] font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer select-none ${
+                                className={`flex-1 h-[38px] flex items-center justify-center gap-1.5 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer select-none ${
                                   retainedFields.phone
-                                    ? 'border-indigo-500/40 text-white bg-indigo-500/10 shadow-[0_0_12px_rgba(99,102,241,0.2)]'
-                                    : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10'
+                                    ? 'border-indigo-500/40 text-white bg-indigo-500/15 shadow-[0_0_12px_rgba(99,102,241,0.25)]'
+                                    : 'border-white/[0.05] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10 hover:bg-white/[0.02]'
                                 }`}
                                 title="Retain Phone"
                               >
-                                <Phone className={`w-3 h-3 flex-shrink-0 ${retainedFields.phone ? 'text-indigo-400' : 'text-slate-500'}`} />
+                                <Phone className={`w-3.5 h-3.5 flex-shrink-0 ${retainedFields.phone ? 'text-indigo-400' : 'text-slate-500'}`} />
                                 <span>Phone</span>
                               </button>
 
                               <button
                                 onClick={() => setRetainedFields(prev => ({ ...prev, email: !prev.email }))}
-                                className={`flex-1 h-[36px] flex items-center justify-center gap-1 rounded-xl border text-[8.5px] font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer select-none ${
+                                className={`flex-1 h-[38px] flex items-center justify-center gap-1.5 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer select-none ${
                                   retainedFields.email
-                                    ? 'border-indigo-500/40 text-white bg-indigo-500/10 shadow-[0_0_12px_rgba(99,102,241,0.2)]'
-                                    : 'border-white/[0.04] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10'
+                                    ? 'border-indigo-500/40 text-white bg-indigo-500/15 shadow-[0_0_12px_rgba(99,102,241,0.25)]'
+                                    : 'border-white/[0.05] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10 hover:bg-white/[0.02]'
                                 }`}
                                 title="Retain Email"
                               >
-                                <Mail className={`w-3 h-3 flex-shrink-0 ${retainedFields.email ? 'text-indigo-400' : 'text-slate-500'}`} />
+                                <Mail className={`w-3.5 h-3.5 flex-shrink-0 ${retainedFields.email ? 'text-indigo-400' : 'text-slate-500'}`} />
                                 <span>Email</span>
                               </button>
                             </div>
@@ -677,11 +679,11 @@ const App: React.FC = () => {
                         {/* Drag and Drop box */}
                         <div 
                           className={`
-                            relative overflow-hidden rounded-[16px] p-3 lg:p-4
-                            flex flex-col items-center justify-center text-center border border-dashed border-white/[0.06] bg-white/[0.01] hover:bg-white/[0.02] min-h-[110px] lg:min-h-[120px] cursor-pointer transition-all duration-300
+                            hero-dropzone-container relative overflow-hidden rounded-[18px] p-4 lg:p-5
+                            flex flex-col items-center justify-center text-center border border-dashed bg-white/[0.01] min-h-[115px] lg:min-h-[125px] cursor-pointer transition-all duration-350 group/dropzone
                             ${dragActive 
-                              ? 'border-indigo-500/80 bg-indigo-500/5 shadow-[0_0_30px_rgba(99,102,241,0.15)] scale-[1.01]' 
-                              : 'border-white/[0.06]'
+                              ? 'border-indigo-500 bg-indigo-500/[0.03] shadow-[0_0_30px_rgba(99,102,241,0.15)] scale-[1.01]' 
+                              : 'border-white/[0.08] hover:border-indigo-500/40 hover:bg-white/[0.02] hover:shadow-[0_0_20px_rgba(99,102,241,0.05)]'
                             }
                           `}
                           onDragEnter={onDragEnter}
@@ -697,29 +699,29 @@ const App: React.FC = () => {
                           />
                           
                           {/* Glowing dynamic background flare */}
-                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-indigo-500/[0.03] rounded-full blur-[70px] pointer-events-none -z-10 group-hover:bg-indigo-500/[0.07] transition-colors duration-500" />
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-indigo-500/[0.03] rounded-full blur-[70px] pointer-events-none -z-10 group-hover/dropzone:bg-indigo-500/[0.07] transition-colors duration-500" />
                           
-                          <div className="w-full flex flex-col items-center justify-center flex-1 py-1">
-                            <div className="mb-2 relative">
+                          <div className="w-full flex flex-col items-center justify-center flex-1 py-0.5">
+                            <div className="hero-dropzone-icon-container mb-2.5 relative">
                               {/* Pulsing ring halo */}
-                              <div className="absolute inset-0 rounded-xl bg-indigo-500/20 blur-sm scale-110 animate-pulse" />
-                              <div className="relative w-8.5 h-8.5 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-[1px] shadow-lg shadow-indigo-500/5">
+                              <div className="absolute inset-0 rounded-xl bg-indigo-500/15 blur-md scale-125 opacity-0 group-hover/dropzone:opacity-100 transition-opacity duration-500" />
+                              <div className="relative w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-[1px] shadow-lg shadow-indigo-500/10 group-hover/dropzone:scale-105 transition-transform duration-350">
                                 <div className="w-full h-full rounded-xl bg-[#080d24] flex items-center justify-center">
-                                  <UploadCloud className="w-4 h-4 text-indigo-400 group-hover:-translate-y-0.5 transition-transform duration-300" />
+                                  <UploadCloud className="w-5 h-5 text-indigo-400 group-hover/dropzone:-translate-y-0.5 transition-transform duration-300" />
                                 </div>
                               </div>
                             </div>
                             
-                            <h3 className="text-sm font-bold text-white mb-0.5 tracking-tight font-display">
+                            <h3 className="text-sm font-bold text-white mb-0.5 tracking-tight font-display select-none">
                               Drop your resume here
                             </h3>
                             
-                            <p className="text-slate-400 mb-2.5 max-w-[280px] mx-auto font-light leading-relaxed text-[10px]">
+                            <p className="text-slate-400 mb-3 max-w-[300px] mx-auto font-light leading-relaxed text-[10px] lg:text-[10.5px] select-none">
                               Supports Word (.docx, .doc), PDF, Text, or Images. We'll handle the rest with precision.
                             </p>
                             
-                            <div className="px-4 py-1.5 border border-white/10 bg-white/[0.02] hover:bg-indigo-500/5 hover:border-indigo-500/40 text-slate-350 hover:text-white font-bold text-[8.5px] uppercase tracking-wider rounded-lg shadow-md transition-all duration-350 flex items-center justify-center gap-1.5 hover:scale-[1.01] group">
-                              Browse Files <ArrowRight className="w-3 h-3 text-indigo-400 group-hover:translate-x-0.5 transition-transform duration-300" />
+                            <div className="px-4.5 py-2 border border-white/10 bg-white/[0.02] group-hover/dropzone:bg-indigo-500/10 group-hover/dropzone:border-indigo-500/40 text-slate-350 group-hover/dropzone:text-white font-bold text-[9.5px] uppercase tracking-wider rounded-lg shadow-md transition-all duration-350 flex items-center justify-center gap-1.5 group-hover/dropzone:scale-[1.02] transition-all duration-350">
+                              Browse Files <ArrowRight className="w-3.5 h-3.5 text-indigo-400 group-hover/dropzone:translate-x-0.5 transition-transform duration-300" />
                             </div>
                           </div>
                         </div>
