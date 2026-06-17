@@ -849,13 +849,27 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
             {/* The Document page (A4 style white sheet) floating on dark slate desk */}
             <div 
               id="resume-preview-content"
-              className="w-full max-w-[820px] bg-white text-black p-12 rounded-lg shadow-[0_24px_64px_rgba(0,0,0,0.6),0_2px_4px_rgba(255,255,255,0.03)] text-left flex-shrink-0 my-4 select-text"
+              className="relative w-full max-w-[820px] bg-white text-black p-12 rounded-lg shadow-[0_24px_64px_rgba(0,0,0,0.6),0_2px_4px_rgba(255,255,255,0.03)] text-left flex-shrink-0 my-4 select-text"
               style={{ 
                 fontFamily: styles.fontFamily, 
                 color: black, 
                 lineHeight: styles.lineHeight
               }}
             >
+              {/* Visual Page Break Guide */}
+              {pageFitInfo.pages > 1 && (
+                <div 
+                  className="absolute left-0 right-0 border-t-2 border-dashed border-rose-500/30 flex items-center justify-between px-8 pointer-events-none select-none z-10"
+                  style={{ top: '1140px', height: '0px' }}
+                >
+                  <span className="text-[9px] font-mono font-bold text-rose-500 bg-white px-2 py-0.5 rounded border border-rose-200 -translate-y-1/2 shadow-sm">
+                    A4 Page Break Boundary
+                  </span>
+                  <span className="text-[9px] font-mono font-bold text-rose-500 bg-white px-2 py-0.5 rounded border border-rose-200 -translate-y-1/2 shadow-sm">
+                    ✂️ Page 2 Content Starts Below
+                  </span>
+                </div>
+              )}
               
               {/* 1. Name */}
               <div 
