@@ -9,7 +9,7 @@ import GrammarHighlighter from "./GrammarHighlighter";
 import get from "lodash/get";
 import set from "lodash/set";
 import { motion, AnimatePresence } from "framer-motion";
-import { cleanBullet, groupBulletPoints, processDescription, processDescriptionWithIndices } from "@/utils/formatters";
+import { cleanBullet, groupBulletPoints, processDescription, processDescriptionWithIndices, formatResumeDate as formatModernDate, stripTrailingDate } from "@/utils/formatters";
 
 interface ResumePreviewProps {
   data: ResumeData;
@@ -144,27 +144,6 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     return cleanedLoc;
   };
 
-  // Helper to expand months for Modern format
-  const formatModernDate = (dateStr: string) => {
-      if (!dateStr) return "";
-      
-      const monthMap: { [key: string]: string } = {
-          "Jan": "January", "Feb": "February", "Mar": "March", "Apr": "April",
-          "May": "May", "Jun": "June", "Jul": "July", "Aug": "August",
-          "Sep": "September", "Oct": "October", "Nov": "November", "Dec": "December",
-          "Sept": "September"
-      };
-
-      // Replace all occurrences of 3-letter months with full names
-      // We use a regex with word boundaries to avoid replacing parts of other words
-      let formatted = dateStr;
-      Object.keys(monthMap).forEach(short => {
-          const regex = new RegExp(`\\b${short}\\b`, 'g');
-          formatted = formatted.replace(regex, monthMap[short]);
-      });
-      
-      return formatted;
-  };
 
   const styleText = (text: string) => {
     if (selectedFormat === ResumeFormat.MODERN_EXECUTIVE) {
@@ -558,10 +537,10 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                   </div>
                                 )}
                                 <div style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black, marginBottom: '2px' }}>
-                                    {exp.company}{exp.location ? `, ${formatLocation(exp.location)}` : ''}
+                                    {stripTrailingDate(exp.company)}{exp.location ? `, ${formatLocation(exp.location)}` : ''}
                                 </div>
                                 <div style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black, marginBottom: '4px' }}>
-                                    {exp.title}
+                                    {stripTrailingDate(exp.title)}
                                 </div>
                             </>
                         ) : (
@@ -569,14 +548,14 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                             <>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                                   <span style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black }}>
-                                    {exp.company}{exp.location ? `, ${formatLocation(exp.location)}` : ''}
+                                    {stripTrailingDate(exp.company)}{exp.location ? `, ${formatLocation(exp.location)}` : ''}
                                   </span>
                                   {exp.dates && exp.dates !== "undefined" && (
-                                    <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: styles.fontSizeBody, color: black }}>{exp.dates}</span>
+                                    <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: styles.fontSizeBody, color: black }}>{formatModernDate(exp.dates)}</span>
                                   )}
                                 </div>
                                 <div style={{ fontWeight: 'bold', marginBottom: 0, fontSize: styles.fontSizeBody, color: black }}>
-                                  {exp.title}
+                                  {stripTrailingDate(exp.title)}
                                 </div>
                             </>
                         )}
@@ -627,10 +606,10 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                   </div>
                                 )}
                                 <div style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black, marginBottom: '2px' }}>
-                                    {exp.company}{exp.location ? `, ${formatLocation(exp.location)}` : ''}
+                                    {stripTrailingDate(exp.company)}{exp.location ? `, ${formatLocation(exp.location)}` : ''}
                                 </div>
                                 <div style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black, marginBottom: '4px' }}>
-                                    {exp.title}
+                                    {stripTrailingDate(exp.title)}
                                 </div>
                             </>
                         ) : (
@@ -638,14 +617,14 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                             <>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                                   <span style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black }}>
-                                    {exp.company}{exp.location ? `, ${formatLocation(exp.location)}` : ''}
+                                    {stripTrailingDate(exp.company)}{exp.location ? `, ${formatLocation(exp.location)}` : ''}
                                   </span>
                                   {exp.dates && exp.dates !== "undefined" && (
-                                    <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: styles.fontSizeBody, color: black }}>{exp.dates}</span>
+                                    <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: styles.fontSizeBody, color: black }}>{formatModernDate(exp.dates)}</span>
                                   )}
                                 </div>
                                 <div style={{ fontWeight: 'bold', marginBottom: 0, fontSize: styles.fontSizeBody, color: black }}>
-                                  {exp.title}
+                                  {stripTrailingDate(exp.title)}
                                 </div>
                             </>
                         )}
@@ -688,14 +667,14 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                       <div key={idx} style={{ marginBottom: '0.5rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                           <span style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black }}>
-                            {edu.institution}{edu.location ? `, ${formatLocation(edu.location)}` : ''}
+                            {stripTrailingDate(edu.institution)}{edu.location ? `, ${formatLocation(edu.location)}` : ''}
                           </span>
                           {edu.dates && edu.dates !== "undefined" && (
-                            <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: styles.fontSizeBody, color: black }}>{edu.dates}</span>
+                            <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: styles.fontSizeBody, color: black }}>{formatModernDate(edu.dates)}</span>
                           )}
                         </div>
                         <div style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black }}>
-                          {edu.degree}
+                          {stripTrailingDate(edu.degree)}
                         </div>
                         {edu.details && edu.details.length > 0 && (
                            <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>

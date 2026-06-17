@@ -1,5 +1,5 @@
 import { ResumeData, ResumeFormat } from "@/types";
-import { cleanBullet, groupBulletPoints, processDescription } from "@/utils/formatters";
+import { cleanBullet, groupBulletPoints, processDescription, formatResumeDate as formatModernDate, stripTrailingDate } from "@/utils/formatters";
 
 // Helper to format title with colon
 const formatTitle = (title: string) => {
@@ -8,26 +8,6 @@ const formatTitle = (title: string) => {
   cleaned = cleaned.replace(/[:\-–—_*\s~▪•·|]+$/, ""); // strip trailing colons, hyphens, en/em dashes, underscores, stars, spaces, bullets, pipes
   cleaned = cleaned.replace(/^[:\-–—_*\s~▪•·|]+/, "");  // strip leading colons, hyphens, en/em dashes, underscores, stars, spaces, bullets, pipes
   return `${cleaned}:`;
-};
-
-// Helper to expand months for Modern format
-const formatModernDate = (dateStr: string) => {
-    if (!dateStr) return "";
-    
-    const monthMap: { [key: string]: string } = {
-        "Jan": "January", "Feb": "February", "Mar": "March", "Apr": "April",
-        "May": "May", "Jun": "June", "Jul": "July", "Aug": "August",
-        "Sep": "September", "Oct": "October", "Nov": "November", "Dec": "December",
-        "Sept": "September"
-    };
-
-    let formatted = dateStr;
-    Object.keys(monthMap).forEach(short => {
-        const regex = new RegExp(`\\b${short}\\b`, 'g');
-        formatted = formatted.replace(regex, monthMap[short]);
-    });
-    
-    return formatted;
 };
 
 // Helper to shorten state names, capitalize city names, and retain just City, State
@@ -198,13 +178,13 @@ export const generateResumePDF = async (
             });
           }
           content.push({
-              text: `${exp.company}${exp.location ? `, ${exp.location}` : ''}`,
+              text: `${stripTrailingDate(exp.company)}${exp.location ? `, ${formatLocation(exp.location)}` : ''}`,
               style: 'bodyText',
               bold: true,
               margin: [0, 0, 0, 2]
           });
           content.push({
-              text: exp.title,
+              text: stripTrailingDate(exp.title),
               style: 'bodyText',
               bold: true,
               margin: [0, 0, 0, 4]
@@ -214,8 +194,8 @@ export const generateResumePDF = async (
           const columns: any[] = [
             {
               text: [
-                { text: exp.company, bold: true },
-                exp.location ? `, ${exp.location}` : ''
+                { text: stripTrailingDate(exp.company), bold: true },
+                exp.location ? `, ${formatLocation(exp.location)}` : ''
               ],
               style: 'bodyText',
               width: '*'
@@ -224,7 +204,7 @@ export const generateResumePDF = async (
           
           if (exp.dates && exp.dates !== "undefined") {
             columns.push({
-              text: exp.dates,
+              text: formatModernDate(exp.dates),
               style: 'bodyText',
               bold: true,
               alignment: 'right',
@@ -238,7 +218,7 @@ export const generateResumePDF = async (
           });
 
           content.push({
-            text: exp.title,
+            text: stripTrailingDate(exp.title),
             style: 'bodyText',
             bold: true,
             margin: [0, 0, 0, 2]
@@ -276,13 +256,13 @@ export const generateResumePDF = async (
             });
           }
           content.push({
-              text: `${exp.company}${exp.location ? `, ${exp.location}` : ''}`,
+              text: `${stripTrailingDate(exp.company)}${exp.location ? `, ${formatLocation(exp.location)}` : ''}`,
               style: 'bodyText',
               bold: true,
               margin: [0, 0, 0, 2]
           });
           content.push({
-              text: exp.title,
+              text: stripTrailingDate(exp.title),
               style: 'bodyText',
               bold: true,
               margin: [0, 0, 0, 4]
@@ -291,8 +271,8 @@ export const generateResumePDF = async (
           const columns: any[] = [
             {
               text: [
-                { text: exp.company, bold: true },
-                exp.location ? `, ${exp.location}` : ''
+                { text: stripTrailingDate(exp.company), bold: true },
+                exp.location ? `, ${formatLocation(exp.location)}` : ''
               ],
               style: 'bodyText',
               width: '*'
@@ -301,7 +281,7 @@ export const generateResumePDF = async (
           
           if (exp.dates && exp.dates !== "undefined") {
             columns.push({
-              text: exp.dates,
+              text: formatModernDate(exp.dates),
               style: 'bodyText',
               bold: true,
               alignment: 'right',
@@ -315,7 +295,7 @@ export const generateResumePDF = async (
           });
 
           content.push({
-            text: exp.title,
+            text: stripTrailingDate(exp.title),
             style: 'bodyText',
             bold: true,
             margin: [0, 0, 0, 2]
@@ -345,8 +325,8 @@ export const generateResumePDF = async (
       const columns: any[] = [
         {
           text: [
-            { text: edu.institution, bold: true },
-            edu.location ? `, ${edu.location}` : ''
+            { text: stripTrailingDate(edu.institution), bold: true },
+            edu.location ? `, ${formatLocation(edu.location)}` : ''
           ],
           style: 'bodyText',
           width: '*'
@@ -355,7 +335,7 @@ export const generateResumePDF = async (
       
       if (edu.dates && edu.dates !== "undefined") {
         columns.push({
-          text: isModern ? formatModernDate(edu.dates) : edu.dates,
+          text: formatModernDate(edu.dates),
           style: 'bodyText',
           bold: true,
           alignment: 'right',
@@ -369,7 +349,7 @@ export const generateResumePDF = async (
       });
 
       content.push({
-        text: edu.degree,
+        text: stripTrailingDate(edu.degree),
         style: 'bodyText',
         bold: true,
         margin: [0, 0, 0, 2]

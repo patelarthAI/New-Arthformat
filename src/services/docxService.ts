@@ -15,7 +15,7 @@ import {
   TabStopPosition,
 } from "docx";
 import { ResumeData, ResumeFormat } from "@/types";
-import { cleanBullet, groupBulletPoints, processDescription } from "@/utils/formatters";
+import { cleanBullet, groupBulletPoints, processDescription, formatResumeDate as formatModernDate, stripTrailingDate } from "@/utils/formatters";
 
 // CONSTANTS
 const FONT_FAMILY = "Calibri";
@@ -90,21 +90,6 @@ export const generateResumeDoc = async (
   const SIZE_NAME = isModern ? 24 : 28; // 12pt vs 14pt (half-points)
   const SIZE_TEXT = 22; // 11pt
 
-  const formatModernDate = (dateStr: string) => {
-      if (!dateStr) return "";
-      const monthMap: { [key: string]: string } = {
-          "Jan": "January", "Feb": "February", "Mar": "March", "Apr": "April",
-          "May": "May", "Jun": "June", "Jul": "July", "Aug": "August",
-          "Sep": "September", "Oct": "October", "Nov": "November", "Dec": "December",
-          "Sept": "September"
-      };
-      let formatted = dateStr;
-      Object.keys(monthMap).forEach(short => {
-          const regex = new RegExp(`\\b${short}\\b`, 'g');
-          formatted = formatted.replace(regex, monthMap[short]);
-      });
-      return formatted;
-  };
 
   const emptyLine = () => new Paragraph({
       text: "",
@@ -160,7 +145,9 @@ export const generateResumeDoc = async (
   // Job Header: Company, Location (Bold) ... Dates (Bold)
   // Uses TabStop for right alignment instead of Table to prevent premature wrapping
   const createJobHeader = (company: string, location: string, dates?: string) => {
-    const leftText = location ? `${company}, ${location}` : company;
+    const cleanCompany = stripTrailingDate(company);
+    const cleanLocation = location ? formatLocation(location) : "";
+    const leftText = cleanLocation ? `${cleanCompany}, ${cleanLocation}` : cleanCompany;
     
     const children = [
       new TextRun({
@@ -175,7 +162,7 @@ export const generateResumeDoc = async (
     if (dates && dates !== "undefined") {
       children.push(
         new TextRun({
-          text: `\t${dates}`, // Tab to right, then date
+          text: `\t${formatModernDate(dates)}`, // Tab to right, then date
           font: FONT_FAMILY,
           size: SIZE_TEXT,
           bold: true,
@@ -430,12 +417,12 @@ export const generateResumeDoc = async (
                   // Company, Location
                   elements.push(new Paragraph({
                       spacing: SINGLE_LINE,
-                      children: [new TextRun({ text: `${exp.company}${exp.location ? `, ${exp.location}` : ''}`, font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
+                      children: [new TextRun({ text: `${stripTrailingDate(exp.company)}${exp.location ? `, ${formatLocation(exp.location)}` : ''}`, font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
                   }));
                   // Title
                   elements.push(new Paragraph({
                       spacing: SINGLE_LINE,
-                      children: [new TextRun({ text: exp.title, font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
+                      children: [new TextRun({ text: stripTrailingDate(exp.title), font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
                   }));
               } else {
                   // Classic Layout
@@ -444,7 +431,7 @@ export const generateResumeDoc = async (
                      spacing: SINGLE_LINE,
                      children: [
                        new TextRun({
-                         text: exp.title,
+                         text: stripTrailingDate(exp.title),
                          font: FONT_FAMILY,
                          size: SIZE_TEXT,
                          bold: true,
@@ -481,11 +468,11 @@ export const generateResumeDoc = async (
                   }
                   elements.push(new Paragraph({
                       spacing: SINGLE_LINE,
-                      children: [new TextRun({ text: `${exp.company}${exp.location ? `, ${exp.location}` : ''}`, font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
+                      children: [new TextRun({ text: `${stripTrailingDate(exp.company)}${exp.location ? `, ${formatLocation(exp.location)}` : ''}`, font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
                   }));
                   elements.push(new Paragraph({
                       spacing: SINGLE_LINE,
-                      children: [new TextRun({ text: exp.title, font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
+                      children: [new TextRun({ text: stripTrailingDate(exp.title), font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
                   }));
               } else {
                   // Classic Layout
@@ -494,7 +481,7 @@ export const generateResumeDoc = async (
                      spacing: SINGLE_LINE,
                      children: [
                        new TextRun({
-                         text: exp.title,
+                         text: stripTrailingDate(exp.title),
                          font: FONT_FAMILY,
                          size: SIZE_TEXT,
                          bold: true,
@@ -531,11 +518,11 @@ export const generateResumeDoc = async (
                    }
                    elements.push(new Paragraph({
                        spacing: SINGLE_LINE,
-                       children: [new TextRun({ text: `${edu.institution}${edu.location ? `, ${edu.location}` : ''}`, font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
+                       children: [new TextRun({ text: `${stripTrailingDate(edu.institution)}${edu.location ? `, ${formatLocation(edu.location)}` : ''}`, font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
                    }));
                    elements.push(new Paragraph({
                        spacing: SINGLE_LINE,
-                       children: [new TextRun({ text: edu.degree, font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
+                       children: [new TextRun({ text: stripTrailingDate(edu.degree), font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
                    }));
                } else {
                    // Classic Layout
@@ -544,7 +531,7 @@ export const generateResumeDoc = async (
                       spacing: SINGLE_LINE,
                       children: [
                         new TextRun({
-                          text: edu.degree,
+                          text: stripTrailingDate(edu.degree),
                           font: FONT_FAMILY,
                           size: SIZE_TEXT,
                           bold: true,
