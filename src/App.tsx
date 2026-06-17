@@ -518,20 +518,19 @@ const App: React.FC = () => {
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                  className="flex flex-col items-center text-center w-full"
+                  className="flex flex-col items-center text-center w-full mb-1"
                 >
-                  {/* Premium AI Tech Badge */}
-                  <div className="mb-1.5 flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/20 bg-indigo-500/[0.05] text-[10px] font-bold text-indigo-300 uppercase tracking-widest shadow-[0_0_15px_rgba(99,102,241,0.1)]">
-                    <Sparkles className="w-3 h-3 text-indigo-400 animate-pulse" />
-                    AI-Powered Precision Formatter
+                  {/* Large Logo Hero Element */}
+                  <div className="mb-4 transform scale-100 hover:scale-105 transition-transform duration-500">
+                    <InteractiveLogo size="md" />
                   </div>
 
-                  <h1 className="font-display text-2xl sm:text-3xl lg:text-[32px] mb-1 text-white leading-none">
-                    Arth<span className="text-gradient-rainbow font-extrabold">Format</span> <span className="text-white">AI</span>
+                  <h1 className="font-display text-xl sm:text-2xl lg:text-[28px] mb-2 text-white font-extrabold tracking-tight leading-tight max-w-[600px] mx-auto">
+                    Resumes Reimagined, <span className="text-gradient-rainbow">Precision Personified.</span>
                   </h1>
                   
-                  <p className="text-[10.5px] sm:text-xs text-slate-400 font-light tracking-wide leading-relaxed max-w-[410px] mx-auto">
-                    Resumes Reimagined, Precision Personified. Instantly scan, format, and align your resume to modern executive standards.
+                  <p className="text-[10.5px] sm:text-xs text-slate-400 font-light tracking-wide leading-relaxed max-w-[400px] mx-auto">
+                    Transform any resume into a polished, professional document in seconds.
                   </p>
                 </motion.div>
 
