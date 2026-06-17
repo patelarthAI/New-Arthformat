@@ -481,16 +481,13 @@ const App: React.FC = () => {
       }`}>
         {/* Header - Brand Bar */}
         {appState !== AppState.REVIEW && (
-          <div className="w-full flex items-center justify-between mb-1.5 lg:mb-3">
+          <div className="w-full flex items-center justify-between mb-1 lg:mb-2">
             <div 
               onClick={() => setShowAdmin(!showAdmin)}
-              className="flex items-center gap-3 cursor-pointer select-none group focus:outline-none"
+              className="flex items-center cursor-pointer select-none group focus:outline-none"
               title="Double-click or tap to toggle view mode securely"
             >
               <InteractiveLogo size="sm" />
-              <span className="text-xl font-bold tracking-tight text-white hidden sm:inline-block">
-                Arth<span className="text-gradient-rainbow font-extrabold">Format</span>
-              </span>
             </div>
 
             <div className="flex items-center gap-3">
@@ -518,18 +515,25 @@ const App: React.FC = () => {
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                  className="flex flex-col items-center text-center w-full mb-1"
+                  className="flex flex-col items-center text-center w-full mb-0.5"
                 >
-                  {/* Large Logo Hero Element */}
-                  <div className="mb-4 transform scale-100 hover:scale-105 transition-transform duration-500">
+                  {/* Center Logo Hero Element */}
+                  <div className="mb-2 transform scale-90 hover:scale-95 transition-transform duration-500">
                     <InteractiveLogo size="md" />
                   </div>
 
-                  <h1 className="font-display text-xl sm:text-2xl lg:text-[28px] mb-2 text-white font-extrabold tracking-tight leading-tight max-w-[600px] mx-auto">
-                    Resumes Reimagined, <span className="text-gradient-rainbow">Precision Personified.</span>
+                  {/* Brand Title in Center Hero */}
+                  <h1 className="font-display text-xl sm:text-2xl lg:text-[25px] font-bold text-white tracking-tight leading-none mb-1">
+                    Arth<span className="text-gradient-rainbow font-extrabold">Format</span> <span className="text-white">AI</span>
                   </h1>
+
+                  {/* Tagline */}
+                  <h2 className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-350 mb-1">
+                    Resumes Reimagined, <span className="text-gradient-rainbow">Precision Personified.</span>
+                  </h2>
                   
-                  <p className="text-[10.5px] sm:text-xs text-slate-400 font-light tracking-wide leading-relaxed max-w-[400px] mx-auto">
+                  {/* Description */}
+                  <p className="text-[10px] sm:text-[10.5px] text-slate-400 font-light tracking-wide leading-relaxed max-w-[380px] mx-auto">
                     Transform any resume into a polished, professional document in seconds.
                   </p>
                 </motion.div>
@@ -544,10 +548,10 @@ const App: React.FC = () => {
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.98 }}
                         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                        className="glassmorphic-card rounded-[24px] p-4 lg:p-5 flex flex-col gap-4 text-left"
+                        className="glassmorphic-card rounded-[24px] p-3 lg:p-4 flex flex-col gap-3 text-left"
                       >
                         {/* Selector Row */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center pb-3 border-b border-white/[0.05]">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center pb-2.5 border-b border-white/[0.05]">
                           {/* Style Selector */}
                           <div className="flex flex-col gap-1.5">
                             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
@@ -673,8 +677,8 @@ const App: React.FC = () => {
                         {/* Drag and Drop box */}
                         <div 
                           className={`
-                            relative overflow-hidden rounded-[16px] p-4 lg:p-5
-                            flex flex-col items-center justify-center text-center border border-dashed border-white/[0.06] bg-white/[0.01] hover:bg-white/[0.02] min-h-[120px] lg:min-h-[135px] cursor-pointer transition-all duration-300
+                            relative overflow-hidden rounded-[16px] p-3 lg:p-4
+                            flex flex-col items-center justify-center text-center border border-dashed border-white/[0.06] bg-white/[0.01] hover:bg-white/[0.02] min-h-[110px] lg:min-h-[120px] cursor-pointer transition-all duration-300
                             ${dragActive 
                               ? 'border-indigo-500/80 bg-indigo-500/5 shadow-[0_0_30px_rgba(99,102,241,0.15)] scale-[1.01]' 
                               : 'border-white/[0.06]'

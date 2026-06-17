@@ -7,6 +7,13 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+@media (min-width: 1024px) {
+  html, body, #root {
+    height: 100vh;
+    overflow: hidden;
+  }
+}
+
 /* Keyframe Animations */
 @keyframes gradient-flow {
   0% { background-position: 0% 50%; }
