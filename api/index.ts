@@ -9,7 +9,7 @@ import fs from "fs";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-import { db, isFirebaseConfigured } from "../server/firebase";
+import { db, isFirebaseConfigured, performAutoCleanup } from "../server/firebase";
 import { 
   extractResumeDataBackend, 
   analyzeGrammarBackend, 
@@ -157,6 +157,26 @@ const autoRejectOldResumes = async () => {
   // Auto-rejection logic removed as per user request
 };
 
+const getDeviceInfoFromUA = (ua: string): string => {
+  if (!ua) return 'Unknown Device';
+  
+  let os = 'Unknown OS';
+  if (ua.includes('Windows')) os = 'Windows';
+  else if (ua.includes('Macintosh') || ua.includes('Mac OS')) os = 'macOS';
+  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+  else if (ua.includes('Android')) os = 'Android';
+  else if (ua.includes('Linux')) os = 'Linux';
+  
+  let browser = 'Unknown Browser';
+  if (ua.includes('Firefox')) browser = 'Firefox';
+  else if (ua.includes('Chrome') && !ua.includes('Chromium')) browser = 'Chrome';
+  else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
+  else if (ua.includes('Edge')) browser = 'Edge';
+  else if (ua.includes('Trident') || ua.includes('MSIE')) browser = 'IE';
+  
+  return `${os} / ${browser}`;
+};
+
 // API Route for submitting a resume
 app.post("/api/submit", async (req, res) => {
   try {
@@ -167,8 +187,22 @@ app.post("/api/submit", async (req, res) => {
     }
 
     const uid = typeof userId === 'string' && userId.trim().length > 0 ? userId.trim() : null;
-    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || req.ip || '';
-    const ip = typeof clientIp === 'string' && clientIp.includes(',') ? clientIp.split(',')[0].trim() : clientIp;
+    
+    const rawIp = 
+      (req.headers['x-forwarded-for'] as string) || 
+      (req.headers['x-real-ip'] as string) || 
+      (req.headers['cf-connecting-ip'] as string) ||
+      (req.headers['x-client-ip'] as string) ||
+      req.socket.remoteAddress || 
+      req.ip || 
+      '';
+    const ip = typeof rawIp === 'string' && rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp;
+
+    const userAgent = req.headers['user-agent'] || '';
+    const deviceInfo = getDeviceInfoFromUA(userAgent);
+
+    // Run Firestore auto-cleanup asynchronously
+    performAutoCleanup().catch(err => console.error("[Auto-Cleanup] Trigger failed:", err));
 
     try {
       if (!isFirebaseConfigured()) throw new Error("Firebase not configured");
@@ -179,6 +213,7 @@ app.post("/api/submit", async (req, res) => {
         content,
         status: 'pending',
         ip_address: ip,
+        device_info: deviceInfo,
         created_at: new Date().toISOString()
       };
       if (uid) insertData.user_id = uid;
@@ -192,6 +227,7 @@ app.post("/api/submit", async (req, res) => {
         action: 'resume_submitted',
         details: { resume_id: resumeRef.id },
         ip_address: ip,
+        device_info: deviceInfo,
         created_at: new Date().toISOString()
       };
       if (uid) logData.user_id = uid;
@@ -203,7 +239,15 @@ app.post("/api/submit", async (req, res) => {
       console.warn("Database error (falling back to in-memory):", dbError.message);
       
       const resumeId = crypto.randomUUID();
-      const newResume = { id: resumeId, user_id: uid, content, status: 'pending', ip_address: ip, created_at: new Date().toISOString() };
+      const newResume = { 
+        id: resumeId, 
+        user_id: uid, 
+        content, 
+        status: 'pending', 
+        ip_address: ip, 
+        device_info: deviceInfo, 
+        created_at: new Date().toISOString() 
+      };
       inMemoryResumes.push(newResume);
       saveInMemoryResumes();
       
@@ -262,7 +306,9 @@ app.get("/api/resumes", checkAdmin, async (req, res) => {
           id: doc.id,
           status: currentStatus,
           created_at: r.created_at,
-          content: r.content
+          content: r.content,
+          ip_address: r.ip_address || '',
+          device_info: r.device_info || ''
         };
       });
 
