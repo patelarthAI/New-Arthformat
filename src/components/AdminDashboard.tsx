@@ -350,15 +350,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                     {(resume as any).fileName || resume.content?.fileName || 'Unnamed Resume'}
                   </h4>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400 mt-1">
-                    <span className="font-mono">ID: {resume.id.substring(0, 8)}...</span>
-                    <span>•</span>
                     <span>{new Date(resume.created_at).toLocaleDateString()}</span>
-                    {resume.ip_address && (
-                      <>
-                        <span>•</span>
-                        <span className="font-mono bg-white/[0.04] px-1.5 py-0.5 rounded border border-white/[0.06] text-[10.5px]">IP: {resume.ip_address}</span>
-                      </>
-                    )}
+                    <span>•</span>
+                    <span className="font-mono bg-white/[0.04] px-1.5 py-0.5 rounded border border-white/[0.06] text-[10.5px]">IP: {resume.ip_address || 'N/A'}</span>
                   </div>
                 </div>
               </div>

@@ -81,15 +81,18 @@ const formatLocation = (loc: string) => {
 export const generateResumeDoc = async (
   data: ResumeData, 
   format: ResumeFormat = ResumeFormat.CLASSIC_PROFESSIONAL,
-  options?: { location?: boolean; phone?: boolean; email?: boolean }
+  options?: { location?: boolean; phone?: boolean; email?: boolean },
+  customFont?: string,
+  customFontSize?: number
 ): Promise<Blob> => {
   const isModern = format === ResumeFormat.MODERN_EXECUTIVE;
   const isClassic = !isModern;
   
   // Dynamic Styles
-  const FONT_FAMILY = isModern ? "Arial" : "Calibri";
-  const SIZE_NAME = isModern ? 24 : 28; // 12pt vs 14pt (half-points)
-  const SIZE_TEXT = 22; // 11pt
+  const FONT_FAMILY = customFont || (isModern ? "Arial" : "Calibri");
+  const baseFontSize = customFontSize || 11;
+  const SIZE_TEXT = baseFontSize * 2; // half-points
+  const SIZE_NAME = (baseFontSize + 2) * 2; // Name is +2pt larger than body (half-points)
 
 
   const emptyLine = () => new Paragraph({

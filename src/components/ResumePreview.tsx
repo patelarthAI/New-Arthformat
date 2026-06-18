@@ -45,31 +45,54 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   // Layout States
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [comparisonMode, setComparisonMode] = useState(false);
-  const [activeTab, setActiveTab] = useState<'insights' | 'signals' | 'copilot' | 'logs' | 'settings'>('insights');
+  const [activeTab, setActiveTab] = useState<'signals' | 'copilot' | 'logs' | 'settings'>('copilot');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
   const [isChecking, setIsChecking] = useState(false);
   const [issues, setIssues] = useState<GrammarIssue[]>([]);
   
-  // Spacing sliders state (0 Credits)
-  const [fontSizeOffset, setFontSizeOffset] = useState<number>(0);
+  // Spacing sliders and dropdowns state (0 Credits)
+  const [selectedFont, setSelectedFont] = useState<string>(
+    selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? 'Arial' : 'Calibri'
+  );
+  const [selectedFontSize, setSelectedFontSize] = useState<number>(11);
   const [lineSpacingOffset, setLineSpacingOffset] = useState<number>(0);
   const [sectionSpacingOffset, setSectionSpacingOffset] = useState<number>(0);
 
+  // Sync default font family when format changes
+  useEffect(() => {
+    setSelectedFont(selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? 'Arial' : 'Calibri');
+    setSelectedFontSize(11);
+  }, [selectedFormat]);
+
   // Copilot AI states (1 Credit when executing)
   const [copilotInstruction, setCopilotInstruction] = useState<string>('');
-  const [targetJobDescription, setTargetJobDescription] = useState<string>('');
   const [isCopilotRunning, setIsCopilotRunning] = useState<boolean>(false);
   const [copilotProgressStep, setCopilotProgressStep] = useState<string>('');
   const [tempUpdatedData, setTempUpdatedData] = useState<ResumeData | null>(null);
 
-  // Local Keyword Matcher state (0 Credits)
-  const [jobKeywords, setJobKeywords] = useState<{ word: string; matched: boolean }[]>([]);
-
   // Section Order (0 Credits)
   const [sectionOrder, setSectionOrder] = useState<string[]>(['summary', 'experience', 'internships', 'education', 'customSections']);
+
+  // Sidebar responsive width
+  const [sidebarWidth, setSidebarWidth] = useState<number>(
+    typeof window !== 'undefined' && window.innerWidth < 768 ? window.innerWidth : 384
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => {
+      setSidebarWidth(window.innerWidth < 768 ? window.innerWidth : 384);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // Highlight state for linked checklist click
   const [highlightedSection, setHighlightedSection] = useState<string | null>(null);
+
+  // Pre-download confirmation states
+  const [showDownloadConfirm, setShowDownloadConfirm] = useState<boolean>(false);
+  const [pendingDownloadType, setPendingDownloadType] = useState<'pdf' | 'docx' | null>(null);
 
   // State for AI Confirmation Modal (pops up to prevent accidental credit usage)
   const [aiConfirm, setAiConfirm] = useState<{
@@ -91,41 +114,6 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     });
   };
 
-  const handleJobDescriptionChange = (text: string) => {
-    setTargetJobDescription(text);
-    if (!text.trim()) {
-      setJobKeywords([]);
-      return;
-    }
-
-    const commonKeywords = [
-      "react", "angular", "vue", "next.js", "nextjs", "typescript", "javascript", "node.js", "nodejs",
-      "python", "java", "c++", "golang", "rust", "aws", "azure", "gcp", "docker", "kubernetes",
-      "terraform", "ci/cd", "jenkins", "git", "github", "sql", "postgresql", "mysql", "mongodb",
-      "redis", "elasticsearch", "graphql", "rest api", "html5", "css3", "tailwindcss", "sass",
-      "figma", "agile", "scrum", "project management", "product management", "leadership",
-      "teamwork", "communication", "machine learning", "deep learning", "ai", "llm", "firebase",
-      "sre", "devops", "security", "microservices", "redux", "zustand", "webpack", "vite"
-    ];
-
-    const lowerDesc = text.toLowerCase();
-    const extracted = commonKeywords.filter(keyword => {
-      const regex = new RegExp(`\\b${keyword.replace('.', '\\.')}\\b`, 'i');
-      return regex.test(lowerDesc);
-    });
-
-    const resumeText = JSON.stringify(data).toLowerCase();
-    const matched = extracted.map(word => {
-      const regex = new RegExp(`\\b${word.replace('.', '\\.')}\\b`, 'i');
-      return {
-        word: word.charAt(0).toUpperCase() + word.slice(1),
-        matched: regex.test(resumeText)
-      };
-    });
-
-    setJobKeywords(matched);
-  };
-
   const executeCopilot = async (instructionToUse: string) => {
     setIsCopilotRunning(true);
     setCopilotProgressStep('Analyzing resume schema...');
@@ -137,7 +125,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
       const updated = await updateResume(
         data, 
         instructionToUse, 
-        targetJobDescription || undefined, 
+        undefined, 
         selectedFormat, 
         usePro
       );
@@ -165,25 +153,76 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     );
   };
 
-  const handleAutoInjectKeywords = async () => {
-    const missing = jobKeywords.filter(k => !k.matched).map(k => k.word);
-    if (missing.length === 0) {
-      alert("All identified keywords are already present in your resume!");
-      return;
+  const generateDiffLogs = (orig: any, updated: any, path: string = ''): ChangeLogItem[] => {
+    const logs: ChangeLogItem[] = [];
+    if (orig === updated) return [];
+
+    if (orig === undefined || orig === null) {
+      if (typeof updated === 'string') {
+        logs.push({
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          timestamp: Date.now(),
+          path: path,
+          original: '(none)',
+          new: updated,
+          reason: "Executive Upgrade"
+        });
+      }
+      return logs;
     }
 
-    const instruction = `Intelligently and naturally integrate the following skills/keywords into the experience descriptions or skills section, ensuring factual accuracy: ${missing.join(', ')}. Keep the sentence flows natural and professional.`;
-    
-    triggerAIConfirmation(
-      "AI Keyword Injector",
-      `This will naturally integrate the missing keywords (${missing.join(', ')}) into your experience descriptions using Gemini.`,
-      1,
-      () => executeCopilot(instruction)
-    );
+    if (updated === undefined || updated === null) {
+      if (typeof orig === 'string') {
+        logs.push({
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          timestamp: Date.now(),
+          path: path,
+          original: orig,
+          new: '(removed)',
+          reason: "Executive Upgrade"
+        });
+      }
+      return logs;
+    }
+
+    if (typeof orig === 'string' && typeof updated === 'string') {
+      if (orig.trim() !== updated.trim()) {
+        logs.push({
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          timestamp: Date.now(),
+          path: path,
+          original: orig,
+          new: updated,
+          reason: "Executive Upgrade"
+        });
+      }
+    } else if (Array.isArray(orig) || Array.isArray(updated)) {
+      const arrOrig = Array.isArray(orig) ? orig : [];
+      const arrUpdated = Array.isArray(updated) ? updated : [];
+      const maxLen = Math.max(arrOrig.length, arrUpdated.length);
+      for (let i = 0; i < maxLen; i++) {
+        const itemPath = path ? `${path}.${i}` : `${i}`;
+        logs.push(...generateDiffLogs(arrOrig[i], arrUpdated[i], itemPath));
+      }
+    } else if (typeof orig === 'object' && typeof updated === 'object') {
+      const keys = Array.from(new Set([...Object.keys(orig), ...Object.keys(updated)]));
+      keys.forEach(key => {
+        const itemPath = path ? `${path}.${key}` : key;
+        logs.push(...generateDiffLogs(orig[key], updated[key], itemPath));
+      });
+    }
+    return logs;
   };
 
   const handleAcceptCopilotChanges = () => {
     if (!tempUpdatedData) return;
+    
+    // Generate diff logs of what actually changed
+    const copilotLogs = generateDiffLogs(data, tempUpdatedData);
+    if (copilotLogs.length > 0) {
+      setChangeLog(prev => [...copilotLogs, ...prev]);
+    }
+    
     updateData(tempUpdatedData, "Applied AI Copilot enhancements");
     setTempUpdatedData(null);
     setCopilotInstruction('');
@@ -401,6 +440,11 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   };
 
   const handleCheckGrammar = () => {
+    if (issues.length > 0) {
+      setIssues([]);
+      return;
+    }
+
     triggerAIConfirmation(
       "Scan Resume with Grammar AI",
       "This will scan your entire resume text using Gemini AI to detect grammar issues, spelling errors, and tone/style optimizations.",
@@ -412,6 +456,9 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
           setIssues(foundIssues);
           if (foundIssues.length === 0) {
             alert("No grammar issues found!");
+          } else {
+            setActiveTab('signals');
+            setSidebarOpen(true);
           }
         } catch (error) {
           console.error("Grammar check failed", error);
@@ -529,24 +576,79 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     }
   };
 
-  const handleDownloadPDF = async () => {
+  const executeDownloadPDF = async () => {
     try {
-      await generateResumePDF(data, selectedFormat, retainedFields);
+      await generateResumePDF(data, selectedFormat, retainedFields, selectedFont, selectedFontSize);
     } catch (err) {
       console.error("PDF generation failed", err);
       alert("Failed to generate PDF.");
     }
   };
 
-  const handleDownloadDOCX = async () => {
+  const executeDownloadDOCX = async () => {
     try {
-      const blob = await generateResumeDoc(data, selectedFormat, retainedFields);
+      const blob = await generateResumeDoc(data, selectedFormat, retainedFields, selectedFont, selectedFontSize);
       const fileName = `${data.fullName.trim().replace(/\s+/g, '.')}.Formatted.docx`;
       saveAs(blob, fileName);
     } catch (err) {
       console.error("DOCX generation failed", err);
       alert("Failed to generate DOCX.");
     }
+  };
+
+  const handleDownloadPDF = async () => {
+    if (changeLog.length > 0) {
+      setPendingDownloadType('pdf');
+      setShowDownloadConfirm(true);
+    } else {
+      await executeDownloadPDF();
+    }
+  };
+
+  const handleDownloadDOCX = async () => {
+    if (changeLog.length > 0) {
+      setPendingDownloadType('docx');
+      setShowDownloadConfirm(true);
+    } else {
+      await executeDownloadDOCX();
+    }
+  };
+
+  const handleConfirmDownload = async () => {
+    setShowDownloadConfirm(false);
+    if (pendingDownloadType === 'pdf') {
+      await executeDownloadPDF();
+    } else if (pendingDownloadType === 'docx') {
+      await executeDownloadDOCX();
+    }
+    setPendingDownloadType(null);
+  };
+
+  const handleRejectDownload = async () => {
+    setShowDownloadConfirm(false);
+    const originalData = historyStack[0]?.data || data;
+    
+    if (pendingDownloadType === 'pdf') {
+      try {
+        await generateResumePDF(originalData, selectedFormat, retainedFields, selectedFont, selectedFontSize);
+      } catch (err) {
+        console.error("PDF generation failed", err);
+        alert("Failed to generate PDF.");
+      }
+    } else if (pendingDownloadType === 'docx') {
+      try {
+        const blob = await generateResumeDoc(originalData, selectedFormat, retainedFields, selectedFont, selectedFontSize);
+        const fileName = `${originalData.fullName.trim().replace(/\s+/g, '.')}.Original.docx`;
+        saveAs(blob, fileName);
+      } catch (err) {
+        console.error("DOCX generation failed", err);
+        alert("Failed to generate DOCX.");
+      }
+    }
+
+    onUpdate(JSON.parse(JSON.stringify(originalData)));
+    setChangeLog([]);
+    setPendingDownloadType(null);
   };
 
   // Real-time AI scoring and suggestion engine
@@ -863,10 +965,21 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   };
 
   const activeData = tempUpdatedData || data;
-  const baseFontSize = selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? 11 : 11;
-  const currentFontSize = `${baseFontSize + fontSizeOffset}pt`;
+  const currentFontSize = `${selectedFontSize}pt`;
   const currentLineHeight = selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? (1.0 + lineSpacingOffset * 0.1) : (1.2 + lineSpacingOffset * 0.15);
   const currentSectionMargin = selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? `${11 + sectionSpacingOffset * 2}pt` : `${16 + sectionSpacingOffset * 3}px`;
+
+  const getFontFamilyString = (font: string) => {
+    switch (font) {
+      case 'Calibri': return '"Calibri", sans-serif';
+      case 'Arial': return '"Arial", sans-serif';
+      case 'Times New Roman': return '"Times New Roman", serif';
+      case 'Garamond': return '"Garamond", serif';
+      case 'Georgia': return '"Georgia", serif';
+      case 'Verdana': return '"Verdana", sans-serif';
+      default: return font;
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen w-full lg:overflow-hidden select-none bg-[#04060f]">
@@ -949,10 +1062,20 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
             <button
               onClick={handleCheckGrammar}
               disabled={isChecking}
-              className="btn-2026-primary px-4 h-9 text-[10px] font-bold uppercase tracking-wider rounded-lg flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              className={`px-4 h-9 text-[10px] font-bold uppercase tracking-wider rounded-lg flex items-center gap-1.5 disabled:opacity-50 cursor-pointer transition-all ${
+                issues.length > 0
+                  ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-450 border border-rose-500/30'
+                  : 'btn-2026-primary'
+              }`}
             >
-              {isChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-indigo-400" />}
-              Check Grammar
+              {isChecking ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : issues.length > 0 ? (
+                <X className="w-3.5 h-3.5 text-rose-400" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              )}
+              {issues.length > 0 ? 'Clear Grammar' : 'Check Grammar'}
             </button>
           </div>
           
@@ -1016,7 +1139,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
           )}
 
           {/* Right panel: A4 Format Preview Editor */}
-          <div className="flex-1 h-full flex flex-col min-w-0 overflow-y-auto custom-scrollbar p-8 items-center bg-[#050714]">
+          <div className={`flex-1 h-full flex flex-col min-w-0 overflow-y-auto custom-scrollbar p-4 sm:p-8 items-center bg-[#050714] ${sidebarOpen ? 'hidden md:flex' : 'flex'}`}>
             
             {tempUpdatedData && (
               <div className="w-full max-w-[820px] mb-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 flex items-center justify-between text-left backdrop-blur-md animate-in slide-in-from-top duration-300">
@@ -1051,7 +1174,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
               id="resume-preview-content"
               className="relative w-full max-w-[820px] bg-white text-black p-12 rounded-lg shadow-[0_24px_64px_rgba(0,0,0,0.6),0_2px_4px_rgba(255,255,255,0.03)] text-left flex-shrink-0 my-4 select-text"
               style={{ 
-                fontFamily: styles.fontFamily, 
+                fontFamily: getFontFamilyString(selectedFont), 
                 color: black, 
                 lineHeight: styles.lineHeight
               }}
@@ -1082,7 +1205,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                   suppressContentEditableWarning
                   onBlur={(e) => handleEditFullName(e.currentTarget.textContent || "")}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                  style={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: styles.fontSizeName, color: styles.headingColor === "#000000" ? black : styles.headingColor, margin: 0 }}
+                  style={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: `${selectedFontSize + 2}pt`, color: styles.headingColor === "#000000" ? black : styles.headingColor, margin: 0 }}
                   className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                 >
                   {activeData.fullName}
@@ -1107,7 +1230,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                 {/* Existing block for Modern Executive structure */}
                 {selectedFormat === ResumeFormat.MODERN_EXECUTIVE && (
                   <div style={{ 
-                      fontSize: styles.fontSizeName, 
+                      fontSize: currentFontSize, 
                       color: black, 
                       marginTop: '4px', 
                       fontWeight: 'bold' 
@@ -1759,23 +1882,12 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
           {sidebarOpen && (
             <motion.div
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 384, opacity: 1 }}
+              animate={{ width: sidebarWidth, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              className="flex-shrink-0 h-full border-l border-white/5 bg-[#080b19] flex flex-col overflow-hidden z-10 text-left"
+              className="flex-shrink-0 h-full border-l border-white/5 bg-[#080b19] flex flex-col overflow-hidden z-10 text-left w-full md:w-[384px]"
             >
-              {/* Tab navigation headers */}
               <div className="flex border-b border-white/[0.06] bg-[#070914] flex-shrink-0">
-                <button
-                  onClick={() => setActiveTab('insights')}
-                  className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-wider text-center border-b-2 transition-colors cursor-pointer ${
-                    activeTab === 'insights'
-                      ? 'border-indigo-500 text-white bg-white/[0.01]'
-                      : 'border-transparent text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  Insights
-                </button>
                 <button
                   onClick={() => setActiveTab('signals')}
                   className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-wider text-center border-b-2 relative transition-colors cursor-pointer ${
@@ -1825,101 +1937,6 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
 
               {/* Tab Contents */}
               <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
-                
-                {/* 1. Insights Tab */}
-                {activeTab === 'insights' && (
-                  <div className="space-y-6">
-                    {/* Real-time score widget */}
-                    <div className="p-4 rounded-xl bg-white/[0.01] border border-white/[0.05] flex items-center justify-between">
-                      <div className="flex flex-col text-left">
-                        <span className="text-xs text-slate-400 font-medium">Resume Rating</span>
-                        <span className="text-2xl font-bold text-white mt-1 font-display">{scoreData.score}/100</span>
-                      </div>
-                      
-                      {/* Linear-like Score circular gauge */}
-                      <div className="relative w-14 h-14">
-                        <svg className="w-full h-full transform -rotate-90">
-                          <circle
-                            cx="28"
-                            cy="28"
-                            r="25"
-                            className="stroke-white/[0.03]"
-                            strokeWidth="3"
-                            fill="transparent"
-                          />
-                          <circle
-                            cx="28"
-                            cy="28"
-                            r="25"
-                            className="stroke-indigo-500 transition-all duration-500"
-                            strokeWidth="3"
-                            fill="transparent"
-                            strokeDasharray="157"
-                            strokeDashoffset={157 - (157 * scoreData.score) / 100}
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Award className="w-5 h-5 text-indigo-400" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Suggestions list */}
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-bold text-slate-400 tracking-wider uppercase font-display">Recruiter Optimization Checklist</h4>
-                      <div className="space-y-2.5">
-                        {scoreData.suggestions.map((s) => {
-                          const mapCategoryToSection = (cat: string) => {
-                            switch (cat) {
-                              case 'Contact Details': return 'contact';
-                              case 'Executive Summary': return 'summary';
-                              case 'Performance Metrics': return 'experience';
-                              case 'Action Verbs': return 'experience';
-                              case 'Bullet Density': return 'experience';
-                              case 'Experience': return 'experience';
-                              case 'Education': return 'education';
-                              case 'Skills': return 'skills';
-                              default: return 'contact';
-                            }
-                          };
-                          
-                          return (
-                            <div 
-                              key={s.id} 
-                              onClick={() => triggerHighlight(mapCategoryToSection(s.category))}
-                              className={`p-3 rounded-xl border flex items-start gap-3 transition-all cursor-pointer hover:bg-white/[0.03] active:scale-[0.99] ${
-                                s.type === 'success' 
-                                  ? 'bg-emerald-500/[0.02] border-emerald-500/10 hover:border-emerald-500/20' 
-                                  : s.type === 'warning'
-                                    ? 'bg-rose-500/[0.02] border-rose-500/10 hover:border-rose-500/20'
-                                    : 'bg-white/[0.01] border-white/[0.04] hover:border-white/[0.08]'
-                              }`}
-                              title="Click to locate this section"
-                            >
-                              <span className="mt-1 flex-shrink-0">
-                                {s.type === 'success' ? (
-                                  <Check className="w-4 h-4 text-emerald-400" />
-                                ) : s.type === 'warning' ? (
-                                  <AlertCircle className="w-4 h-4 text-rose-450" />
-                                ) : (
-                                  <Info className="w-4 h-4 text-slate-400" />
-                                )}
-                              </span>
-                              <div className="flex-1 flex flex-col text-left">
-                                <span className={`text-[10px] font-bold uppercase tracking-wider leading-none mb-1 ${
-                                  s.type === 'success' ? 'text-emerald-400' : s.type === 'warning' ? 'text-rose-400' : 'text-slate-400'
-                                }`}>
-                                  {s.category}
-                                </span>
-                                <p className="text-xs text-slate-300 font-light leading-relaxed">{s.text}</p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* 2. Signals (Parser Signals) Tab */}
                 {activeTab === 'signals' && (
@@ -2002,21 +2019,42 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                         <span>Layout & Typography (0 Credits)</span>
                       </div>
 
-                      {/* Font Size slider */}
+                      {/* Font Family selector */}
                       <div className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-slate-400 font-medium font-sans">Font Size Offset</span>
-                          <span className="text-white font-semibold font-mono">{fontSizeOffset >= 0 ? `+${fontSizeOffset}` : fontSizeOffset}pt</span>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-slate-400 font-medium font-sans">Font Family</span>
                         </div>
-                        <input
-                          type="range"
-                          min="-2"
-                          max="2"
-                          step="1"
-                          value={fontSizeOffset}
-                          onChange={(e) => setFontSizeOffset(parseInt(e.target.value))}
-                          className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                        />
+                        <select
+                          value={selectedFont}
+                          onChange={(e) => setSelectedFont(e.target.value)}
+                          className="w-full bg-[#050714]/60 border border-white/10 hover:border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition-all cursor-pointer font-sans"
+                        >
+                          <option value="Calibri">Calibri (Classic Default)</option>
+                          <option value="Arial">Arial (Modern Default)</option>
+                          <option value="Times New Roman">Times New Roman</option>
+                          <option value="Garamond">Garamond</option>
+                          <option value="Georgia">Georgia</option>
+                          <option value="Verdana">Verdana</option>
+                        </select>
+                      </div>
+
+                      {/* Font Size selector */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-slate-400 font-medium font-sans">Font Size</span>
+                          <span className="text-white font-semibold font-mono">{selectedFontSize}pt</span>
+                        </div>
+                        <select
+                          value={selectedFontSize}
+                          onChange={(e) => setSelectedFontSize(parseFloat(e.target.value))}
+                          className="w-full bg-[#050714]/60 border border-white/10 hover:border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition-all cursor-pointer font-sans"
+                        >
+                          <option value="10">10 pt</option>
+                          <option value="10.5">10.5 pt</option>
+                          <option value="11">11 pt</option>
+                          <option value="11.5">11.5 pt</option>
+                          <option value="12">12 pt</option>
+                        </select>
                       </div>
 
                       {/* Line Spacing slider */}
@@ -2111,35 +2149,14 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                           className="w-full bg-[#050714] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 resize-none font-light leading-relaxed font-sans"
                         />
 
-                        {/* Presets Grid */}
-                        <div className="grid grid-cols-2 gap-1.5 font-sans">
+                         {/* Presets Grid */}
+                        <div className="font-sans">
                           <button
-                            onClick={() => handleRunCopilot("Upgrade the vocabulary, verb strength, and metrics positioning to a premium, high-impact executive tone across all descriptions.")}
+                            onClick={() => handleRunCopilot("Upgrade vocabulary and verb strength to executive tone. CRITICAL: Do NOT change any meaning, add irrelevant content, or fabricate information. Only refine existing wording.")}
                             disabled={isCopilotRunning}
-                            className="p-2 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-indigo-500/10 hover:border-indigo-500/20 text-left text-[10px] text-slate-300 cursor-pointer transition-colors"
+                            className="w-full p-2.5 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-indigo-500/10 hover:border-indigo-500/20 text-center text-[10px] text-slate-300 cursor-pointer transition-colors font-medium flex items-center justify-center gap-1.5"
                           >
                             👔 Executive Upgrade
-                          </button>
-                          <button
-                            onClick={() => handleRunCopilot("Slightly condense experience bullets and summary to help the content fit beautifully within a single page while retaining factual milestones.")}
-                            disabled={isCopilotRunning}
-                            className="p-2 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-indigo-500/10 hover:border-indigo-500/20 text-left text-[10px] text-slate-300 cursor-pointer transition-colors"
-                          >
-                            📏 Page-Fit Shrink
-                          </button>
-                          <button
-                            onClick={() => handleRunCopilot("Rewrite any passive phrases and swap weak verbs (helped, managed, support) with strong active action verbs (spearheaded, pioneered, engineered).")}
-                            disabled={isCopilotRunning}
-                            className="p-2 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-indigo-500/10 hover:border-indigo-500/20 text-left text-[10px] text-slate-300 cursor-pointer transition-colors"
-                          >
-                            ⚡ Active Voice Boost
-                          </button>
-                          <button
-                            onClick={() => handleRunCopilot("Identify duty descriptions and restructure them to highlight quantitative outcomes, adding placeholders (like [X]%) where data fits.")}
-                            disabled={isCopilotRunning}
-                            className="p-2 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-indigo-500/10 hover:border-indigo-500/20 text-left text-[10px] text-slate-300 cursor-pointer transition-colors"
-                          >
-                            📈 Quantify Achievements
                           </button>
                         </div>
 
@@ -2161,79 +2178,6 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                             </>
                           )}
                         </button>
-                      </div>
-                    </div>
-
-                    {/* D. Target Job Description & Local Keyword Matcher (0 Credits) */}
-                    <div className="p-4 rounded-xl bg-white/[0.01] border border-white/[0.04] space-y-4 text-left">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-slate-350 font-bold text-xs uppercase tracking-wider">
-                          <FileText className="w-4 h-4 text-indigo-400" />
-                          <span>ATS Keyword Matcher (0 Credits)</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3 font-sans">
-                        <textarea
-                          placeholder="Paste target job description here..."
-                          value={targetJobDescription}
-                          onChange={(e) => handleJobDescriptionChange(e.target.value)}
-                          disabled={isCopilotRunning}
-                          rows={4}
-                          className="w-full bg-[#050714] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 resize-none font-light leading-relaxed font-sans"
-                        />
-
-                        {jobKeywords.length > 0 && (
-                          <div className="space-y-3 pt-2">
-                            {/* Match Rate Progress Bar */}
-                            <div className="space-y-1">
-                              <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase font-sans">
-                                <span>ATS Keyword Match Rate</span>
-                                <span className="font-mono text-white">
-                                  {Math.round((jobKeywords.filter(k => k.matched).length / jobKeywords.length) * 100)}%
-                                </span>
-                              </div>
-                              <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-500"
-                                  style={{ width: `${(jobKeywords.filter(k => k.matched).length / jobKeywords.length) * 100}%` }}
-                                />
-                              </div>
-                            </div>
-
-                            {/* Keywords List */}
-                            <div className="space-y-1.5">
-                              <div className="text-[10px] text-slate-550 font-bold uppercase tracking-wider font-sans">Keywords Scanner</div>
-                              <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto custom-scrollbar">
-                                {jobKeywords.map((k, idx) => (
-                                  <span
-                                    key={idx}
-                                    className={`text-[9px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${
-                                      k.matched
-                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10'
-                                        : 'bg-rose-500/10 text-rose-350 border border-rose-500/10'
-                                    }`}
-                                  >
-                                    <span className={`w-1 h-1 rounded-full ${k.matched ? 'bg-emerald-400' : 'bg-rose-450'}`} />
-                                    {k.word}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Inject Missing Keywords Button */}
-                            {jobKeywords.some(k => !k.matched) && (
-                              <button
-                                onClick={handleAutoInjectKeywords}
-                                disabled={isCopilotRunning}
-                                className="w-full h-9 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/25 border border-indigo-500/25 text-indigo-300 hover:text-white font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                              >
-                                <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-                                <span>Inject Missing Keywords (⚡ 1 Credit)</span>
-                              </button>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -2436,6 +2380,72 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                 className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-violet-650 hover:from-indigo-500 hover:to-violet-550 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-[0_4px_20px_rgba(99,102,241,0.25)] hover:shadow-[0_4px_25px_rgba(99,102,241,0.4)] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
               >
                 Confirm &amp; Run
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Download Changes Confirmation Modal */}
+      {showDownloadConfirm && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div 
+            className="relative bg-slate-900/95 border border-white/10 rounded-3xl p-7 max-w-lg w-full flex flex-col gap-5 shadow-[0_0_50px_rgba(99,102,241,0.25)] hover:shadow-[0_0_60px_rgba(99,102,241,0.35)] transition-all duration-300 animate-in zoom-in-95 duration-200"
+            style={{
+              boxShadow: '0 25px 60px -15px rgba(0,0,0,0.9), 0 0 25px rgba(99, 102, 241, 0.2)'
+            }}
+          >
+            <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.15)] flex-shrink-0 self-center">
+              <Sparkles className="w-6 h-6 animate-pulse" />
+            </div>
+
+            <div className="space-y-1 text-center">
+              <h3 className="text-lg font-bold text-white tracking-wide">Review Resume Changes</h3>
+              <p className="text-xs text-slate-400 font-light leading-relaxed px-2">
+                The following AI and grammar optimizations were applied to your resume. Please accept or reject these changes before downloading.
+              </p>
+            </div>
+
+            {/* List of changes with custom scrollbar */}
+            <div className="flex-1 max-h-60 overflow-y-auto space-y-3 p-1 custom-scrollbar">
+              {changeLog.map((item) => (
+                <div key={item.id} className="p-3 bg-white/[0.02] border border-white/5 rounded-xl text-left space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between text-[9px] uppercase tracking-wider font-bold">
+                    <span className="text-indigo-400">{item.path.replace(/\./g, ' ➔ ')}</span>
+                    <span className="text-slate-500 bg-white/5 px-2 py-0.5 rounded">{item.reason}</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-1 font-light">
+                    <div className="text-rose-300 line-through">
+                      <span className="text-[10px] text-slate-500 select-none mr-1">-</span>
+                      {item.original}
+                    </div>
+                    <div className="text-emerald-300">
+                      <span className="text-[10px] text-slate-500 select-none mr-1">+</span>
+                      {item.new}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 w-full mt-2">
+              <button
+                onClick={() => { setShowDownloadConfirm(false); setPendingDownloadType(null); }}
+                className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/15 text-slate-350 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+              >
+                Cancel / Edit
+              </button>
+              <button
+                onClick={handleRejectDownload}
+                className="flex-1 py-3 bg-rose-950 hover:bg-rose-900 text-rose-100 text-xs font-bold uppercase tracking-wider rounded-xl border border-rose-500/25 transition-all cursor-pointer"
+              >
+                Reject Changes &amp; Get Original
+              </button>
+              <button
+                onClick={handleConfirmDownload}
+                className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-violet-650 hover:from-indigo-500 hover:to-violet-550 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-[0_4px_20px_rgba(99,102,241,0.25)] hover:shadow-[0_4px_25px_rgba(99,102,241,0.4)] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+              >
+                Accept All &amp; Download
               </button>
             </div>
           </div>

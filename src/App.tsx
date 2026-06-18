@@ -536,14 +536,6 @@ const App: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-3">
-              {showAdmin && (
-                <button
-                  onClick={() => setShowAdmin(false)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-semibold tracking-wide uppercase transition-all"
-                >
-                  Exit Workspace
-                </button>
-              )}
             </div>
           </div>
         )}

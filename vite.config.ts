@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
       resolve: {
         alias: {
           '@': path.resolve(__dirname, './src'),
+          'vfs_fonts_stub': path.resolve(__dirname, './src/services/vfs_fonts_stub.ts'),
         },
       },
       server: {

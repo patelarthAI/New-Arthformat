@@ -48,13 +48,15 @@ const formatLocation = (loc: string) => {
 export const generateResumePDF = async (
   data: ResumeData, 
   format: ResumeFormat | string = ResumeFormat.CLASSIC_PROFESSIONAL,
-  options?: { location?: boolean; phone?: boolean; email?: boolean }
+  options?: { location?: boolean; phone?: boolean; email?: boolean },
+  customFont?: string,
+  customFontSize?: number
 ) => {
-  console.log("generateResumePDF called with format:", format);
+  console.log("generateResumePDF called with format:", format, "customFont:", customFont, "customFontSize:", customFontSize);
   
   // Dynamically import pdfmake to reduce initial bundle size
   const pdfMakeModule = await import("pdfmake/build/pdfmake");
-  const pdfFontsModule = await import("pdfmake/build/vfs_fonts");
+  const pdfFontsModule = await import("vfs_fonts_stub" as any).catch(() => import("pdfmake/build/vfs_fonts"));
   
   const pm = (pdfMakeModule as any).default || pdfMakeModule;
   const pf = (pdfFontsModule as any).default || pdfFontsModule;
@@ -76,9 +78,10 @@ export const generateResumePDF = async (
   
   console.log("isModern calculated as:", isModern);
   
+  const baseFontSize = customFontSize || 11;
   const styles = {
-      nameFontSize: isModern ? 12 : 18,
-      bodyFontSize: isModern ? 11 : 11,
+      nameFontSize: customFontSize ? (customFontSize + 2) : (isModern ? 12 : 18),
+      bodyFontSize: baseFontSize,
       nameAlignment: isModern ? 'left' : 'center',
       headerMargin: isModern ? [0, 0, 0, 15] : [0, 0, 0, 10],
       sectionHeaderDecoration: undefined,
@@ -453,6 +456,42 @@ export const generateResumePDF = async (
     });
   }
 
+  // Register standard 14 PDF fonts so they are available without vfs
+  pm.fonts = {
+    Roboto: {
+      normal: 'Roboto-Regular.ttf',
+      bold: 'Roboto-Medium.ttf',
+      italic: 'Roboto-Italic.ttf',
+      bolditalic: 'Roboto-MediumItalic.ttf'
+    },
+    Helvetica: {
+      normal: 'Helvetica',
+      bold: 'Helvetica-Bold',
+      italic: 'Helvetica-Oblique',
+      bolditalic: 'Helvetica-BoldOblique'
+    },
+    Times: {
+      normal: 'Times-Roman',
+      bold: 'Times-Bold',
+      italic: 'Times-Italic',
+      bolditalic: 'Times-BoldItalic'
+    }
+  };
+
+  const getStandardPDFFont = (font: string) => {
+    switch (font) {
+      case 'Times New Roman':
+      case 'Georgia':
+      case 'Garamond':
+        return 'Times';
+      case 'Arial':
+      case 'Calibri':
+      case 'Verdana':
+      default:
+        return 'Helvetica';
+    }
+  };
+
   const docDefinition = {
     content: content,
     styles: {
@@ -469,7 +508,7 @@ export const generateResumePDF = async (
       }
     },
     defaultStyle: {
-      font: 'Roboto', // pdfmake default font
+      font: customFont ? getStandardPDFFont(customFont) : 'Roboto',
       lineHeight: 1
     }
   };
