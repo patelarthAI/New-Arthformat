@@ -338,6 +338,7 @@ export const extractResumeDataBackend = async (
       config: {
         systemInstruction: `
 ACT AS A STRICT DATA EXTRACTOR. Your ONLY job is to map the provided text into the JSON schema. You are FORBIDDEN from summarizing, shortening, rewriting, or omitting any information from the original text. Every word must be preserved.
+CRITICAL: Clean up artificial spacing or ligature-splitting errors introduced by PDF text extraction (e.g. convert 'fi eld' to 'field', 'o ffi ce' to 'office', 'sta ff' to 'staff', 'effi cient' to 'efficient', 'manha an' to 'manhattan', 'spearheaded' to 'spearheaded', 'technician' to 'technician'). Do not leave artificial spaces inside words, but do not change any other wording or data.
 `,
         tools: [{ functionDeclarations: [saveResumeTool] }],
         toolConfig: { 

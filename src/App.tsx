@@ -304,7 +304,51 @@ const App: React.FC = () => {
           for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
-            const pageText = textContent.items.map((item: any) => item.str).join(' ');
+            
+            let pageText = '';
+            let lastY: number | null = null;
+            let lastX: number | null = null;
+            let lastWidth = 0;
+            let lastHeight = 0;
+            
+            for (const item of textContent.items as any[]) {
+              if (item.str === undefined) continue;
+              
+              const currentX = item.transform[4];
+              const currentY = item.transform[5];
+              const currentStr = item.str;
+              const currentHeight = item.height || Math.abs(item.transform[3]) || 10;
+              const currentWidth = item.width || 0;
+              
+              if (lastY === null) {
+                pageText += currentStr;
+              } else {
+                const yDiff = Math.abs(currentY - lastY);
+                // If Y coordinate has changed significantly, we are on a new line.
+                // We use a threshold of 3 points or half the font height, whichever is larger.
+                const isNewLine = yDiff > Math.max(3, currentHeight * 0.5);
+                
+                if (isNewLine) {
+                  pageText += '\n' + currentStr;
+                } else {
+                  // Same line. Check if we should add a space.
+                  const gap = currentX - (lastX! + lastWidth);
+                  const spaceThreshold = Math.max(1.5, currentHeight * 0.15);
+                  
+                  if (gap > spaceThreshold && !pageText.endsWith(' ') && !currentStr.startsWith(' ')) {
+                    pageText += ' ' + currentStr;
+                  } else {
+                    pageText += currentStr;
+                  }
+                }
+              }
+              
+              lastX = currentX;
+              lastY = currentY;
+              lastWidth = currentWidth;
+              lastHeight = currentHeight;
+            }
+            
             fullText += pageText + '\n';
           }
           
