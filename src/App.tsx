@@ -554,25 +554,18 @@ const App: React.FC = () => {
                   transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                   className="flex flex-col items-center text-center w-full mb-3"
                 >
-                  {/* Logo and Name - Centered & Balanced */}
-                  <div className="flex flex-col items-center justify-center mb-5 select-none w-full">
-                    {/* Mobile: Logo is placed on top of the text for a clean, symmetric stacked layout */}
-                    <div className="md:hidden mb-3.5 relative group transition-all duration-500 hover:scale-[1.03] active:scale-[0.98] flex-shrink-0">
-                      {/* Glowing background aura */}
-                      <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-indigo-500/20 via-purple-500/20 to-pink-500/20 blur-2xl opacity-80 pointer-events-none" />
-                      <InteractiveLogo size="lg" />
+                  {/* Premium Stacked Brand Header - Symmetrical & Balanced */}
+                  <div className="flex flex-col items-center justify-center select-none w-full mb-6">
+                    {/* Centered Brand Mark */}
+                    <div className="relative group transition-all duration-500 hover:scale-[1.05] active:scale-[0.98] flex-shrink-0 mb-5">
+                      {/* Deep-glow background aura */}
+                      <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-indigo-500/25 via-purple-500/25 to-pink-500/25 blur-3xl opacity-90 pointer-events-none" />
+                      <InteractiveLogo size="xl" />
                     </div>
-
-                    <h1 className="hero-title font-display text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-none drop-shadow-[0_4px_16px_rgba(0,0,0,0.6)] relative inline-flex items-center justify-center">
-                      {/* Desktop: Logo is positioned absolutely to the left of the title so the text's center matches the page center perfectly */}
-                      <span className="hidden md:inline-block absolute right-full top-1/2 -translate-y-1/2 mr-4 lg:mr-6 group transition-all duration-500 hover:scale-[1.03] active:scale-[0.98] flex-shrink-0">
-                        <span className="absolute inset-0 rounded-full bg-gradient-to-tr from-indigo-500/20 via-purple-500/20 to-pink-500/20 blur-2xl opacity-80 pointer-events-none" />
-                        <InteractiveLogo size="xl" />
-                      </span>
-                      
-                      <span className="flex items-center justify-center whitespace-nowrap">
-                        Arth<span className="text-gradient-rainbow drop-shadow-[0_0_35px_rgba(168,85,247,0.35)]">Format</span>&nbsp;<span className="text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">AI</span>
-                      </span>
+                    
+                    {/* Brand Name */}
+                    <h1 className="hero-title font-display text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-none drop-shadow-[0_4px_16px_rgba(0,0,0,0.6)]">
+                      Arth<span className="text-gradient-rainbow drop-shadow-[0_0_35px_rgba(168,85,247,0.35)]">Format</span> <span className="text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">AI</span>
                     </h1>
                   </div>
 
