@@ -78,3 +78,48 @@ export const checkSpelling = async (
 
   return response.json();
 };
+
+export const updateResume = async (
+  data: ResumeData,
+  instruction: string,
+  targetJobDescription: string | undefined,
+  format: ResumeFormat,
+  usePro: boolean = false
+): Promise<ResumeData> => {
+  const response = await fetch("/api/gemini/update-resume", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ data, instruction, targetJobDescription, format, usePro })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to update resume from server");
+  }
+
+  return response.json();
+};
+
+export const rewritePhrase = async (
+  text: string,
+  instruction: string,
+  usePro: boolean = false
+): Promise<string[]> => {
+  const response = await fetch("/api/gemini/rewrite-phrase", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ text, instruction, usePro })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to rewrite phrase from server");
+  }
+
+  return response.json();
+};
+

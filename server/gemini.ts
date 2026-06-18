@@ -419,20 +419,23 @@ export const analyzeGrammarBackend = async (data: ResumeData, format: ResumeForm
             2. **Grammar & Verb Tense**: Identify grammatical errors, incorrect verb tenses, or punctuation issues. Categorize as 'GRAMMAR'.
             3. **First-Person Pronouns**: Resumes should NEVER use first-person pronouns (I, me, my, mine, we, us, our). Flag ANY instance of these words. Provide suggestions that rewrite the sentence to remove them (e.g., change "I led a team" to "Led a team"). Categorize as 'STYLE'.
             4. **Smart Resume Coach (Style)**: 
-               - Suggest high-impact, context-aware improvements to phrasing.
-               - DO NOT just swap single words if it makes the sentence read awkwardly. Instead, select the entire phrase or sentence as the 'errorText' and provide a fully rewritten, polished version as the 'suggestion'.
+               - **Weak Action Verbs**: Audit for lazy, overused action verbs like "helped with", "handled", "worked on", "responsible for", "made sure", "managed". Suggest strong dynamic verbs like "Orchestrated", "Spearheaded", "Architected", "Engineered", "Synthesized", "Pioneered".
+               - **Passive Voice Restructuring**: Flag passive phrasing (e.g., "A new platform was developed by me") and suggest active phrasing ("Pioneered the development of a new platform").
+               - **Buzzword & Cliché Auditing**: Flag weak clichés ("synergy", "think outside the box", "team player", "hard worker", "results-driven") and suggest concrete, professional, or metric-oriented replacements.
+               - **Impact & Metrics Positioning**: Identify descriptions that describe duties without outcomes. Recommend restructures that highlight achievements and placeholders for metrics (e.g., restructured sentences ending with "...resulting in a [X]% increase in throughput").
+               - **Exclusions**: DO NOT flag technical terms, version numbers, framework names, dates, or proper nouns.
                - Ensure suggestions make logical sense for the specific line, industry, and context.
-               - Categorize these as 'STYLE'.
+               - DO NOT just swap single words if it makes the sentence read awkwardly. Instead, select the entire phrase or sentence as the 'errorText' and provide a fully rewritten, polished version as the 'suggestions'.
+               - Categorize all of these as 'STYLE'.
             5. **Precision & Safety**: DO NOT change dates, numbers, metrics, factual information, or proper nouns. DO NOT hallucinate new skills or experiences.
             6. **Context**: For each issue, explain WHY the change is recommended (e.g., "Using 'Spearheaded' instead of 'Led' adds more executive impact, and restructuring the sentence highlights the 30% metric better.").
-            7. **Exclusions**: DO NOT flag technical terms, version numbers, framework names, dates, or proper nouns.
-            8. **Replacement Integrity**: 
+            7. **Replacement Integrity**: 
                - 'errorText' MUST be the EXACT substring from the 'original' text. It must match character-for-character, including spaces and punctuation.
                - 'suggestions' MUST be drop-in replacements for 'errorText'. 
                - If 'errorText' is a whole sentence, 'suggestions' should be whole sentences.
                - NEVER return a suggestion that is a partial correction of the 'errorText' if 'errorText' is a whole sentence.
-            9. Return a list of issues using the 'save_grammar_issues' tool. You MUST find at least 1-2 stylistic improvements if there are no spelling/grammar errors.
-            10. For each issue, provide:
+            8. Return a list of issues using the 'save_grammar_issues' tool. You MUST find at least 2-3 stylistic improvements to make the resume read like it was polished by an executive coach.
+            9. For each issue, provide:
                - 'path': The exact JSON path (dot notation).
                - 'original': The FULL text content of that field.
                - 'errorText': The EXACT substring within 'original' that is incorrect or could be improved.
@@ -536,3 +539,155 @@ ACT AS A STRICT PROOFREADER. You are only allowed to fix objective spelling and 
     throw new Error("The AI model did not return corrected data.");
   }, "checkSpelling", usePro);
 };
+
+const rewritePhraseTool: FunctionDeclaration = {
+  name: "save_rewrite_suggestions",
+  description: "Saves list of 3 distinct rewrite suggestions.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      suggestions: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: "Exactly 3 high-impact rewrite suggestions matching the instruction"
+      }
+    },
+    required: ["suggestions"]
+  }
+};
+
+export const updateResumeBackend = async (
+  data: ResumeData,
+  instruction: string,
+  targetJobDescription: string | undefined,
+  format: ResumeFormat,
+  usePro: boolean = false
+): Promise<ResumeData> => {
+  return withModelFallback(async (modelId, apiKey) => {
+    const ai = new GoogleGenAI({ 
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    const jobContext = targetJobDescription 
+      ? `\n\nTARGET JOB DESCRIPTION:\n${targetJobDescription}`
+      : "";
+
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: {
+        parts: [
+          {
+            text: `You are an elite executive resume writer. Your task is to update this resume according to the user's instructions.
+            
+            USER INSTRUCTIONS:
+            ${instruction}${jobContext}
+            
+            CRITICAL RULES:
+            1. Preserve the exact structure of the resume.
+            2. Do not omit or truncate any section unless explicitly requested.
+            3. Do not invent new details (jobs, degrees, certifications) that the user did not specify.
+            4. Make the formatting matches the ${format} style.
+            5. Return the fully updated resume data using the 'save_resume_data' tool.
+            
+            ORIGINAL DATA:
+            ${JSON.stringify(data)}`
+          }
+        ],
+      },
+      config: {
+        systemInstruction: `
+ACT AS AN EXPERT RESUME EDITOR. Modify the JSON resume data strictly following the user's instructions. You must preserve the schema structure and use the 'save_resume_data' tool to return the modified data.
+`,
+        tools: [{ functionDeclarations: [saveResumeTool] }],
+        toolConfig: { 
+          functionCallingConfig: { 
+            mode: "ANY" as any, 
+            allowedFunctionNames: ["save_resume_data"]
+          } 
+        },
+      },
+    });
+
+    const functionCalls = response.functionCalls;
+    if (functionCalls && functionCalls.length > 0) {
+      const call = functionCalls[0];
+      if (call.name === "save_resume_data") {
+         const updatedData = call.args as unknown as ResumeData;
+         
+         if (updatedData.summary) {
+            if (typeof updatedData.summary === 'string') {
+                updatedData.summary = [updatedData.summary];
+            }
+         }
+         return updatedData;
+      }
+    }
+    
+    throw new Error("The AI model did not return updated resume data.");
+  }, "updateResume", usePro);
+};
+
+export const rewritePhraseBackend = async (
+  text: string,
+  instruction: string,
+  usePro: boolean = false
+): Promise<string[]> => {
+  return withModelFallback(async (modelId, apiKey) => {
+    const ai = new GoogleGenAI({ 
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: {
+        parts: [
+          {
+            text: `Provide exactly 3 distinct, high-impact improvements/rewrites for this text.
+            
+            TEXT:
+            "${text}"
+            
+            INSTRUCTION / TONE TO APPLY:
+            "${instruction}"
+            
+            Ensure suggestions make logical sense for a professional resume and are direct replacements for the text.`
+          }
+        ],
+      },
+      config: {
+        systemInstruction: `
+ACT AS AN EXECUTIVE RESUME COACH. Provide 3 high-impact direct replacement options matching the style instruction. Use the 'save_rewrite_suggestions' tool.
+`,
+        tools: [{ functionDeclarations: [rewritePhraseTool] }],
+        toolConfig: { 
+          functionCallingConfig: { 
+            mode: "ANY" as any, 
+            allowedFunctionNames: ["save_rewrite_suggestions"]
+          } 
+        },
+      },
+    });
+
+    const functionCalls = response.functionCalls;
+    if (functionCalls && functionCalls.length > 0) {
+      const call = functionCalls[0];
+      if (call.name === "save_rewrite_suggestions") {
+         const args = call.args as unknown as { suggestions: string[] };
+         return args.suggestions || [];
+      }
+    }
+    
+    return [text];
+  }, "rewritePhrase", usePro);
+};
+

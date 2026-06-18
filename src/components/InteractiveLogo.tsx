@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 
 interface InteractiveLogoProps {
-  size?: 'sm' | 'md' | 'lg' | 'hero';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'hero';
 }
 
 export const InteractiveLogo: React.FC<InteractiveLogoProps> = ({ size = 'md' }) => {
@@ -10,6 +10,7 @@ export const InteractiveLogo: React.FC<InteractiveLogoProps> = ({ size = 'md' })
     sm: { container: 'w-10 h-10', svgSize: 40, strokeWidth: 1.5, glow: '10px' },
     md: { container: 'w-16 h-16', svgSize: 64, strokeWidth: 2, glow: '15px' },
     lg: { container: 'w-24 h-24', svgSize: 96, strokeWidth: 2.5, glow: '20px' },
+    xl: { container: 'w-20 h-20', svgSize: 80, strokeWidth: 2.2, glow: '16px' },
     hero: { container: 'w-36 h-36 md:w-40 md:h-40', svgSize: 160, strokeWidth: 3, glow: '35px' },
   };
 

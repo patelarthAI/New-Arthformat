@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { GrammarIssue } from '@/types';
 import { Check, X, AlertCircle } from 'lucide-react';
+import { rewritePhrase } from '../services/geminiService';
 
 interface GrammarHighlighterProps {
   text: string;
@@ -11,6 +12,7 @@ interface GrammarHighlighterProps {
   style?: React.CSSProperties;
   className?: string;
   onEdit?: (newText: string) => void;
+  onConfirmAI?: (title: string, description: string, cost: number, onConfirm: () => void) => void;
 }
 
 const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({ 
@@ -21,11 +23,52 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
   onIgnore,
   style,
   className,
-  onEdit
+  onEdit,
+  onConfirmAI
 }) => {
   const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<'top' | 'bottom'>('bottom');
   const spanRef = useRef<HTMLSpanElement>(null);
+  const [refineText, setRefineText] = useState<string>('');
+  const [isRefining, setIsRefining] = useState<boolean>(false);
+  const [activeIssueSuggestions, setActiveIssueSuggestions] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    setRefineText('');
+    setIsRefining(false);
+  }, [activeIssueId]);
+
+  const handleRefine = async (issue: any) => {
+    if (!refineText.trim()) return;
+    
+    const runRefinement = async () => {
+      setIsRefining(true);
+      try {
+        const newSuggestions = await rewritePhrase(issue.cleanErrorText, refineText);
+        setActiveIssueSuggestions(prev => ({
+          ...prev,
+          [issue.id]: newSuggestions
+        }));
+        setRefineText('');
+      } catch (err) {
+        console.error("Refinement failed:", err);
+        alert("Failed to refine phrase. Please try again.");
+      } finally {
+        setIsRefining(false);
+      }
+    };
+
+    if (onConfirmAI) {
+      onConfirmAI(
+        "AI Custom Refine",
+        `Refine the text "${issue.cleanErrorText}" with the custom instruction: "${refineText}" using Gemini.`,
+        1,
+        runRefinement
+      );
+    } else {
+      await runRefinement();
+    }
+  };
   
   // Normalize path for comparison
   const normalizePath = (p: string) => p.replace(/\[(\d+)\]/g, '.$1');
@@ -118,10 +161,11 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
 
       const isSpelling = issue.type === 'SPELLING';
       const isStyle = issue.type === 'STYLE';
-      const highlightColor = isSpelling ? '#ef4444' : (isStyle ? '#8b5cf6' : '#22c55e'); 
-      const bgColor = isSpelling ? 'rgba(239, 68, 68, 0.1)' : (isStyle ? 'rgba(139, 92, 246, 0.1)' : 'rgba(34, 197, 94, 0.1)');
-      const iconColor = isSpelling ? '#ef4444' : (isStyle ? '#8b5cf6' : '#22c55e');
+      const highlightColor = isSpelling ? '#f87171' : (isStyle ? '#c084fc' : '#4ade80'); 
+      const bgColor = isSpelling ? 'rgba(239, 68, 68, 0.08)' : (isStyle ? 'rgba(139, 92, 246, 0.08)' : 'rgba(34, 197, 94, 0.08)');
+      const iconColor = isSpelling ? '#f87171' : (isStyle ? '#c084fc' : '#4ade80');
       const label = isSpelling ? 'Spelling Error' : (isStyle ? 'Style Suggestion' : 'Grammar Correction');
+      const animationClass = isSpelling ? 'highlight-spelling-active' : (isStyle ? 'highlight-style-active' : 'highlight-grammar-active');
 
       result.push(
         <span 
@@ -132,13 +176,10 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
         >
           <span 
             ref={activeIssueId === issue.id ? spanRef : null}
+            className={`${animationClass} cursor-pointer rounded-[2px] px-0.5 transition-all duration-200`}
             style={{
-              cursor: 'pointer',
               borderBottom: `2px solid ${highlightColor}`,
               backgroundColor: bgColor,
-              borderRadius: '2px',
-              padding: '0 2px',
-              transition: 'background-color 0.2s, border-color 0.2s',
             }}
             onClick={(e) => {
                 e.stopPropagation();
@@ -178,60 +219,112 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
           
           {activeIssueId === issue.id && (
             <div 
-              className={`absolute z-50 left-0 w-72 rounded-lg shadow-xl border p-4 text-sm font-sans animate-in fade-in zoom-in duration-200 ${
-                popoverPosition === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
+              className={`absolute z-50 left-0 w-72 rounded-2xl shadow-2xl border p-4 text-sm font-sans backdrop-blur-xl animate-in fade-in zoom-in duration-250 ${
+                popoverPosition === 'top' ? 'bottom-full mb-2.5' : 'top-full mt-2.5'
               }`}
               style={{
-                backgroundColor: '#ffffff',
-                borderColor: '#e2e8f0',
-                color: '#1e293b',
+                backgroundColor: 'rgba(8, 12, 28, 0.94)',
+                borderColor: 'rgba(255, 255, 255, 0.08)',
+                color: '#f8fafc',
                 textAlign: 'left',
-                minWidth: '300px'
+                minWidth: '300px',
+                boxShadow: '0 20px 50px -12px rgba(0,0,0,0.8), 0 0 15px rgba(99, 102, 241, 0.15)'
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-start gap-2 mb-2">
-                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: iconColor }} />
+              <div className="flex items-start gap-2.5 mb-2">
+                <AlertCircle className="w-4.5 h-4.5 mt-0.5 flex-shrink-0" style={{ color: iconColor }} />
                 <div>
-                   <div className="font-semibold" style={{ color: '#1e293b' }}>{label}</div>
-                   <div className="text-xs mt-1 leading-relaxed" style={{ color: '#64748b' }}>{issue.reason}</div>
+                   <div className="font-bold text-white text-xs uppercase tracking-wider">{label}</div>
+                   <div className="text-xs mt-1 leading-relaxed text-slate-400">{issue.reason}</div>
                 </div>
               </div>
               
-              <div className="p-2 rounded border mb-3" style={{ backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }}>
-                 <div className="line-through text-xs mb-1 opacity-60" style={{ color: '#475569' }}>{issue.cleanErrorText}</div>
-                 <div className="flex flex-col gap-1 mt-2">
-                    {issue.suggestions.map((suggestion, sIdx) => (
+              <div className="p-2.5 rounded-xl border mb-3" style={{ backgroundColor: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.05)' }}>
+                 <div className="line-through text-xs mb-1 text-slate-500 font-medium">{issue.cleanErrorText}</div>
+                 <div className="flex flex-col gap-1.5 mt-2">
+                    {(activeIssueSuggestions[issue.id] || issue.suggestions).map((suggestion, sIdx) => (
                         <button
                             key={sIdx}
                             onClick={() => { onAccept({ ...issue, suggestions: [suggestion] }); setActiveIssueId(null); }}
-                            className={`text-left px-2 py-1.5 text-sm font-medium rounded transition-colors border border-transparent ${
+                            className={`text-left px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-all border border-transparent cursor-pointer ${
                                 isSpelling 
-                                ? 'hover:bg-red-100 text-red-700 hover:border-red-200' 
-                                : (isStyle ? 'hover:bg-purple-100 text-purple-700 hover:border-purple-200' : 'hover:bg-green-100 text-green-700 hover:border-green-200')
+                                ? 'hover:bg-red-500/20 text-red-200 border-red-500/20 hover:border-red-500/40 hover:shadow-[0_0_8px_rgba(239,68,68,0.25)]' 
+                                : (isStyle ? 'hover:bg-purple-500/20 text-purple-200 border-purple-500/20 hover:border-purple-500/40 hover:shadow-[0_0_8px_rgba(139,92,246,0.25)]' : 'hover:bg-emerald-500/20 text-emerald-200 border-emerald-500/20 hover:border-emerald-500/40 hover:shadow-[0_0_8px_rgba(34,197,94,0.25)]')
                             }`}
                         >
                             {suggestion}
                         </button>
                     ))}
                  </div>
+
+                 {/* 1. Local Action Verb Swapper (0 Credits) */}
+                 {isStyle && (
+                   <div className="mt-3 pt-2.5 border-t border-white/5">
+                     <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5">💡 Swap Action Verb (0 Credits)</div>
+                     <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto custom-scrollbar">
+                       {["Spearheaded", "Orchestrated", "Engineered", "Pioneered", "Synthesized", "Accelerated", "Architected", "Cultivated"].map(v => (
+                         <button
+                           key={v}
+                           onClick={() => {
+                             onAccept({ ...issue, suggestions: [v] });
+                             setActiveIssueId(null);
+                           }}
+                           className="px-2 py-0.5 text-[9px] bg-white/5 hover:bg-indigo-500/25 text-indigo-300 hover:text-white rounded border border-white/5 transition-colors cursor-pointer"
+                         >
+                           {v}
+                         </button>
+                       ))}
+                     </div>
+                   </div>
+                 )}
+
+                 {/* 2. Custom Refinement Input (1 Credit) */}
+                 <div className="mt-3 pt-2.5 border-t border-white/5">
+                   <div className="flex items-center justify-between mb-1.5">
+                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">⚡ AI Custom Refine</span>
+                     <span className="text-[9px] text-indigo-400/80 font-mono">1 AI Credit</span>
+                   </div>
+                   <div className="flex gap-1.5">
+                     <input
+                       type="text"
+                       placeholder="E.g. 'make it sound more technical'..."
+                       value={refineText}
+                       onChange={(e) => setRefineText(e.target.value)}
+                       onKeyDown={async (e) => {
+                         if (e.key === 'Enter' && refineText.trim()) {
+                           e.preventDefault();
+                           await handleRefine(issue);
+                         }
+                       }}
+                       disabled={isRefining}
+                       className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50"
+                     />
+                     <button
+                       onClick={() => handleRefine(issue)}
+                       disabled={isRefining || !refineText.trim()}
+                       className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors"
+                     >
+                       {isRefining ? '...' : 'Go'}
+                     </button>
+                   </div>
+                 </div>
               </div>
 
               <div className="flex gap-2 justify-end">
                 <button
                   onClick={() => { onIgnore(issue); setActiveIssueId(null); }}
-                  className="px-3 py-1.5 text-xs font-medium hover:bg-slate-100 rounded border flex items-center gap-1"
-                  style={{ color: '#475569', borderColor: '#e2e8f0' }}
+                  className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 flex items-center gap-1.5 cursor-pointer text-slate-300 transition-colors"
                 >
-                  <X className="w-3 h-3" /> Ignore
+                  <X className="w-3.5 h-3.5" /> Ignore
                 </button>
               </div>
               
               <div 
-                className={`absolute left-4 w-2 h-2 border-b border-r transform rotate-45 ${
-                  popoverPosition === 'top' ? 'top-full -mt-1 bg-white' : 'bottom-full -mb-1 bg-white rotate-[225deg]'
+                className={`absolute left-4 w-2.5 h-2.5 border-b border-r transform ${
+                  popoverPosition === 'top' ? 'top-full -mt-1.5 rotate-[45deg]' : 'bottom-full -mb-1.5 rotate-[225deg]'
                 }`}
-                style={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0' }}
+                style={{ backgroundColor: 'rgba(8, 12, 28, 0.94)', borderColor: 'rgba(255, 255, 255, 0.08)' }}
               ></div>
             </div>
           )}

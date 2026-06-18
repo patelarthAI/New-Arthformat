@@ -3,9 +3,10 @@ import { ResumeData, GrammarIssue, ChangeLogItem, ResumeFormat } from "@/types";
 import { 
   Download, FileText, Loader2, History, ArrowRight, LayoutTemplate, Undo2, 
   ShieldCheck, Lock, AlertCircle, Sparkles, Check, X, Eye, EyeOff, MapPin, 
-  Phone, Mail, Unlock, RotateCcw, PanelRight, Settings, Award, Split, Layers, Info
+  Phone, Mail, Unlock, RotateCcw, PanelRight, Settings, Award, Split, Layers, Info,
+  ArrowUp, ArrowDown, Wand2, Sliders
 } from "lucide-react";
-import { analyzeGrammar } from "@/services/geminiService";
+import { analyzeGrammar, updateResume } from "@/services/geminiService";
 import { generateResumePDF } from "@/services/pdfService";
 import { generateResumeDoc } from "@/services/docxService";
 import { saveAs } from "file-saver";
@@ -44,13 +45,171 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   // Layout States
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [comparisonMode, setComparisonMode] = useState(false);
-  const [activeTab, setActiveTab] = useState<'insights' | 'signals' | 'logs' | 'settings'>('insights');
+  const [activeTab, setActiveTab] = useState<'insights' | 'signals' | 'copilot' | 'logs' | 'settings'>('insights');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
   const [isChecking, setIsChecking] = useState(false);
   const [issues, setIssues] = useState<GrammarIssue[]>([]);
   
+  // Spacing sliders state (0 Credits)
+  const [fontSizeOffset, setFontSizeOffset] = useState<number>(0);
+  const [lineSpacingOffset, setLineSpacingOffset] = useState<number>(0);
+  const [sectionSpacingOffset, setSectionSpacingOffset] = useState<number>(0);
+
+  // Copilot AI states (1 Credit when executing)
+  const [copilotInstruction, setCopilotInstruction] = useState<string>('');
+  const [targetJobDescription, setTargetJobDescription] = useState<string>('');
+  const [isCopilotRunning, setIsCopilotRunning] = useState<boolean>(false);
+  const [copilotProgressStep, setCopilotProgressStep] = useState<string>('');
+  const [tempUpdatedData, setTempUpdatedData] = useState<ResumeData | null>(null);
+
+  // Local Keyword Matcher state (0 Credits)
+  const [jobKeywords, setJobKeywords] = useState<{ word: string; matched: boolean }[]>([]);
+
+  // Section Order (0 Credits)
+  const [sectionOrder, setSectionOrder] = useState<string[]>(['summary', 'experience', 'internships', 'education', 'customSections']);
+  
   // Highlight state for linked checklist click
   const [highlightedSection, setHighlightedSection] = useState<string | null>(null);
+
+  // State for AI Confirmation Modal (pops up to prevent accidental credit usage)
+  const [aiConfirm, setAiConfirm] = useState<{
+    title: string;
+    description: string;
+    cost: number;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const triggerAIConfirmation = (title: string, description: string, cost: number, onConfirm: () => void) => {
+    setAiConfirm({
+      title,
+      description,
+      cost,
+      onConfirm: () => {
+        onConfirm();
+        setAiConfirm(null);
+      }
+    });
+  };
+
+  const handleJobDescriptionChange = (text: string) => {
+    setTargetJobDescription(text);
+    if (!text.trim()) {
+      setJobKeywords([]);
+      return;
+    }
+
+    const commonKeywords = [
+      "react", "angular", "vue", "next.js", "nextjs", "typescript", "javascript", "node.js", "nodejs",
+      "python", "java", "c++", "golang", "rust", "aws", "azure", "gcp", "docker", "kubernetes",
+      "terraform", "ci/cd", "jenkins", "git", "github", "sql", "postgresql", "mysql", "mongodb",
+      "redis", "elasticsearch", "graphql", "rest api", "html5", "css3", "tailwindcss", "sass",
+      "figma", "agile", "scrum", "project management", "product management", "leadership",
+      "teamwork", "communication", "machine learning", "deep learning", "ai", "llm", "firebase",
+      "sre", "devops", "security", "microservices", "redux", "zustand", "webpack", "vite"
+    ];
+
+    const lowerDesc = text.toLowerCase();
+    const extracted = commonKeywords.filter(keyword => {
+      const regex = new RegExp(`\\b${keyword.replace('.', '\\.')}\\b`, 'i');
+      return regex.test(lowerDesc);
+    });
+
+    const resumeText = JSON.stringify(data).toLowerCase();
+    const matched = extracted.map(word => {
+      const regex = new RegExp(`\\b${word.replace('.', '\\.')}\\b`, 'i');
+      return {
+        word: word.charAt(0).toUpperCase() + word.slice(1),
+        matched: regex.test(resumeText)
+      };
+    });
+
+    setJobKeywords(matched);
+  };
+
+  const executeCopilot = async (instructionToUse: string) => {
+    setIsCopilotRunning(true);
+    setCopilotProgressStep('Analyzing resume schema...');
+    
+    try {
+      setTimeout(() => setCopilotProgressStep('Synthesizing requested edits...'), 1000);
+      setTimeout(() => setCopilotProgressStep('Verifying layout dimensions...'), 2500);
+
+      const updated = await updateResume(
+        data, 
+        instructionToUse, 
+        targetJobDescription || undefined, 
+        selectedFormat, 
+        usePro
+      );
+
+      setTempUpdatedData(updated);
+      setActiveTab('copilot');
+    } catch (err) {
+      console.error("Copilot update failed:", err);
+      alert("AI Copilot encountered an error while processing your request. Please try again.");
+    } finally {
+      setIsCopilotRunning(false);
+      setCopilotProgressStep('');
+    }
+  };
+
+  const handleRunCopilot = async (overrideInstruction?: string) => {
+    const instructionToUse = overrideInstruction || copilotInstruction;
+    if (!instructionToUse.trim()) return;
+
+    triggerAIConfirmation(
+      "AI Resume Editor Action",
+      `Are you sure you want to run the AI Resume Editor to update your resume based on your instruction: "${instructionToUse}"? This suggestion will be previewed before applying.`,
+      1,
+      () => executeCopilot(instructionToUse)
+    );
+  };
+
+  const handleAutoInjectKeywords = async () => {
+    const missing = jobKeywords.filter(k => !k.matched).map(k => k.word);
+    if (missing.length === 0) {
+      alert("All identified keywords are already present in your resume!");
+      return;
+    }
+
+    const instruction = `Intelligently and naturally integrate the following skills/keywords into the experience descriptions or skills section, ensuring factual accuracy: ${missing.join(', ')}. Keep the sentence flows natural and professional.`;
+    
+    triggerAIConfirmation(
+      "AI Keyword Injector",
+      `This will naturally integrate the missing keywords (${missing.join(', ')}) into your experience descriptions using Gemini.`,
+      1,
+      () => executeCopilot(instruction)
+    );
+  };
+
+  const handleAcceptCopilotChanges = () => {
+    if (!tempUpdatedData) return;
+    updateData(tempUpdatedData, "Applied AI Copilot enhancements");
+    setTempUpdatedData(null);
+    setCopilotInstruction('');
+  };
+
+  const handleDiscardCopilotChanges = () => {
+    setTempUpdatedData(null);
+  };
+
+  const isFieldModified = (path: string): boolean => {
+    if (!tempUpdatedData) return false;
+    const originalValue = get(data, path);
+    const updatedValue = get(tempUpdatedData, path);
+    return JSON.stringify(originalValue) !== JSON.stringify(updatedValue);
+  };
+
+  const moveSection = (index: number, direction: 'up' | 'down') => {
+    const newOrder = [...sectionOrder];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex >= 0 && targetIndex < newOrder.length) {
+      const temp = newOrder[index];
+      newOrder[index] = newOrder[targetIndex];
+      newOrder[targetIndex] = temp;
+      setSectionOrder(newOrder);
+    }
+  };
   
   // Page fit checker state
   const [pageFitInfo, setPageFitInfo] = useState({ pages: 1, overflowLines: 0, percentUsed: 100 });
@@ -241,20 +400,27 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     return cleanedLoc;
   };
 
-  const handleCheckGrammar = async () => {
-    setIsChecking(true);
-    try {
-      const foundIssues = await analyzeGrammar(data, selectedFormat, usePro);
-      setIssues(foundIssues);
-      if (foundIssues.length === 0) {
-        alert("No grammar issues found!");
+  const handleCheckGrammar = () => {
+    triggerAIConfirmation(
+      "Scan Resume with Grammar AI",
+      "This will scan your entire resume text using Gemini AI to detect grammar issues, spelling errors, and tone/style optimizations.",
+      1,
+      async () => {
+        setIsChecking(true);
+        try {
+          const foundIssues = await analyzeGrammar(data, selectedFormat, usePro);
+          setIssues(foundIssues);
+          if (foundIssues.length === 0) {
+            alert("No grammar issues found!");
+          }
+        } catch (error) {
+          console.error("Grammar check failed", error);
+          alert("Failed to check grammar. Please try again.");
+        } finally {
+          setIsChecking(false);
+        }
       }
-    } catch (error) {
-      console.error("Grammar check failed", error);
-      alert("Failed to check grammar. Please try again.");
-    } finally {
-      setIsChecking(false);
-    }
+    );
   };
 
   const handleAcceptIssue = (issue: GrammarIssue) => {
@@ -696,6 +862,12 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     }
   };
 
+  const activeData = tempUpdatedData || data;
+  const baseFontSize = selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? 11 : 11;
+  const currentFontSize = `${baseFontSize + fontSizeOffset}pt`;
+  const currentLineHeight = selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? (1.0 + lineSpacingOffset * 0.1) : (1.2 + lineSpacingOffset * 0.15);
+  const currentSectionMargin = selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? `${11 + sectionSpacingOffset * 2}pt` : `${16 + sectionSpacingOffset * 3}px`;
+
   return (
     <div className="flex flex-col h-screen w-full lg:overflow-hidden select-none bg-[#04060f]">
       <style>{`
@@ -846,6 +1018,34 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
           {/* Right panel: A4 Format Preview Editor */}
           <div className="flex-1 h-full flex flex-col min-w-0 overflow-y-auto custom-scrollbar p-8 items-center bg-[#050714]">
             
+            {tempUpdatedData && (
+              <div className="w-full max-w-[820px] mb-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 flex items-center justify-between text-left backdrop-blur-md animate-in slide-in-from-top duration-300">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                    <Sparkles className="w-4 h-4 animate-pulse" />
+                  </div>
+                  <div>
+                    <h5 className="text-sm font-bold text-white leading-tight">AI Copilot Proposed Updates</h5>
+                    <p className="text-xs text-slate-400 mt-0.5">Proposed changes are highlighted in green. Review them in the document below.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleDiscardCopilotChanges}
+                    className="px-4 py-2 text-xs font-bold bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white rounded-lg transition-all cursor-pointer"
+                  >
+                    Discard Changes
+                  </button>
+                  <button
+                    onClick={handleAcceptCopilotChanges}
+                    className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_20px_rgba(16,185,129,0.5)] cursor-pointer animate-pulse"
+                  >
+                    Accept & Apply
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* The Document page (A4 style white sheet) floating on dark slate desk */}
             <div 
               id="resume-preview-content"
@@ -870,36 +1070,36 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                   </span>
                 </div>
               )}
-              
-              {/* 1. Name */}
+
+              {/* 1. Name & Contact Details (Always at the top) */}
               <div 
                 id="resume-section-contact" 
-                className={`transition-all duration-300 p-1 rounded ${highlightedSection === 'contact' ? 'flash-highlight-active' : ''}`}
-                style={{ textAlign: styles.nameAlign, marginBottom: styles.marginBottom }}
+                className={`transition-all duration-300 p-1 rounded ${highlightedSection === 'contact' ? 'flash-highlight-active' : ''} ${isFieldModified('fullName') || isFieldModified('contactInfo') ? 'field-diff-modified' : ''}`}
+                style={{ textAlign: styles.nameAlign, marginBottom: currentSectionMargin }}
               >
                 <h1 
-                  contentEditable
+                  contentEditable={!tempUpdatedData}
                   suppressContentEditableWarning
                   onBlur={(e) => handleEditFullName(e.currentTarget.textContent || "")}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
                   style={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: styles.fontSizeName, color: styles.headingColor === "#000000" ? black : styles.headingColor, margin: 0 }}
                   className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                 >
-                  {data.fullName}
+                  {activeData.fullName}
                 </h1>
                 
                 {/* Custom Contact Info row for Classic Professional based on Selection Panel */}
                 {selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL && (retainedFields.location || retainedFields.phone || retainedFields.email) && (
                   <div style={{ 
-                      fontSize: styles.fontSizeBody, 
+                      fontSize: currentFontSize, 
                       color: black, 
                       marginTop: '4px', 
                       fontWeight: 'normal' 
                   }}>
                       {[
-                          retainedFields.phone && data.contactInfo?.phone,
-                          retainedFields.email && data.contactInfo?.email,
-                          retainedFields.location && data.contactInfo?.location ? formatLocation(data.contactInfo.location) : null
+                          retainedFields.phone && activeData.contactInfo?.phone,
+                          retainedFields.email && activeData.contactInfo?.email,
+                          retainedFields.location && activeData.contactInfo?.location ? formatLocation(activeData.contactInfo.location) : null
                       ].filter(Boolean).join(" | ")}
                   </div>
                 )}
@@ -913,594 +1113,618 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                       fontWeight: 'bold' 
                   }}>
                       {retainedFields.location || (!retainedFields.phone && !retainedFields.email) ? (
-                          formatLocation(data.contactInfo?.location || "")
+                          formatLocation(activeData.contactInfo?.location || "")
                       ) : ""}
                       {(retainedFields.phone || retainedFields.email) ? (
                           [
-                              retainedFields.location && formatLocation(data.contactInfo?.location || ""),
-                              retainedFields.phone && data.contactInfo?.phone,
-                              retainedFields.email && data.contactInfo?.email
+                              retainedFields.location && formatLocation(activeData.contactInfo?.location || ""),
+                              retainedFields.phone && activeData.contactInfo?.phone,
+                              retainedFields.email && activeData.contactInfo?.email
                           ].filter(Boolean).join(" | ")
                       ) : ""}
                   </div>
                 )}
               </div>
 
-              {/* 2. Summary */}
-              {data.summary && (
-                <div 
-                  id="resume-section-summary"
-                  className={`transition-all duration-300 p-1 rounded ${highlightedSection === 'summary' ? 'flash-highlight-active' : ''}`}
-                  style={{ marginBottom: styles.marginBottom }}
-                >
-                  <h3 style={{ 
-                      fontWeight: 'bold', 
-                      textTransform: styles.headingTransform, 
-                      marginTop: styles.headingMarginTop,
-                      marginBottom: styles.headingMarginBottom, 
-                      fontSize: styles.fontSizeBody, 
-                      color: styles.headingColor,
-                      borderBottom: styles.headingBorder,
-                      paddingBottom: styles.headingBorder !== 'none' ? '2px' : '0'
-                  }}>
-                    {formatTitle(data.sectionTitleSummary || "SUMMARY")}
-                  </h3>
-                  {Array.isArray(data.summary) ? (
-                      data.summary.length === 1 ? (
-                         <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>
-                            {processDescriptionWithIndices(data.summary).map((bulletObj, idx) => {
+              {/* Render Sections Dynamically Based on sectionOrder */}
+              {sectionOrder.map((sectionKey) => {
+                if (sectionKey === 'summary' && activeData.summary) {
+                  return (
+                    <div 
+                      key="summary"
+                      id="resume-section-summary"
+                      className={`transition-all duration-300 p-1 rounded ${highlightedSection === 'summary' ? 'flash-highlight-active' : ''} ${isFieldModified('summary') ? 'field-diff-modified' : ''}`}
+                      style={{ marginBottom: currentSectionMargin }}
+                    >
+                      <h3 style={{ 
+                          fontWeight: 'bold', 
+                          textTransform: styles.headingTransform, 
+                          marginTop: styles.headingMarginTop,
+                          marginBottom: styles.headingMarginBottom, 
+                          fontSize: currentFontSize, 
+                          color: styles.headingColor,
+                          borderBottom: styles.headingBorder,
+                          paddingBottom: styles.headingBorder !== 'none' ? '2px' : '0'
+                      }}>
+                        {formatTitle(activeData.sectionTitleSummary || "SUMMARY")}
+                      </h3>
+                      {Array.isArray(activeData.summary) ? (
+                          activeData.summary.length === 1 ? (
+                             <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>
+                                {processDescriptionWithIndices(activeData.summary).map((bulletObj, idx) => {
+                                  return (
+                                    <li key={idx} style={{ fontSize: currentFontSize, lineHeight: currentLineHeight, marginBottom: '2px', paddingLeft: '2px' }} className={isFieldModified(`summary.${bulletObj.originalIndex}`) ? 'field-diff-modified' : ''}>
+                                      <GrammarHighlighter 
+                                        text={bulletObj.text} 
+                                        path={`summary.${bulletObj.originalIndex}`} 
+                                        issues={issues} 
+                                        onAccept={handleAcceptIssue} 
+                                        onIgnore={handleIgnoreIssue} 
+                                        onEdit={(newVal) => handleEditSummaryBullet(bulletObj.originalIndex, newVal)}
+                                        onConfirmAI={triggerAIConfirmation}
+                                      />
+                                    </li>
+                                  );
+                                })}
+                             </ul>
+                          ) : (
+                             <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>
+                                {activeData.summary.map((rawItem, idx) => {
+                                  const item = cleanBullet(rawItem);
+                                  return (
+                                  <li key={idx} style={{ fontSize: currentFontSize, lineHeight: currentLineHeight, marginBottom: '2px', paddingLeft: '2px' }} className={isFieldModified(`summary.${idx}`) ? 'field-diff-modified' : ''}>
+                                    <GrammarHighlighter 
+                                      text={item} 
+                                      path={`summary.${idx}`} 
+                                      issues={issues} 
+                                      onAccept={handleAcceptIssue} 
+                                      onIgnore={handleIgnoreIssue} 
+                                      onEdit={(newVal) => handleEditSummaryBullet(idx, newVal)}
+                                      onConfirmAI={triggerAIConfirmation}
+                                    />
+                                  </li>
+                                )})}
+                             </ul>
+                          )
+                      ) : (
+                          <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>
+                            {processDescription([activeData.summary]).map((rawItem, idx) => {
+                              const item = cleanBullet(rawItem);
                               return (
-                                <li key={idx} style={{ fontSize: styles.fontSizeBody, lineHeight: styles.lineHeight, marginBottom: '2px', paddingLeft: '2px' }}>
+                                <li key={idx} style={{ fontSize: currentFontSize, lineHeight: currentLineHeight, marginBottom: '2px', paddingLeft: '2px' }} className={isFieldModified(`summary`) ? 'field-diff-modified' : ''}>
                                   <GrammarHighlighter 
-                                    text={bulletObj.text} 
-                                    path={`summary.${bulletObj.originalIndex}`} 
+                                    text={item} 
+                                    path={`summary`} 
                                     issues={issues} 
                                     onAccept={handleAcceptIssue} 
                                     onIgnore={handleIgnoreIssue} 
-                                    onEdit={(newVal) => handleEditSummaryBullet(bulletObj.originalIndex, newVal)}
+                                    onEdit={(newVal) => {
+                                      if (newVal !== item) {
+                                        const newData = { ...activeData, summary: [newVal] };
+                                        updateData(newData, "Edited summary bullet");
+                                      }
+                                    }}
+                                    onConfirmAI={triggerAIConfirmation}
                                   />
                                 </li>
                               );
                             })}
-                         </ul>
-                      ) : (
-                         <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>
-                            {data.summary.map((rawItem, idx) => {
-                              const item = cleanBullet(rawItem);
-                              return (
-                              <li key={idx} style={{ fontSize: styles.fontSizeBody, lineHeight: styles.lineHeight, marginBottom: '2px', paddingLeft: '2px' }}>
-                                <GrammarHighlighter 
-                                  text={item} 
-                                  path={`summary.${idx}`} 
-                                  issues={issues} 
-                                  onAccept={handleAcceptIssue} 
-                                  onIgnore={handleIgnoreIssue} 
-                                  onEdit={(newVal) => handleEditSummaryBullet(idx, newVal)}
-                                />
-                              </li>
-                            )})}
-                         </ul>
-                      )
-                  ) : (
-                      <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>
-                        {processDescription([data.summary]).map((rawItem, idx) => {
-                          const item = cleanBullet(rawItem);
-                          return (
-                            <li key={idx} style={{ fontSize: styles.fontSizeBody, lineHeight: styles.lineHeight, marginBottom: '2px', paddingLeft: '2px' }}>
-                              <GrammarHighlighter 
-                                text={item} 
-                                path={`summary`} 
-                                issues={issues} 
-                                onAccept={handleAcceptIssue} 
-                                onIgnore={handleIgnoreIssue} 
-                                onEdit={(newVal) => {
-                                  if (newVal !== item) {
-                                    const newData = { ...data, summary: [newVal] };
-                                    updateData(newData, "Edited summary bullet");
-                                  }
-                                }}
-                              />
-                            </li>
-                          );
-                        })}
-                      </ul>
-                  )}
-                </div>
-              )}
+                          </ul>
+                      )}
+                    </div>
+                  );
+                }
 
-              {/* 3. Experience */}
-              {data.experience && data.experience.length > 0 && (
-                <div 
-                  id="resume-section-experience"
-                  className={`transition-all duration-300 p-1 rounded ${highlightedSection === 'experience' ? 'flash-highlight-active' : ''}`}
-                  style={{ marginBottom: styles.marginBottom }}
-                >
-                  <h3 style={{ 
-                      fontWeight: 'bold', 
-                      textTransform: styles.headingTransform, 
-                      marginTop: styles.headingMarginTop,
-                      marginBottom: styles.headingMarginBottom, 
-                      fontSize: styles.fontSizeBody, 
-                      color: styles.headingColor,
-                      borderBottom: styles.headingBorder,
-                      paddingBottom: styles.headingBorder !== 'none' ? '2px' : '0'
-                  }}>
-                    {formatTitle(data.sectionTitleExperience || "PROFESSIONAL EXPERIENCE")}
-                  </h3>
-                  
-                  <div style={{ paddingTop: '0.25rem' }}>
-                    {data.experience.map((exp, idx) => (
-                      <div key={idx} style={{ marginBottom: '1rem' }}>
-                        {styles.jobLayout === 'modern' ? (
-                            <>
-                                {exp.dates && exp.dates !== "undefined" && (
-                                  <div style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black, marginBottom: '2px' }}>
-                                    <span
-                                      contentEditable
-                                      suppressContentEditableWarning
-                                      onBlur={(e) => handleEditExpDates(idx, e.currentTarget.textContent || "")}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                      className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
-                                    >
-                                      {formatModernDate(exp.dates)}
-                                    </span>
-                                  </div>
-                                )}
-                                <div style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black, marginBottom: '2px' }}>
-                                    <span
-                                      contentEditable
-                                      suppressContentEditableWarning
-                                      onBlur={(e) => handleEditExpCompany(idx, e.currentTarget.textContent || "")}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                      className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
-                                    >
-                                      {stripTrailingDate(exp.company)}
-                                    </span>
-                                    {exp.location && (
-                                      <>
-                                        {", "}
+                if (sectionKey === 'experience' && activeData.experience && activeData.experience.length > 0) {
+                  return (
+                    <div 
+                      key="experience"
+                      id="resume-section-experience"
+                      className={`transition-all duration-300 p-1 rounded ${highlightedSection === 'experience' ? 'flash-highlight-active' : ''}`}
+                      style={{ marginBottom: currentSectionMargin }}
+                    >
+                      <h3 style={{ 
+                          fontWeight: 'bold', 
+                          textTransform: styles.headingTransform, 
+                          marginTop: styles.headingMarginTop,
+                          marginBottom: styles.headingMarginBottom, 
+                          fontSize: currentFontSize, 
+                          color: styles.headingColor,
+                          borderBottom: styles.headingBorder,
+                          paddingBottom: styles.headingBorder !== 'none' ? '2px' : '0'
+                      }}>
+                        {formatTitle(activeData.sectionTitleExperience || "PROFESSIONAL EXPERIENCE")}
+                      </h3>
+                      
+                      <div style={{ paddingTop: '0.25rem' }}>
+                        {activeData.experience.map((exp, idx) => (
+                          <div key={idx} style={{ marginBottom: '1rem' }}>
+                            {styles.jobLayout === 'modern' ? (
+                                <>
+                                    {exp.dates && exp.dates !== "undefined" && (
+                                      <div style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black, marginBottom: '2px' }} className={isFieldModified(`experience.${idx}.dates`) ? 'field-diff-modified' : ''}>
                                         <span
-                                          contentEditable
+                                          contentEditable={!tempUpdatedData}
                                           suppressContentEditableWarning
-                                          onBlur={(e) => handleEditExpLocation(idx, e.currentTarget.textContent || "")}
+                                          onBlur={(e) => handleEditExpDates(idx, e.currentTarget.textContent || "")}
                                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
                                           className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                         >
-                                          {formatLocation(exp.location)}
+                                          {formatModernDate(exp.dates)}
                                         </span>
-                                      </>
+                                      </div>
                                     )}
-                                </div>
-                                <div style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black, marginBottom: '4px' }}>
-                                    <span
-                                      contentEditable
-                                      suppressContentEditableWarning
-                                      onBlur={(e) => handleEditExpTitle(idx, e.currentTarget.textContent || "")}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                      className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
-                                    >
-                                      {stripTrailingDate(exp.title)}
-                                    </span>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                                  <span style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black }}>
-                                    <span
-                                      contentEditable
-                                      suppressContentEditableWarning
-                                      onBlur={(e) => handleEditExpCompany(idx, e.currentTarget.textContent || "")}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                      className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
-                                    >
-                                      {stripTrailingDate(exp.company)}
-                                    </span>
-                                    {exp.location && (
-                                      <>
-                                        {", "}
+                                    <div style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black, marginBottom: '2px' }}>
                                         <span
-                                          contentEditable
+                                          contentEditable={!tempUpdatedData}
                                           suppressContentEditableWarning
-                                          onBlur={(e) => handleEditExpLocation(idx, e.currentTarget.textContent || "")}
+                                          onBlur={(e) => handleEditExpCompany(idx, e.currentTarget.textContent || "")}
+                                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                          className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`experience.${idx}.company`) ? 'field-diff-modified' : ''}`}
+                                        >
+                                          {stripTrailingDate(exp.company)}
+                                        </span>
+                                        {exp.location && (
+                                          <>
+                                            {", "}
+                                            <span
+                                              contentEditable={!tempUpdatedData}
+                                              suppressContentEditableWarning
+                                              onBlur={(e) => handleEditExpLocation(idx, e.currentTarget.textContent || "")}
+                                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                              className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`experience.${idx}.location`) ? 'field-diff-modified' : ''}`}
+                                            >
+                                              {formatLocation(exp.location)}
+                                            </span>
+                                          </>
+                                        )}
+                                    </div>
+                                    <div style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black, marginBottom: '4px' }} className={isFieldModified(`experience.${idx}.title`) ? 'field-diff-modified' : ''}>
+                                        <span
+                                          contentEditable={!tempUpdatedData}
+                                          suppressContentEditableWarning
+                                          onBlur={(e) => handleEditExpTitle(idx, e.currentTarget.textContent || "")}
                                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
                                           className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                         >
-                                          {formatLocation(exp.location)}
+                                          {stripTrailingDate(exp.title)}
                                         </span>
-                                      </>
-                                    )}
-                                  </span>
-                                  {exp.dates && exp.dates !== "undefined" && (
-                                    <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: styles.fontSizeBody, color: black }}>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                                      <span style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black }}>
+                                        <span
+                                          contentEditable={!tempUpdatedData}
+                                          suppressContentEditableWarning
+                                          onBlur={(e) => handleEditExpCompany(idx, e.currentTarget.textContent || "")}
+                                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                          className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`experience.${idx}.company`) ? 'field-diff-modified' : ''}`}
+                                        >
+                                          {stripTrailingDate(exp.company)}
+                                        </span>
+                                        {exp.location && (
+                                          <>
+                                            {", "}
+                                            <span
+                                              contentEditable={!tempUpdatedData}
+                                              suppressContentEditableWarning
+                                              onBlur={(e) => handleEditExpLocation(idx, e.currentTarget.textContent || "")}
+                                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                              className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`experience.${idx}.location`) ? 'field-diff-modified' : ''}`}
+                                            >
+                                              {formatLocation(exp.location)}
+                                            </span>
+                                          </>
+                                        )}
+                                      </span>
+                                      {exp.dates && exp.dates !== "undefined" && (
+                                        <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: currentFontSize, color: black }} className={isFieldModified(`experience.${idx}.dates`) ? 'field-diff-modified' : ''}>
+                                          <span
+                                            contentEditable={!tempUpdatedData}
+                                            suppressContentEditableWarning
+                                            onBlur={(e) => handleEditExpDates(idx, e.currentTarget.textContent || "")}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                            className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
+                                          >
+                                            {formatModernDate(exp.dates)}
+                                          </span>
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div style={{ fontWeight: 'bold', marginBottom: 0, fontSize: currentFontSize, color: black }} className={isFieldModified(`experience.${idx}.title`) ? 'field-diff-modified' : ''}>
                                       <span
-                                        contentEditable
+                                        contentEditable={!tempUpdatedData}
                                         suppressContentEditableWarning
-                                        onBlur={(e) => handleEditExpDates(idx, e.currentTarget.textContent || "")}
+                                        onBlur={(e) => handleEditExpTitle(idx, e.currentTarget.textContent || "")}
                                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
                                         className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                       >
-                                        {formatModernDate(exp.dates)}
+                                        {stripTrailingDate(exp.title)}
                                       </span>
-                                    </span>
-                                  )}
-                                </div>
-                                <div style={{ fontWeight: 'bold', marginBottom: 0, fontSize: styles.fontSizeBody, color: black }}>
-                                  <span
-                                    contentEditable
-                                    suppressContentEditableWarning
-                                    onBlur={(e) => handleEditExpTitle(idx, e.currentTarget.textContent || "")}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                    className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
-                                  >
-                                    {stripTrailingDate(exp.title)}
-                                  </span>
-                                </div>
-                            </>
-                        )}
-                        <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>
-                          {exp.description && processDescriptionWithIndices(exp.description).map((bulletObj, bIdx) => (
-                            <li key={bIdx} style={{ fontSize: styles.fontSizeBody, lineHeight: styles.lineHeight, marginBottom: '2px', paddingLeft: '2px' }}>
-                                <GrammarHighlighter 
-                                  text={bulletObj.text} 
-                                  path={`experience.${idx}.description.${bulletObj.originalIndex}`}
-                                  issues={issues} 
-                                  onAccept={handleAcceptIssue} 
-                                  onIgnore={handleIgnoreIssue} 
-                                  onEdit={(newVal) => handleEditExpBullet(idx, bulletObj.originalIndex, newVal)}
-                                />
-                            </li>
-                          ))}
-                        </ul>
+                                    </div>
+                                </>
+                            )}
+                            <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>
+                              {exp.description && processDescriptionWithIndices(exp.description).map((bulletObj, bIdx) => (
+                                <li key={bIdx} style={{ fontSize: currentFontSize, lineHeight: currentLineHeight, marginBottom: '2px', paddingLeft: '2px' }} className={isFieldModified(`experience.${idx}.description.${bulletObj.originalIndex}`) ? 'field-diff-modified' : ''}>
+                                    <GrammarHighlighter 
+                                      text={bulletObj.text} 
+                                      path={`experience.${idx}.description.${bulletObj.originalIndex}`}
+                                      issues={issues} 
+                                      onAccept={handleAcceptIssue} 
+                                      onIgnore={handleIgnoreIssue} 
+                                      onEdit={(newVal) => handleEditExpBullet(idx, bulletObj.originalIndex, newVal)}
+                                      onConfirmAI={triggerAIConfirmation}
+                                    />
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    </div>
+                  );
+                }
 
-              {/* 4. Internships */}
-              {data.internships && data.internships.length > 0 && (
-                <div style={{ marginBottom: styles.marginBottom }}>
-                  <h3 style={{ 
-                      fontWeight: 'bold', 
-                      textTransform: styles.headingTransform, 
-                      marginTop: styles.headingMarginTop,
-                      marginBottom: styles.headingMarginBottom, 
-                      fontSize: styles.fontSizeBody, 
-                      color: styles.headingColor,
-                      borderBottom: styles.headingBorder,
-                      paddingBottom: styles.headingBorder !== 'none' ? '2px' : '0'
-                  }}>
-                    {formatTitle(data.sectionTitleInternships || "INTERNSHIPS")}
-                  </h3>
-                  
-                  <div style={{ paddingTop: '0.25rem' }}>
-                    {data.internships.map((exp, idx) => (
-                      <div key={idx} style={{ marginBottom: '1rem' }}>
-                        {styles.jobLayout === 'modern' ? (
-                            <>
-                                {exp.dates && exp.dates !== "undefined" && (
-                                  <div style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black, marginBottom: '2px' }}>
-                                    <span
-                                      contentEditable
-                                      suppressContentEditableWarning
-                                      onBlur={(e) => handleEditInternDates(idx, e.currentTarget.textContent || "")}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                      className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
-                                    >
-                                      {formatModernDate(exp.dates)}
-                                    </span>
-                                  </div>
-                                )}
-                                <div style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black, marginBottom: '2px' }}>
-                                    <span
-                                      contentEditable
-                                      suppressContentEditableWarning
-                                      onBlur={(e) => handleEditInternCompany(idx, e.currentTarget.textContent || "")}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                      className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
-                                    >
-                                      {stripTrailingDate(exp.company)}
-                                    </span>
-                                    {exp.location && (
-                                      <>
-                                        {", "}
+                if (sectionKey === 'internships' && activeData.internships && activeData.internships.length > 0) {
+                  return (
+                    <div key="internships" style={{ marginBottom: currentSectionMargin }}>
+                      <h3 style={{ 
+                          fontWeight: 'bold', 
+                          textTransform: styles.headingTransform, 
+                          marginTop: styles.headingMarginTop,
+                          marginBottom: styles.headingMarginBottom, 
+                          fontSize: currentFontSize, 
+                          color: styles.headingColor,
+                          borderBottom: styles.headingBorder,
+                          paddingBottom: styles.headingBorder !== 'none' ? '2px' : '0'
+                      }}>
+                        {formatTitle(activeData.sectionTitleInternships || "INTERNSHIPS")}
+                      </h3>
+                      
+                      <div style={{ paddingTop: '0.25rem' }}>
+                        {activeData.internships.map((exp, idx) => (
+                          <div key={idx} style={{ marginBottom: '1rem' }}>
+                            {styles.jobLayout === 'modern' ? (
+                                <>
+                                    {exp.dates && exp.dates !== "undefined" && (
+                                      <div style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black, marginBottom: '2px' }} className={isFieldModified(`internships.${idx}.dates`) ? 'field-diff-modified' : ''}>
                                         <span
-                                          contentEditable
+                                          contentEditable={!tempUpdatedData}
                                           suppressContentEditableWarning
-                                          onBlur={(e) => handleEditInternLocation(idx, e.currentTarget.textContent || "")}
+                                          onBlur={(e) => handleEditInternDates(idx, e.currentTarget.textContent || "")}
                                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
                                           className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
                                         >
-                                          {formatLocation(exp.location)}
+                                          {formatModernDate(exp.dates)}
                                         </span>
-                                      </>
+                                      </div>
                                     )}
-                                </div>
-                                <div style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black, marginBottom: '4px' }}>
-                                    <span
-                                      contentEditable
-                                      suppressContentEditableWarning
-                                      onBlur={(e) => handleEditInternTitle(idx, e.currentTarget.textContent || "")}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                      className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
-                                    >
-                                      {stripTrailingDate(exp.title)}
-                                    </span>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                                  <span style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black }}>
-                                    <span
-                                      contentEditable
-                                      suppressContentEditableWarning
-                                      onBlur={(e) => handleEditInternCompany(idx, e.currentTarget.textContent || "")}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                      className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
-                                    >
-                                      {stripTrailingDate(exp.company)}
-                                    </span>
-                                    {exp.location && (
-                                      <>
-                                        {", "}
+                                    <div style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black, marginBottom: '2px' }}>
                                         <span
-                                          contentEditable
+                                          contentEditable={!tempUpdatedData}
                                           suppressContentEditableWarning
-                                          onBlur={(e) => handleEditInternLocation(idx, e.currentTarget.textContent || "")}
+                                          onBlur={(e) => handleEditInternCompany(idx, e.currentTarget.textContent || "")}
+                                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                          className={`hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none ${isFieldModified(`internships.${idx}.company`) ? 'field-diff-modified' : ''}`}
+                                        >
+                                          {stripTrailingDate(exp.company)}
+                                        </span>
+                                        {exp.location && (
+                                          <>
+                                            {", "}
+                                            <span
+                                              contentEditable={!tempUpdatedData}
+                                              suppressContentEditableWarning
+                                              onBlur={(e) => handleEditInternLocation(idx, e.currentTarget.textContent || "")}
+                                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                              className={`hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none ${isFieldModified(`internships.${idx}.location`) ? 'field-diff-modified' : ''}`}
+                                            >
+                                              {formatLocation(exp.location)}
+                                            </span>
+                                          </>
+                                        )}
+                                    </div>
+                                    <div style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black, marginBottom: '4px' }} className={isFieldModified(`internships.${idx}.title`) ? 'field-diff-modified' : ''}>
+                                        <span
+                                          contentEditable={!tempUpdatedData}
+                                          suppressContentEditableWarning
+                                          onBlur={(e) => handleEditInternTitle(idx, e.currentTarget.textContent || "")}
                                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
                                           className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
                                         >
-                                          {formatLocation(exp.location)}
+                                          {stripTrailingDate(exp.title)}
                                         </span>
-                                      </>
-                                    )}
-                                  </span>
-                                  {exp.dates && exp.dates !== "undefined" && (
-                                    <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: styles.fontSizeBody, color: black }}>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                                      <span style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black }}>
+                                        <span
+                                          contentEditable={!tempUpdatedData}
+                                          suppressContentEditableWarning
+                                          onBlur={(e) => handleEditInternCompany(idx, e.currentTarget.textContent || "")}
+                                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                          className={`hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none ${isFieldModified(`internships.${idx}.company`) ? 'field-diff-modified' : ''}`}
+                                        >
+                                          {stripTrailingDate(exp.company)}
+                                        </span>
+                                        {exp.location && (
+                                          <>
+                                            {", "}
+                                            <span
+                                              contentEditable={!tempUpdatedData}
+                                              suppressContentEditableWarning
+                                              onBlur={(e) => handleEditInternLocation(idx, e.currentTarget.textContent || "")}
+                                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                              className={`hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none ${isFieldModified(`internships.${idx}.location`) ? 'field-diff-modified' : ''}`}
+                                            >
+                                              {formatLocation(exp.location)}
+                                            </span>
+                                          </>
+                                        )}
+                                      </span>
+                                      {exp.dates && exp.dates !== "undefined" && (
+                                        <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: currentFontSize, color: black }} className={isFieldModified(`internships.${idx}.dates`) ? 'field-diff-modified' : ''}>
+                                          <span
+                                            contentEditable={!tempUpdatedData}
+                                            suppressContentEditableWarning
+                                            onBlur={(e) => handleEditInternDates(idx, e.currentTarget.textContent || "")}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                            className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
+                                          >
+                                            {formatModernDate(exp.dates)}
+                                          </span>
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div style={{ fontWeight: 'bold', marginBottom: 0, fontSize: currentFontSize, color: black }} className={isFieldModified(`internships.${idx}.title`) ? 'field-diff-modified' : ''}>
                                       <span
-                                        contentEditable
+                                        contentEditable={!tempUpdatedData}
                                         suppressContentEditableWarning
-                                        onBlur={(e) => handleEditInternDates(idx, e.currentTarget.textContent || "")}
+                                        onBlur={(e) => handleEditInternTitle(idx, e.currentTarget.textContent || "")}
                                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
                                         className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
                                       >
-                                        {formatModernDate(exp.dates)}
+                                        {stripTrailingDate(exp.title)}
                                       </span>
-                                    </span>
-                                  )}
-                                </div>
-                                <div style={{ fontWeight: 'bold', marginBottom: 0, fontSize: styles.fontSizeBody, color: black }}>
-                                  <span
-                                    contentEditable
-                                    suppressContentEditableWarning
-                                    onBlur={(e) => handleEditInternTitle(idx, e.currentTarget.textContent || "")}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                    className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
-                                  >
-                                    {stripTrailingDate(exp.title)}
-                                  </span>
-                                </div>
-                            </>
-                        )}
-                        <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>
-                          {exp.description && processDescriptionWithIndices(exp.description).map((bulletObj, bIdx) => (
-                            <li key={bIdx} style={{ fontSize: styles.fontSizeBody, lineHeight: styles.lineHeight, marginBottom: '2px', paddingLeft: '2px' }}>
-                                <GrammarHighlighter 
-                                  text={bulletObj.text} 
-                                  path={`internships.${idx}.description.${bulletObj.originalIndex}`} 
-                                  issues={issues} 
-                                  onAccept={handleAcceptIssue} 
-                                  onIgnore={handleIgnoreIssue} 
-                                  onEdit={(newVal) => handleEditInternBullet(idx, bulletObj.originalIndex, newVal)}
-                                />
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 5. Education */}
-              {data.education && data.education.length > 0 && (
-                <div 
-                  id="resume-section-education"
-                  className={`transition-all duration-300 p-1 rounded ${highlightedSection === 'education' ? 'flash-highlight-active' : ''}`}
-                  style={{ marginBottom: styles.marginBottom }}
-                >
-                  <h3 style={{ 
-                      fontWeight: 'bold', 
-                      textTransform: styles.headingTransform, 
-                      marginTop: styles.headingMarginTop,
-                      marginBottom: styles.headingMarginBottom, 
-                      fontSize: styles.fontSizeBody, 
-                      color: styles.headingColor,
-                      borderBottom: styles.headingBorder,
-                      paddingBottom: styles.headingBorder !== 'none' ? '2px' : '0'
-                  }}>
-                    {formatTitle(data.sectionTitleEducation || "EDUCATION")}
-                  </h3>
-                  <div style={{ paddingTop: '0.25rem' }}>
-                     {data.education.map((edu, idx) => (
-                      <div key={idx} style={{ marginBottom: '0.5rem' }}>
-                        <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                          <span style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black }}>
-                            <span
-                              contentEditable
-                              suppressContentEditableWarning
-                              onBlur={(e) => handleEditEduInstitution(idx, e.currentTarget.textContent || "")}
-                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                              className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
-                            >
-                              {stripTrailingDate(edu.institution)}
-                            </span>
-                            {edu.location && (
-                              <>
-                                {", "}
-                                <span
-                                  contentEditable
-                                  suppressContentEditableWarning
-                                  onBlur={(e) => handleEditEduLocation(idx, e.currentTarget.textContent || "")}
-                                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                  className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
-                                >
-                                  {formatLocation(edu.location)}
-                                </span>
-                              </>
+                                    </div>
+                                </>
                             )}
-                          </span>
-                          {edu.dates && edu.dates !== "undefined" && (
-                            <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: styles.fontSizeBody, color: black }}>
+                            <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>
+                              {exp.description && processDescriptionWithIndices(exp.description).map((bulletObj, bIdx) => (
+                                <li key={bIdx} style={{ fontSize: currentFontSize, lineHeight: currentLineHeight, marginBottom: '2px', paddingLeft: '2px' }} className={isFieldModified(`internships.${idx}.description.${bulletObj.originalIndex}`) ? 'field-diff-modified' : ''}>
+                                    <GrammarHighlighter 
+                                      text={bulletObj.text} 
+                                      path={`internships.${idx}.description.${bulletObj.originalIndex}`} 
+                                      issues={issues} 
+                                      onAccept={handleAcceptIssue} 
+                                      onIgnore={handleIgnoreIssue} 
+                                      onEdit={(newVal) => handleEditInternBullet(idx, bulletObj.originalIndex, newVal)}
+                                      onConfirmAI={triggerAIConfirmation}
+                                    />
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (sectionKey === 'education' && activeData.education && activeData.education.length > 0) {
+                  return (
+                    <div 
+                      key="education"
+                      id="resume-section-education"
+                      className={`transition-all duration-300 p-1 rounded ${highlightedSection === 'education' ? 'flash-highlight-active' : ''}`}
+                      style={{ marginBottom: currentSectionMargin }}
+                    >
+                      <h3 style={{ 
+                          fontWeight: 'bold', 
+                          textTransform: styles.headingTransform, 
+                          marginTop: styles.headingMarginTop,
+                          marginBottom: styles.headingMarginBottom, 
+                          fontSize: currentFontSize, 
+                          color: styles.headingColor,
+                          borderBottom: styles.headingBorder,
+                          paddingBottom: styles.headingBorder !== 'none' ? '2px' : '0'
+                      }}>
+                        {formatTitle(activeData.sectionTitleEducation || "EDUCATION")}
+                      </h3>
+                      <div style={{ paddingTop: '0.25rem' }}>
+                         {activeData.education.map((edu, idx) => (
+                          <div key={idx} style={{ marginBottom: '0.5rem' }}>
+                            <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                              <span style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black }}>
+                                <span
+                                  contentEditable={!tempUpdatedData}
+                                  suppressContentEditableWarning
+                                  onBlur={(e) => handleEditEduInstitution(idx, e.currentTarget.textContent || "")}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                  className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`education.${idx}.institution`) ? 'field-diff-modified' : ''}`}
+                                >
+                                  {stripTrailingDate(edu.institution)}
+                                </span>
+                                {edu.location && (
+                                  <>
+                                    {", "}
+                                    <span
+                                      contentEditable={!tempUpdatedData}
+                                      suppressContentEditableWarning
+                                      onBlur={(e) => handleEditEduLocation(idx, e.currentTarget.textContent || "")}
+                                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                      className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`education.${idx}.location`) ? 'field-diff-modified' : ''}`}
+                                    >
+                                      {formatLocation(edu.location)}
+                                    </span>
+                                  </>
+                                )}
+                              </span>
+                              {edu.dates && edu.dates !== "undefined" && (
+                                <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: currentFontSize, color: black }} className={isFieldModified(`education.${idx}.dates`) ? 'field-diff-modified' : ''}>
+                                  <span
+                                    contentEditable={!tempUpdatedData}
+                                    suppressContentEditableWarning
+                                    onBlur={(e) => handleEditEduDates(idx, e.currentTarget.textContent || "")}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                    className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
+                                  >
+                                    {formatModernDate(edu.dates)}
+                                  </span>
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black }} className={isFieldModified(`education.${idx}.degree`) ? 'field-diff-modified' : ''}>
                               <span
-                                contentEditable
+                                contentEditable={!tempUpdatedData}
                                 suppressContentEditableWarning
-                                // Wait, let's keep the date edit handler
-                                onBlur={(e) => handleEditEduDates(idx, e.currentTarget.textContent || "")}
+                                onBlur={(e) => handleEditEduDegree(idx, e.currentTarget.textContent || "")}
                                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
                                 className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                               >
-                                {formatModernDate(edu.dates)}
+                                {stripTrailingDate(edu.degree)}
                               </span>
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontWeight: 'bold', fontSize: styles.fontSizeBody, color: black }}>
-                          <span
-                            contentEditable
-                            suppressContentEditableWarning
-                            onBlur={(e) => handleEditEduDegree(idx, e.currentTarget.textContent || "")}
-                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                            className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
-                          >
-                            {stripTrailingDate(edu.degree)}
-                          </span>
-                        </div>
-                        {edu.details && edu.details.length > 0 && (
-                           <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>
-                             {processDescriptionWithIndices(edu.details).map((bulletObj, dIdx) => (
-                               <li key={dIdx} style={{ fontSize: styles.fontSizeBody, lineHeight: styles.lineHeight, marginBottom: '2px', paddingLeft: '2px' }}>
-                                  <GrammarHighlighter 
-                                    text={bulletObj.text} 
-                                    path={`education.${idx}.details.${bulletObj.originalIndex}`} 
-                                    issues={issues} 
-                                    onAccept={handleAcceptIssue} 
-                                    onIgnore={handleIgnoreIssue} 
-                                    onEdit={(newVal) => handleEditEduDetail(idx, bulletObj.originalIndex, newVal)}
-                                  />
-                                </li>
-                             ))}
-                           </ul>
-                        )}
-                      </div>
-                     ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 6. Custom Sections (Skills, Tools, etc.) */}
-              {data.customSections && data.customSections.map((section, idx) => {
-                   const titleUpper = section.title.toUpperCase();
-                   const isGridCandidate = titleUpper.includes("SKILLS") || titleUpper.includes("COMPETENCIES") || titleUpper.includes("LANGUAGES");
-                   const hasLongItems = section.items && section.items.some(item => item.length > 60);
-                   const useColumns = isGridCandidate && !hasLongItems && section.items && section.items.length > 2;
-
-                   return (
-                     <div 
-                       key={idx} 
-                       id={idx === 0 ? "resume-section-skills" : `resume-section-custom-${idx}`}
-                       className={`transition-all duration-300 p-1 rounded ${
-                         (idx === 0 && highlightedSection === 'skills') 
-                           ? 'flash-highlight-active' 
-                           : (highlightedSection === `custom-${idx}` ? 'flash-highlight-active' : '')
-                       }`}
-                       style={{ marginBottom: styles.marginBottom }}
-                     >
-                       <h3 
-                         contentEditable
-                         suppressContentEditableWarning
-                         onBlur={(e) => handleEditCustomSectionTitle(idx, e.currentTarget.textContent || "")}
-                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                         style={{ 
-                             fontWeight: 'bold', 
-                             textTransform: styles.headingTransform, 
-                             marginTop: styles.headingMarginTop,
-                             marginBottom: styles.headingMarginBottom, 
-                             fontSize: styles.fontSizeBody, 
-                             color: styles.headingColor,
-                             borderBottom: styles.headingBorder,
-                             paddingBottom: styles.headingBorder !== 'none' ? '2px' : '0'
-                         }}
-                         className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text inline-block"
-                       >
-                         {formatTitle(section.title)}
-                       </h3>
-                       <div style={{ paddingTop: '0.25rem' }}>
-                           <ul style={{ 
-                               columnCount: useColumns ? 2 : 1, 
-                               columnGap: '2rem', 
-                               paddingLeft: '1.25rem', 
-                               marginTop: 0,
-                               listStyleType: 'disc'
-                           }}>
-                              {section.items && groupBulletPoints(section.items).map((g, gIdx) => {
-                                if (g.key) {
-                                  if (g.values.length === 1) {
-                                    return (
-                                      <li key={gIdx} style={{ listStyleType: 'none', marginLeft: '-1.25rem', fontSize: styles.fontSizeBody, lineHeight: styles.lineHeight, marginBottom: '2px', breakInside: 'avoid' }}>
-                                        <span style={{ fontWeight: 'bold' }}>{g.key}:</span>{' '}
-                                        <GrammarHighlighter 
-                                          text={g.values[0].text} 
-                                          path={`customSections.${idx}.items.${g.values[0].originalIndex}`} 
-                                          issues={issues} 
-                                          onAccept={handleAcceptIssue} 
-                                          onIgnore={handleIgnoreIssue} 
-                                          onEdit={(newVal) => handleEditCustomSectionItem(idx, g.values[0].originalIndex, newVal)}
-                                        />
-                                      </li>
-                                    );
-                                  } else {
-                                    return (
-                                      <li key={gIdx} style={{ listStyleType: 'none', marginLeft: '-1.25rem', fontSize: styles.fontSizeBody, lineHeight: styles.lineHeight, marginBottom: '2px', breakInside: 'avoid' }}>
-                                        <div style={{ fontWeight: 'bold' }}>{g.key}:</div>
-                                        <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: '2px', marginBottom: 0 }}>
-                                          {g.values.map((v, vIdx) => (
-                                            <li key={vIdx} style={{ marginBottom: '2px', paddingLeft: '2px' }}>
-                                              <GrammarHighlighter 
-                                                text={v.text} 
-                                                path={`customSections.${idx}.items.${v.originalIndex}`} 
-                                                issues={issues} 
-                                                onAccept={handleAcceptIssue} 
-                                                onIgnore={handleIgnoreIssue} 
-                                                onEdit={(newVal) => handleEditCustomSectionItem(idx, v.originalIndex, newVal)}
-                                              />
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      </li>
-                                    );
-                                  }
-                                } else {
-                                  return g.values.map((v, vIdx) => (
-                                    <li key={`${gIdx}-${vIdx}`} style={{ fontSize: styles.fontSizeBody, lineHeight: styles.lineHeight, marginBottom: '2px', paddingLeft: '2px', breakInside: 'avoid' }}>
+                            </div>
+                            {edu.details && edu.details.length > 0 && (
+                               <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>
+                                 {processDescriptionWithIndices(edu.details).map((bulletObj, dIdx) => (
+                                   <li key={dIdx} style={{ fontSize: currentFontSize, lineHeight: currentLineHeight, marginBottom: '2px', paddingLeft: '2px' }} className={isFieldModified(`education.${idx}.details.${bulletObj.originalIndex}`) ? 'field-diff-modified' : ''}>
                                       <GrammarHighlighter 
-                                        text={v.text} 
-                                        path={`customSections.${idx}.items.${v.originalIndex}`} 
+                                        text={bulletObj.text} 
+                                        path={`education.${idx}.details.${bulletObj.originalIndex}`} 
                                         issues={issues} 
                                         onAccept={handleAcceptIssue} 
                                         onIgnore={handleIgnoreIssue} 
-                                        onEdit={(newVal) => handleEditCustomSectionItem(idx, v.originalIndex, newVal)}
+                                        onEdit={(newVal) => handleEditEduDetail(idx, bulletObj.originalIndex, newVal)}
+                                        onConfirmAI={triggerAIConfirmation}
                                       />
                                     </li>
-                                  ));
-                                }
-                              })}
-                           </ul>
-                       </div>
-                     </div>
-                   );
+                                 ))}
+                               </ul>
+                            )}
+                          </div>
+                         ))}
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (sectionKey === 'customSections' && activeData.customSections) {
+                  return (
+                    <React.Fragment key="customSections">
+                      {activeData.customSections.map((section, idx) => {
+                         const titleUpper = section.title.toUpperCase();
+                         const isGridCandidate = titleUpper.includes("SKILLS") || titleUpper.includes("COMPETENCIES") || titleUpper.includes("LANGUAGES");
+                         const hasLongItems = section.items && section.items.some(item => item.length > 60);
+                         const useColumns = isGridCandidate && !hasLongItems && section.items && section.items.length > 2;
+
+                         return (
+                           <div 
+                             key={idx} 
+                             id={idx === 0 ? "resume-section-skills" : `resume-section-custom-${idx}`}
+                             className={`transition-all duration-300 p-1 rounded ${
+                               (idx === 0 && highlightedSection === 'skills') 
+                                 ? 'flash-highlight-active' 
+                                 : (highlightedSection === `custom-${idx}` ? 'flash-highlight-active' : '')
+                             }`}
+                             style={{ marginBottom: currentSectionMargin }}
+                           >
+                             <h3 
+                               contentEditable={!tempUpdatedData}
+                               suppressContentEditableWarning
+                               onBlur={(e) => handleEditCustomSectionTitle(idx, e.currentTarget.textContent || "")}
+                               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                               style={{ 
+                                   fontWeight: 'bold', 
+                                   textTransform: styles.headingTransform, 
+                                   marginTop: styles.headingMarginTop,
+                                   marginBottom: styles.headingMarginBottom, 
+                                   fontSize: currentFontSize, 
+                                   color: styles.headingColor,
+                                   borderBottom: styles.headingBorder,
+                                   paddingBottom: styles.headingBorder !== 'none' ? '2px' : '0'
+                               }}
+                               className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text inline-block ${isFieldModified(`customSections.${idx}.title`) ? 'field-diff-modified' : ''}`}
+                             >
+                               {formatTitle(section.title)}
+                             </h3>
+                             <div style={{ paddingTop: '0.25rem' }}>
+                                 <ul style={{ 
+                                     columnCount: useColumns ? 2 : 1, 
+                                     columnGap: '2rem', 
+                                     paddingLeft: '1.25rem', 
+                                     marginTop: 0,
+                                     listStyleType: 'disc'
+                                 }}>
+                                     {section.items && groupBulletPoints(section.items).map((g, gIdx) => {
+                                       if (g.key) {
+                                         if (g.values.length === 1) {
+                                           return (
+                                             <li key={gIdx} style={{ listStyleType: 'none', marginLeft: '-1.25rem', fontSize: currentFontSize, lineHeight: currentLineHeight, marginBottom: '2px', breakInside: 'avoid' }} className={isFieldModified(`customSections.${idx}.items.${g.values[0].originalIndex}`) ? 'field-diff-modified' : ''}>
+                                               <span style={{ fontWeight: 'bold' }}>{g.key}:</span>{' '}
+                                               <GrammarHighlighter 
+                                                 text={g.values[0].text} 
+                                                 path={`customSections.${idx}.items.${g.values[0].originalIndex}`} 
+                                                 issues={issues} 
+                                                 onAccept={handleAcceptIssue} 
+                                                 onIgnore={handleIgnoreIssue} 
+                                                 onEdit={(newVal) => handleEditCustomSectionItem(idx, g.values[0].originalIndex, newVal)}
+                                                 onConfirmAI={triggerAIConfirmation}
+                                               />
+                                             </li>
+                                           );
+                                         } else {
+                                           return (
+                                             <li key={gIdx} style={{ listStyleType: 'none', marginLeft: '-1.25rem', fontSize: currentFontSize, lineHeight: currentLineHeight, marginBottom: '2px', breakInside: 'avoid' }}>
+                                               <div style={{ fontWeight: 'bold' }}>{g.key}:</div>
+                                               <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: '2px', marginBottom: 0 }}>
+                                                 {g.values.map((v, vIdx) => (
+                                                   <li key={vIdx} style={{ marginBottom: '2px', paddingLeft: '2px' }} className={isFieldModified(`customSections.${idx}.items.${v.originalIndex}`) ? 'field-diff-modified' : ''}>
+                                                     <GrammarHighlighter 
+                                                       text={v.text} 
+                                                       path={`customSections.${idx}.items.${v.originalIndex}`} 
+                                                       issues={issues} 
+                                                       onAccept={handleAcceptIssue} 
+                                                       onIgnore={handleIgnoreIssue} 
+                                                       onEdit={(newVal) => handleEditCustomSectionItem(idx, v.originalIndex, newVal)}
+                                                       onConfirmAI={triggerAIConfirmation}
+                                                     />
+                                                   </li>
+                                                 ))}
+                                               </ul>
+                                             </li>
+                                           );
+                                         }
+                                       } else {
+                                         return g.values.map((v, vIdx) => (
+                                           <li key={`${gIdx}-${vIdx}`} style={{ fontSize: currentFontSize, lineHeight: currentLineHeight, marginBottom: '2px', paddingLeft: '2px', breakInside: 'avoid' }} className={isFieldModified(`customSections.${idx}.items.${v.originalIndex}`) ? 'field-diff-modified' : ''}>
+                                             <GrammarHighlighter 
+                                               text={v.text} 
+                                               path={`customSections.${idx}.items.${v.originalIndex}`} 
+                                               issues={issues} 
+                                               onAccept={handleAcceptIssue} 
+                                               onIgnore={handleIgnoreIssue} 
+                                               onEdit={(newVal) => handleEditCustomSectionItem(idx, v.originalIndex, newVal)}
+                                               onConfirmAI={triggerAIConfirmation}
+                                             />
+                                           </li>
+                                         ));
+                                       }
+                                     })}
+                                 </ul>
+                             </div>
+                           </div>
+                         );
+                      })}
+                    </React.Fragment>
+                  );
+                }
+                return null;
               })}
 
             </div>
@@ -1566,6 +1790,16 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                       {issues.length}
                     </span>
                   )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('copilot')}
+                  className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-wider text-center border-b-2 transition-colors cursor-pointer ${
+                    activeTab === 'copilot'
+                      ? 'border-indigo-500 text-white bg-white/[0.01]'
+                      : 'border-transparent text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  Copilot
                 </button>
                 <button
                   onClick={() => setActiveTab('logs')}
@@ -1758,7 +1992,254 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                   </div>
                 )}
 
-                {/* 3. History (Version Snapshots & Logs) Tab */}
+                {/* 3. AI Copilot & Layout Engine Tab */}
+                {activeTab === 'copilot' && (
+                  <div className="space-y-6">
+                    {/* A. Local Layout & Typography Sliders (0 Credits) */}
+                    <div className="p-4 rounded-xl bg-white/[0.01] border border-white/[0.04] space-y-4 text-left">
+                      <div className="flex items-center gap-2 text-slate-350 font-bold text-xs uppercase tracking-wider">
+                        <Sliders className="w-4 h-4 text-indigo-400" />
+                        <span>Layout & Typography (0 Credits)</span>
+                      </div>
+
+                      {/* Font Size slider */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400 font-medium font-sans">Font Size Offset</span>
+                          <span className="text-white font-semibold font-mono">{fontSizeOffset >= 0 ? `+${fontSizeOffset}` : fontSizeOffset}pt</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-2"
+                          max="2"
+                          step="1"
+                          value={fontSizeOffset}
+                          onChange={(e) => setFontSizeOffset(parseInt(e.target.value))}
+                          className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                        />
+                      </div>
+
+                      {/* Line Spacing slider */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400 font-medium font-sans">Line Spacing Offset</span>
+                          <span className="text-white font-semibold font-mono">{lineSpacingOffset >= 0 ? `+${lineSpacingOffset}` : lineSpacingOffset}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-2"
+                          max="2"
+                          step="1"
+                          value={lineSpacingOffset}
+                          onChange={(e) => setLineSpacingOffset(parseInt(e.target.value))}
+                          className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                        />
+                      </div>
+
+                      {/* Section Spacing slider */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400 font-medium font-sans">Section Margin Offset</span>
+                          <span className="text-white font-semibold font-mono">{sectionSpacingOffset >= 0 ? `+${sectionSpacingOffset}` : sectionSpacingOffset}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-2"
+                          max="2"
+                          step="1"
+                          value={sectionSpacingOffset}
+                          onChange={(e) => setSectionSpacingOffset(parseInt(e.target.value))}
+                          className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                        />
+                      </div>
+
+                      {/* B. Section Reordering (0 Credits) */}
+                      <div className="pt-3 border-t border-white/5 space-y-2">
+                        <div className="text-[10px] text-slate-550 font-bold uppercase tracking-wider font-sans">Section Order (Drag-Free)</div>
+                        <div className="space-y-1.5">
+                          {sectionOrder.map((sectionKey, index) => {
+                            const nameMap: Record<string, string> = {
+                              summary: "Summary",
+                              experience: "Experience",
+                              internships: "Internships",
+                              education: "Education",
+                              customSections: "Custom Skills"
+                            };
+                            return (
+                              <div key={sectionKey} className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/[0.04] text-xs">
+                                <span className="text-slate-300 font-medium font-sans">{nameMap[sectionKey] || sectionKey}</span>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => moveSection(index, 'up')}
+                                    disabled={index === 0}
+                                    className="p-1 hover:bg-white/5 disabled:opacity-30 rounded text-slate-400 cursor-pointer"
+                                  >
+                                    <ArrowUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => moveSection(index, 'down')}
+                                    disabled={index === sectionOrder.length - 1}
+                                    className="p-1 hover:bg-white/5 disabled:opacity-30 rounded text-slate-400 cursor-pointer"
+                                  >
+                                    <ArrowDown className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* C. Generative AI Prompt & Preset Actions (1 AI Credit) */}
+                    <div className="p-4 rounded-xl bg-white/[0.01] border border-white/[0.04] space-y-4 text-left">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-slate-350 font-bold text-xs uppercase tracking-wider">
+                          <Wand2 className="w-4 h-4 text-indigo-400 animate-pulse" />
+                          <span>AI Resume Editor</span>
+                        </div>
+                        <span className="text-[9px] text-indigo-400 font-mono">⚡ 1 AI Credit</span>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        <textarea
+                          placeholder="Type changes (e.g. 'Add project X with React', 'Make summary sound technical')..."
+                          value={copilotInstruction}
+                          onChange={(e) => setCopilotInstruction(e.target.value)}
+                          disabled={isCopilotRunning}
+                          rows={3}
+                          className="w-full bg-[#050714] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 resize-none font-light leading-relaxed font-sans"
+                        />
+
+                        {/* Presets Grid */}
+                        <div className="grid grid-cols-2 gap-1.5 font-sans">
+                          <button
+                            onClick={() => handleRunCopilot("Upgrade the vocabulary, verb strength, and metrics positioning to a premium, high-impact executive tone across all descriptions.")}
+                            disabled={isCopilotRunning}
+                            className="p-2 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-indigo-500/10 hover:border-indigo-500/20 text-left text-[10px] text-slate-300 cursor-pointer transition-colors"
+                          >
+                            👔 Executive Upgrade
+                          </button>
+                          <button
+                            onClick={() => handleRunCopilot("Slightly condense experience bullets and summary to help the content fit beautifully within a single page while retaining factual milestones.")}
+                            disabled={isCopilotRunning}
+                            className="p-2 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-indigo-500/10 hover:border-indigo-500/20 text-left text-[10px] text-slate-300 cursor-pointer transition-colors"
+                          >
+                            📏 Page-Fit Shrink
+                          </button>
+                          <button
+                            onClick={() => handleRunCopilot("Rewrite any passive phrases and swap weak verbs (helped, managed, support) with strong active action verbs (spearheaded, pioneered, engineered).")}
+                            disabled={isCopilotRunning}
+                            className="p-2 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-indigo-500/10 hover:border-indigo-500/20 text-left text-[10px] text-slate-300 cursor-pointer transition-colors"
+                          >
+                            ⚡ Active Voice Boost
+                          </button>
+                          <button
+                            onClick={() => handleRunCopilot("Identify duty descriptions and restructure them to highlight quantitative outcomes, adding placeholders (like [X]%) where data fits.")}
+                            disabled={isCopilotRunning}
+                            className="p-2 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-indigo-500/10 hover:border-indigo-500/20 text-left text-[10px] text-slate-300 cursor-pointer transition-colors"
+                          >
+                            📈 Quantify Achievements
+                          </button>
+                        </div>
+
+                        {/* Submit Actions */}
+                        <button
+                          onClick={() => handleRunCopilot()}
+                          disabled={isCopilotRunning || !copilotInstruction.trim()}
+                          className="w-full h-10 rounded-xl bg-[#6366f1] hover:bg-[#5a5cd8] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+                        >
+                          {isCopilotRunning ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>{copilotProgressStep}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-4 h-4" />
+                              <span>Run AI Update</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* D. Target Job Description & Local Keyword Matcher (0 Credits) */}
+                    <div className="p-4 rounded-xl bg-white/[0.01] border border-white/[0.04] space-y-4 text-left">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-slate-350 font-bold text-xs uppercase tracking-wider">
+                          <FileText className="w-4 h-4 text-indigo-400" />
+                          <span>ATS Keyword Matcher (0 Credits)</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 font-sans">
+                        <textarea
+                          placeholder="Paste target job description here..."
+                          value={targetJobDescription}
+                          onChange={(e) => handleJobDescriptionChange(e.target.value)}
+                          disabled={isCopilotRunning}
+                          rows={4}
+                          className="w-full bg-[#050714] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 resize-none font-light leading-relaxed font-sans"
+                        />
+
+                        {jobKeywords.length > 0 && (
+                          <div className="space-y-3 pt-2">
+                            {/* Match Rate Progress Bar */}
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase font-sans">
+                                <span>ATS Keyword Match Rate</span>
+                                <span className="font-mono text-white">
+                                  {Math.round((jobKeywords.filter(k => k.matched).length / jobKeywords.length) * 100)}%
+                                </span>
+                              </div>
+                              <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-500"
+                                  style={{ width: `${(jobKeywords.filter(k => k.matched).length / jobKeywords.length) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Keywords List */}
+                            <div className="space-y-1.5">
+                              <div className="text-[10px] text-slate-550 font-bold uppercase tracking-wider font-sans">Keywords Scanner</div>
+                              <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto custom-scrollbar">
+                                {jobKeywords.map((k, idx) => (
+                                  <span
+                                    key={idx}
+                                    className={`text-[9px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${
+                                      k.matched
+                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10'
+                                        : 'bg-rose-500/10 text-rose-350 border border-rose-500/10'
+                                    }`}
+                                  >
+                                    <span className={`w-1 h-1 rounded-full ${k.matched ? 'bg-emerald-400' : 'bg-rose-450'}`} />
+                                    {k.word}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Inject Missing Keywords Button */}
+                            {jobKeywords.some(k => !k.matched) && (
+                              <button
+                                onClick={handleAutoInjectKeywords}
+                                disabled={isCopilotRunning}
+                                className="w-full h-9 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/25 border border-indigo-500/25 text-indigo-300 hover:text-white font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                                <span>Inject Missing Keywords (⚡ 1 Credit)</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. History (Version Snapshots & Logs) Tab */}
                 {activeTab === 'logs' && (
                   <div className="space-y-6">
                     {/* Revisions snapshots list */}
@@ -1911,6 +2392,56 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
         </AnimatePresence>
 
       </div>
+
+      {/* AI Confirmation Modal */}
+      {aiConfirm && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div 
+            className="relative bg-slate-900/95 border border-white/10 rounded-3xl p-7 max-w-md w-full text-center flex flex-col items-center gap-5 shadow-[0_0_50px_rgba(99,102,241,0.25)] hover:shadow-[0_0_60px_rgba(99,102,241,0.35)] transition-all duration-300 animate-in zoom-in-95 duration-200"
+            style={{
+              boxShadow: '0 25px 60px -15px rgba(0,0,0,0.9), 0 0 25px rgba(99, 102, 241, 0.2)'
+            }}
+          >
+            <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.15)] animate-pulse">
+              <Sparkles className="w-7 h-7" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-lg font-bold text-white tracking-wide">{aiConfirm.title}</h3>
+              <p className="text-xs text-slate-400 font-light leading-relaxed px-2">
+                {aiConfirm.description}
+              </p>
+            </div>
+
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-ping" />
+              <span className="text-[11px] font-semibold text-indigo-300 font-mono uppercase tracking-wider">
+                ⚡ Deducts {aiConfirm.cost} AI Credit{aiConfirm.cost > 1 ? 's' : ''}
+              </span>
+            </div>
+
+            <p className="text-[10px] text-slate-500 font-light italic">
+              AI credits are limited. This operation calls our premium models to update your resume.
+            </p>
+
+            <div className="flex gap-3 w-full mt-2">
+              <button
+                onClick={() => setAiConfirm(null)}
+                className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/15 text-slate-350 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={aiConfirm.onConfirm}
+                className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-violet-650 hover:from-indigo-500 hover:to-violet-550 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-[0_4px_20px_rgba(99,102,241,0.25)] hover:shadow-[0_4px_25px_rgba(99,102,241,0.4)] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+              >
+                Confirm &amp; Run
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

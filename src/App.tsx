@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppState, ResumeData, ResumeFormat } from '@/types';
 import { extractResumeData, getUsageStats } from '@/services/geminiService';
@@ -55,6 +55,7 @@ const App: React.FC = () => {
     return safeStorage.getItem('pendingResumeId');
   });
   const [backendStatus, setBackendStatus] = useState<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (pendingResumeId) {
@@ -465,7 +466,7 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="bg-[#04060f] text-slate-200 font-sans selection:bg-indigo-500/30 overflow-x-hidden min-h-screen lg:h-screen lg:overflow-hidden">
+    <div className="bg-[#04060f] text-slate-200 font-sans selection:bg-indigo-500/30 overflow-x-hidden min-h-screen">
       {/* Ambient Background with slow-pulsing color rings */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
         <div className="grid-bg-mesh" />
@@ -474,14 +475,14 @@ const App: React.FC = () => {
         <div className="absolute top-[25%] left-[25%] w-[50%] h-[50%] rounded-full bg-violet-500/[0.05] blur-[130px] animate-pulse" style={{ animationDuration: '12s' }} />
       </div>
 
-      <div className={`relative z-10 flex flex-col items-center w-full min-h-screen lg:h-screen lg:overflow-hidden ${
+      <div className={`relative z-10 flex flex-col items-center w-full min-h-screen ${
         appState === AppState.REVIEW 
           ? 'w-full max-w-full px-0 pt-0 pb-0' 
-          : 'px-4 sm:px-6 lg:px-[48px] max-w-[1280px] mx-auto pt-3 lg:pt-[16px] pb-3'
+          : 'px-4 sm:px-6 lg:px-[48px] max-w-[1280px] mx-auto pt-4 pb-8'
       }`}>
         {/* Header - Brand Bar */}
         {appState !== AppState.REVIEW && (
-          <div className="w-full flex items-center justify-between mb-1 lg:mb-2">
+          <div className="w-full flex items-center justify-between mb-2 lg:mb-4">
             <div 
               onClick={() => setShowAdmin(!showAdmin)}
               className="flex items-center cursor-pointer select-none group focus:outline-none"
@@ -508,40 +509,41 @@ const App: React.FC = () => {
         ) : (
           <>
             {appState !== AppState.REVIEW ? (
-              <div className="main-hero-container w-full flex-1 flex flex-col justify-center items-center text-center gap-4 lg:gap-[20px] py-2">
+              <div className="main-hero-container w-full flex-1 flex flex-col justify-center items-center text-center gap-5 py-2">
                 
                 {/* Hero Text */}
                 <motion.div 
                   initial={{ opacity: 0, y: -15 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                  className="flex flex-col items-center text-center w-full mb-1"
+                  className="flex flex-col items-center text-center w-full mb-3"
                 >
-                  {/* Center Logo Hero Element */}
-                  <div className="hero-logo-container mb-3.5 relative group transition-all duration-500 hover:scale-[1.03] active:scale-[0.98]">
-                    {/* Glowing background aura */}
-                    <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-indigo-500/10 via-purple-500/10 to-pink-500/10 blur-3xl opacity-75 pointer-events-none" />
-                    <InteractiveLogo size="hero" />
+                  {/* Logo and Name on Same Line - Big & Hero */}
+                  <div className="flex items-center justify-center gap-4 sm:gap-6 mb-4 select-none">
+                    <div className="relative group transition-all duration-500 hover:scale-[1.03] active:scale-[0.98] flex-shrink-0">
+                      {/* Glowing background aura */}
+                      <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-indigo-500/20 via-purple-500/20 to-pink-500/20 blur-2xl opacity-80 pointer-events-none" />
+                      <InteractiveLogo size="xl" />
+                    </div>
+                    
+                    <h1 className="hero-title font-display text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight drop-shadow-[0_4px_16px_rgba(0,0,0,0.6)]">
+                      Arth<span className="text-gradient-rainbow drop-shadow-[0_0_35px_rgba(168,85,247,0.35)]">Format</span> <span className="text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">AI</span>
+                    </h1>
                   </div>
 
-                  {/* Brand Title in Center Hero */}
-                  <h1 className="hero-title font-display text-3xl sm:text-4xl lg:text-[40px] font-extrabold text-white tracking-tight leading-none mb-2 select-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
-                    Arth<span className="text-gradient-rainbow font-black drop-shadow-[0_0_30px_rgba(168,85,247,0.25)]">Format</span> <span className="text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.15)]">AI</span>
-                  </h1>
-
-                  {/* Tagline */}
-                  <h2 className="hero-tagline text-[11px] sm:text-xs lg:text-[13px] font-semibold uppercase tracking-[0.2em] text-indigo-200/90 mb-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)] select-none">
-                    Resumes Reimagined, <span className="text-gradient-rainbow font-extrabold">Precision Personified.</span>
+                  {/* Subtitle - Resumes, Perfected */}
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white mb-3 select-none drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)]">
+                    Resumes, <span className="text-gradient-rainbow font-black drop-shadow-[0_0_30px_rgba(168,85,247,0.25)]">Perfected.</span>
                   </h2>
-                  
-                  {/* Description */}
-                  <p className="hero-desc text-[10px] sm:text-[11px] lg:text-[12.5px] text-slate-400 font-light tracking-wide leading-relaxed max-w-[440px] mx-auto opacity-90 select-none">
-                    Transform any resume into a polished, professional document in seconds.
+
+                  {/* Tagline / Third Line */}
+                  <p className="hero-tagline text-xs sm:text-sm lg:text-base text-slate-400 max-w-2xl mx-auto leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)] select-none">
+                    Instantly transform your resume into a polished, professionally formatted document designed to impress hiring managers.
                   </p>
                 </motion.div>
 
-                {/* Upload / Combined Option selector Zone */}
-                <div className="w-full max-w-[800px] z-10">
+                {/* Upload / Combined Option selector Zone - Expanded Main Box */}
+                <div className="w-full max-w-[1000px] z-10">
                   <AnimatePresence mode="wait">
                     {(appState === AppState.IDLE || appState === AppState.ERROR) && (
                       <motion.div 
@@ -550,16 +552,17 @@ const App: React.FC = () => {
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.98 }}
                         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                        className="glassmorphic-card hero-card-container rounded-[24px] p-3.5 lg:p-4.5 flex flex-col gap-3.5 text-left"
+                        className="glassmorphic-card hero-card-container rounded-[28px] p-6 lg:p-8 flex flex-col gap-6 text-left"
                       >
-                        {/* Selector Row */}
-                        <div className="hero-card-selector-row grid grid-cols-1 md:grid-cols-3 gap-3.5 items-center pb-3 border-b border-white/[0.05]">
+                        {/* Selector Row - Snug & Prominent */}
+                        <div className="hero-card-selector-row grid grid-cols-1 md:grid-cols-3 gap-5 items-center pb-5 border-b border-white/[0.05]">
                           {/* Style Selector */}
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] lg:text-[10.5px] font-bold text-slate-400 uppercase tracking-widest select-none">
+                            <span className="text-[11px] lg:text-[12px] font-extrabold text-slate-400 uppercase tracking-widest select-none flex items-center gap-1.5">
+                              <LayoutTemplate className="w-3.5 h-3.5 text-indigo-400" />
                               1. Target Template Style
                             </span>
-                            <div className="relative flex p-1 bg-white/[0.01] border border-white/[0.05] hover:border-white/10 rounded-xl h-[38px] transition-colors duration-300">
+                            <div className="relative flex p-1 bg-white/[0.01] border border-white/[0.05] hover:border-white/10 rounded-xl h-[44px] transition-colors duration-300">
                               {/* Sliding Background */}
                               <div 
                                 className={`absolute top-1 bottom-1 transition-all duration-300 ease-out bg-indigo-500/15 border border-indigo-500/40 rounded-lg shadow-[0_0_12px_rgba(99,102,241,0.25)] ${
@@ -571,7 +574,7 @@ const App: React.FC = () => {
                               
                               <button 
                                 onClick={() => setSelectedFormat(ResumeFormat.CLASSIC_PROFESSIONAL)}
-                                className={`relative z-10 flex-1 py-1 text-[10.5px] font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 cursor-pointer ${
+                                className={`relative z-10 flex-1 py-1 text-[12px] font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 cursor-pointer ${
                                   selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL ? 'text-white' : 'text-slate-400 hover:text-slate-200'
                                 }`}
                               >
@@ -581,7 +584,7 @@ const App: React.FC = () => {
                               
                               <button 
                                 onClick={() => setSelectedFormat(ResumeFormat.MODERN_EXECUTIVE)}
-                                className={`relative z-10 flex-1 py-1 text-[10.5px] font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 cursor-pointer ${
+                                className={`relative z-10 flex-1 py-1 text-[12px] font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 cursor-pointer ${
                                   selectedFormat === ResumeFormat.MODERN_EXECUTIVE ? 'text-white' : 'text-slate-400 hover:text-slate-200'
                                 }`}
                               >
@@ -593,10 +596,11 @@ const App: React.FC = () => {
 
                           {/* AI Engine Selector */}
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] lg:text-[10.5px] font-bold text-slate-400 uppercase tracking-widest select-none">
+                            <span className="text-[11px] lg:text-[12px] font-extrabold text-slate-400 uppercase tracking-widest select-none flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                               2. AI Engine
                             </span>
-                            <div className="relative flex p-1 bg-white/[0.01] border border-white/[0.05] hover:border-white/10 rounded-xl h-[38px] cursor-pointer transition-colors duration-300" onClick={() => setUsePro(!usePro)}>
+                            <div className="relative flex p-1 bg-white/[0.01] border border-white/[0.05] hover:border-white/10 rounded-xl h-[44px] cursor-pointer transition-colors duration-300" onClick={() => setUsePro(!usePro)}>
                               {/* Sliding Background */}
                               <div 
                                 className={`absolute top-1 bottom-1 transition-all duration-300 ease-out rounded-lg ${
@@ -608,7 +612,7 @@ const App: React.FC = () => {
                               
                               <button 
                                 type="button"
-                                className={`relative z-10 flex-1 text-[10px] font-bold uppercase rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 ${
+                                className={`relative z-10 flex-1 text-[11px] font-bold uppercase rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 ${
                                   !usePro ? 'text-white' : 'text-slate-400 hover:text-slate-200'
                                 }`}
                               >
@@ -618,7 +622,7 @@ const App: React.FC = () => {
                               
                               <button 
                                 type="button"
-                                className={`relative z-10 flex-1 text-[10px] font-bold uppercase rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 ${
+                                className={`relative z-10 flex-1 text-[11px] font-bold uppercase rounded-lg flex items-center justify-center gap-1.5 transition-colors duration-300 ${
                                   usePro ? 'text-amber-200' : 'text-slate-400 hover:text-slate-200'
                                 }`}
                               >
@@ -630,16 +634,17 @@ const App: React.FC = () => {
 
                           {/* Data Shield Selector */}
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] lg:text-[10.5px] font-bold text-slate-400 uppercase tracking-widest select-none">
+                            <span className="text-[11px] lg:text-[12px] font-extrabold text-slate-400 uppercase tracking-widest select-none flex items-center gap-1.5">
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                               3. Data Shield
                             </span>
-                            <div className="flex gap-1.5 w-full">
+                            <div className="relative flex p-1 bg-white/[0.01] border border-white/[0.05] hover:border-white/10 rounded-xl h-[44px] transition-colors duration-300 w-full gap-1">
                               <button
                                 onClick={() => setRetainedFields(prev => ({ ...prev, location: !prev.location }))}
-                                className={`flex-1 h-[38px] flex items-center justify-center gap-1.5 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer select-none ${
+                                className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer select-none ${
                                   retainedFields.location
-                                    ? 'border-indigo-500/40 text-white bg-indigo-500/15 shadow-[0_0_12px_rgba(99,102,241,0.25)]'
-                                    : 'border-white/[0.05] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10 hover:bg-white/[0.02]'
+                                    ? 'bg-indigo-500/15 border border-indigo-500/40 text-white shadow-[0_0_12px_rgba(99,102,241,0.25)]'
+                                    : 'text-slate-400 hover:text-white hover:bg-white/[0.02]'
                                 }`}
                                 title="Retain Location"
                               >
@@ -649,10 +654,10 @@ const App: React.FC = () => {
                               
                               <button
                                 onClick={() => setRetainedFields(prev => ({ ...prev, phone: !prev.phone }))}
-                                className={`flex-1 h-[38px] flex items-center justify-center gap-1.5 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer select-none ${
+                                className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer select-none ${
                                   retainedFields.phone
-                                    ? 'border-indigo-500/40 text-white bg-indigo-500/15 shadow-[0_0_12px_rgba(99,102,241,0.25)]'
-                                    : 'border-white/[0.05] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10 hover:bg-white/[0.02]'
+                                    ? 'bg-indigo-500/15 border border-indigo-500/40 text-white shadow-[0_0_12px_rgba(99,102,241,0.25)]'
+                                    : 'text-slate-400 hover:text-white hover:bg-white/[0.02]'
                                 }`}
                                 title="Retain Phone"
                               >
@@ -662,10 +667,10 @@ const App: React.FC = () => {
 
                               <button
                                 onClick={() => setRetainedFields(prev => ({ ...prev, email: !prev.email }))}
-                                className={`flex-1 h-[38px] flex items-center justify-center gap-1.5 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer select-none ${
+                                className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer select-none ${
                                   retainedFields.email
-                                    ? 'border-indigo-500/40 text-white bg-indigo-500/15 shadow-[0_0_12px_rgba(99,102,241,0.25)]'
-                                    : 'border-white/[0.05] bg-white/[0.01] text-slate-400 hover:text-white hover:border-white/10 hover:bg-white/[0.02]'
+                                    ? 'bg-indigo-500/15 border border-indigo-500/40 text-white shadow-[0_0_12px_rgba(99,102,241,0.25)]'
+                                    : 'text-slate-400 hover:text-white hover:bg-white/[0.02]'
                                 }`}
                                 title="Retain Email"
                               >
@@ -676,53 +681,56 @@ const App: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Drag and Drop box */}
+                        {/* Drag and Drop box - Expanded Sizing */}
                         <div 
                           className={`
-                            hero-dropzone-container relative overflow-hidden rounded-[18px] p-4 lg:p-5
-                            flex flex-col items-center justify-center text-center border border-dashed bg-white/[0.01] min-h-[115px] lg:min-h-[125px] cursor-pointer transition-all duration-350 group/dropzone
-                            ${dragActive 
-                              ? 'border-indigo-500 bg-indigo-500/[0.03] shadow-[0_0_30px_rgba(99,102,241,0.15)] scale-[1.01]' 
-                              : 'border-white/[0.08] hover:border-indigo-500/40 hover:bg-white/[0.02] hover:shadow-[0_0_20px_rgba(99,102,241,0.05)]'
+                            hero-dropzone-container relative overflow-hidden rounded-[24px] p-6 lg:p-10
+                            flex flex-col items-center justify-center text-center border min-h-[220px] lg:min-h-[260px] cursor-pointer transition-all duration-350 group/dropzone
+                            \${dragActive 
+                              ? 'border-indigo-500 bg-indigo-500/[0.05] shadow-[0_0_35px_rgba(168,85,247,0.25)] scale-[1.02] border-solid' 
+                              : ''
                             }
                           `}
                           onDragEnter={onDragEnter}
                           onDragLeave={onDragLeave}
                           onDragOver={onDragOver}
                           onDrop={onDrop}
+                          onClick={() => fileInputRef.current?.click()}
                         >
                           <input
+                            ref={fileInputRef}
                             type="file"
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                            className="hidden"
                             onChange={(e) => e.target.files && handleFileChange(e.target.files[0])}
                             accept=".pdf,.docx,.txt,.rtf,.png,.jpg,.jpeg,.webp"
                           />
                           
-                          {/* Glowing dynamic background flare */}
-                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-indigo-500/[0.03] rounded-full blur-[70px] pointer-events-none -z-10 group-hover/dropzone:bg-indigo-500/[0.07] transition-colors duration-500" />
+                          {/* Glowing dynamic background flare with color transition */}
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 rounded-full blur-[80px] pointer-events-none -z-10 group-hover/dropzone:scale-110 transition-all duration-500 animate-[slow-spin_20s_linear_infinite]" />
                           
-                          <div className="w-full flex flex-col items-center justify-center flex-1 py-0.5">
-                            <div className="hero-dropzone-icon-container mb-2.5 relative">
+                          <div className="w-full flex flex-col items-center justify-center flex-1 py-6 z-10 pointer-events-none">
+                            <div className="hero-dropzone-icon-container mb-3.5 relative">
                               {/* Pulsing ring halo */}
-                              <div className="absolute inset-0 rounded-xl bg-indigo-500/15 blur-md scale-125 opacity-0 group-hover/dropzone:opacity-100 transition-opacity duration-500" />
-                              <div className="relative w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-[1px] shadow-lg shadow-indigo-500/10 group-hover/dropzone:scale-105 transition-transform duration-350">
-                                <div className="w-full h-full rounded-xl bg-[#080d24] flex items-center justify-center">
-                                  <UploadCloud className="w-5 h-5 text-indigo-400 group-hover/dropzone:-translate-y-0.5 transition-transform duration-300" />
+                              <div className="absolute inset-0 rounded-2xl bg-indigo-500/15 blur-md scale-125 opacity-0 group-hover/dropzone:opacity-100 transition-opacity duration-500" />
+                              <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-[length:200%_auto] animate-[gradient-flow_4s_linear_infinite] p-[1.5px] shadow-lg shadow-indigo-500/15 group-hover/dropzone:scale-110 transition-transform duration-350">
+                                <div className="w-full h-full rounded-2xl bg-[#080d24]/90 backdrop-blur-md flex items-center justify-center">
+                                  <UploadCloud className="w-6 h-6 text-indigo-400 group-hover/dropzone:text-pink-400 group-hover/dropzone:-translate-y-0.5 transition-all duration-300" />
                                 </div>
                               </div>
                             </div>
                             
-                            <h3 className="text-sm font-bold text-white mb-0.5 tracking-tight font-display select-none">
+                            <h3 className="text-xl sm:text-2xl font-extrabold text-white mb-5.5 tracking-tight font-display select-none">
                               Drop your resume here
                             </h3>
                             
-                            <p className="text-slate-400 mb-3 max-w-[300px] mx-auto font-light leading-relaxed text-[10px] lg:text-[10.5px] select-none">
-                              Supports Word (.docx, .doc), PDF, Text, or Images. We'll handle the rest with precision.
-                            </p>
-                            
-                            <div className="px-4.5 py-2 border border-white/10 bg-white/[0.02] group-hover/dropzone:bg-indigo-500/10 group-hover/dropzone:border-indigo-500/40 text-slate-350 group-hover/dropzone:text-white font-bold text-[9.5px] uppercase tracking-wider rounded-lg shadow-md transition-all duration-350 flex items-center justify-center gap-1.5 group-hover/dropzone:scale-[1.02] transition-all duration-350">
-                              Browse Files <ArrowRight className="w-3.5 h-3.5 text-indigo-400 group-hover/dropzone:translate-x-0.5 transition-transform duration-300" />
+                            <div className="relative overflow-hidden bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-[length:200%_auto] animate-[gradient-flow_4s_linear_infinite] px-8 py-3.5 rounded-xl shadow-[0_6px_20px_rgba(99,102,241,0.4),0_0_15px_rgba(236,72,153,0.3)] hover:shadow-[0_10px_30px_rgba(99,102,241,0.6),0_0_25px_rgba(236,72,153,0.5)] text-[10.5px] font-extrabold tracking-widest uppercase text-white flex items-center gap-2 group-hover/dropzone:scale-[1.04] hover:scale-[1.06] transition-all duration-300 border border-white/20 select-none cursor-pointer mb-3.5">
+                              <span>Browse Files</span>
+                              <ArrowRight className="w-3.5 h-3.5 text-white group-hover/dropzone:translate-x-0.5 transition-transform duration-300" />
                             </div>
+                            
+                            <p className="text-slate-500 font-bold tracking-[0.2em] text-[9.5px] sm:text-[10px] uppercase mt-2.5 select-none">
+                              PDF &bull; DOCX &bull; DOC &bull; Images
+                            </p>
                           </div>
                         </div>
 
