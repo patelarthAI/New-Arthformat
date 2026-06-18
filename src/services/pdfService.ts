@@ -72,6 +72,7 @@ export const generateResumePDF = async (
   // Define styles based on format
   // Ensure we compare against the string value to avoid any enum object issues
   const isModern = format === 'MODERN_EXECUTIVE' || format === ResumeFormat.MODERN_EXECUTIVE;
+  const isClassic = !isModern;
   
   console.log("isModern calculated as:", isModern);
   
@@ -171,7 +172,7 @@ export const generateResumePDF = async (
           // Title (Italic)
           if (exp.dates && exp.dates !== "undefined") {
             content.push({
-                text: formatModernDate(exp.dates),
+                text: formatModernDate(exp.dates, isClassic),
                 style: 'bodyText',
                 bold: true,
                 margin: [0, 0, 0, 2]
@@ -204,7 +205,7 @@ export const generateResumePDF = async (
           
           if (exp.dates && exp.dates !== "undefined") {
             columns.push({
-              text: formatModernDate(exp.dates),
+              text: formatModernDate(exp.dates, isClassic),
               style: 'bodyText',
               bold: true,
               alignment: 'right',
@@ -249,7 +250,7 @@ export const generateResumePDF = async (
       if (isModern) {
           if (exp.dates && exp.dates !== "undefined") {
             content.push({
-                text: formatModernDate(exp.dates),
+                text: formatModernDate(exp.dates, isClassic),
                 style: 'bodyText',
                 bold: true,
                 margin: [0, 0, 0, 2]
@@ -281,7 +282,7 @@ export const generateResumePDF = async (
           
           if (exp.dates && exp.dates !== "undefined") {
             columns.push({
-              text: formatModernDate(exp.dates),
+              text: formatModernDate(exp.dates, isClassic),
               style: 'bodyText',
               bold: true,
               alignment: 'right',
@@ -335,7 +336,7 @@ export const generateResumePDF = async (
       
       if (edu.dates && edu.dates !== "undefined") {
         columns.push({
-          text: formatModernDate(edu.dates),
+          text: formatModernDate(edu.dates, isClassic),
           style: 'bodyText',
           bold: true,
           alignment: 'right',
@@ -381,51 +382,32 @@ export const generateResumePDF = async (
       const useColumns = isGridCandidate && !hasLongItems && section.items && section.items.length > 2;
 
       if (useColumns && section.items) {
-        const groupedItems = groupBulletPoints(section.items);
-        const maxLen = Math.max(...section.items.map(i => i.length));
+        const cleanedItems = section.items.map(i => cleanBullet(i));
+        const maxLen = Math.max(...cleanedItems.map(i => i.length));
         const numCols = maxLen < 35 ? 3 : 2;
-        const cols: any[][] = Array.from({ length: numCols }, () => []);
+        const colItems: string[][] = Array.from({ length: numCols }, () => []);
         
-        const rows = Math.ceil(groupedItems.length / numCols);
-        groupedItems.forEach((g, idx) => {
+        const rows = Math.ceil(cleanedItems.length / numCols);
+        cleanedItems.forEach((item, idx) => {
           const colIdx = Math.floor(idx / rows);
-          if (cols[colIdx]) {
-            if (g.key) {
-              if (g.values.length === 1) {
-                cols[colIdx].push({
-                  text: [
-                    { text: g.key + ": ", bold: true },
-                    g.values[0].text
-                  ],
-                  listType: 'none',
-                  margin: [0, 2, 0, 2]
-                });
-              } else {
-                cols[colIdx].push({
-                  text: g.key + ":",
-                  bold: true,
-                  listType: 'none',
-                  margin: [0, 2, 0, 2]
-                });
-                cols[colIdx].push({
-                  ul: g.values.map(v => ({ text: v.text, fontSize: styles.bodyFontSize })),
-                  fontSize: 13,
-                  margin: isModern ? [25, 0, 0, 2] : [0, 0, 0, 2]
-                });
-              }
-            } else {
-              cols[colIdx].push({
-                ul: g.values.map(v => ({ text: v.text, fontSize: styles.bodyFontSize })),
-                fontSize: 13,
-                margin: isModern ? [25, 2, 0, 2] : [0, 2, 0, 2]
-              });
-            }
+          if (colItems[colIdx]) {
+            colItems[colIdx].push(item);
           }
         });
 
+        const columns = colItems.map(itemsInCol => {
+          if (itemsInCol.length === 0) return { text: "" };
+          return {
+            ul: itemsInCol.map(item => ({ text: item, fontSize: styles.bodyFontSize })),
+            fontSize: 13,
+            margin: isModern ? [25, 0, 0, 0] : [0, 0, 0, 0]
+          };
+        });
+
         content.push({
-          columns: cols.map(col => ({ stack: col, style: 'bodyText' })),
-          margin: [0, 0, 0, 5]
+          columns: columns,
+          margin: [0, 0, 0, 5],
+          style: 'bodyText'
         });
       } else if (section.items) {
         const groupedItems = groupBulletPoints(section.items);

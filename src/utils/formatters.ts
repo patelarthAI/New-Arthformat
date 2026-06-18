@@ -98,7 +98,7 @@ export const groupBulletPoints = (items: string[]): GroupedItem[] => {
   return grouped;
 };
 
-export const formatSingleDate = (str: string): string => {
+export const formatSingleDate = (str: string, shortMonths: boolean = false): string => {
   const cleaned = str.trim();
   if (!cleaned) return "";
 
@@ -106,12 +106,19 @@ export const formatSingleDate = (str: string): string => {
     return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
   }
 
-  const monthNames = [
+  const fullMonthNames = [
     "", "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
   ];
 
-  const monthNameMap: { [key: string]: string } = {
+  const shortMonthNames = [
+    "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+  ];
+
+  const monthNames = shortMonths ? shortMonthNames : fullMonthNames;
+
+  const monthNameMapFull: { [key: string]: string } = {
     "jan": "January", "january": "January",
     "feb": "February", "february": "February", "febuary": "February",
     "mar": "March", "march": "March",
@@ -125,6 +132,23 @@ export const formatSingleDate = (str: string): string => {
     "nov": "November", "november": "November",
     "dec": "December", "december": "December"
   };
+
+  const monthNameMapShort: { [key: string]: string } = {
+    "jan": "Jan", "january": "Jan",
+    "feb": "Feb", "february": "Feb", "febuary": "Feb",
+    "mar": "Mar", "march": "Mar",
+    "apr": "Apr", "april": "Apr",
+    "may": "May",
+    "jun": "Jun", "june": "Jun",
+    "jul": "Jul", "july": "Jul",
+    "aug": "Aug", "august": "Aug",
+    "sep": "Sep", "sept": "Sep", "september": "Sep",
+    "oct": "Oct", "october": "Oct",
+    "nov": "Nov", "november": "Nov",
+    "dec": "Dec", "december": "Dec"
+  };
+
+  const monthNameMap = shortMonths ? monthNameMapShort : monthNameMapFull;
 
   // 1. Try ISO date format: YYYY-MM-DD
   const isoMatch = cleaned.match(/\b(\d{4})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\d|3[01])\b/);
@@ -182,7 +206,7 @@ export const formatSingleDate = (str: string): string => {
   // 4. Try alphabetic month names (e.g., "March 1, 2026", "1st March 2026", "Mar/2026")
   const alphaMonthMatch = cleaned.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b/i);
   const yearMatch = cleaned.match(/\b(\d{4}|\d{2})\b/);
-  
+
   if (alphaMonthMatch && yearMatch) {
     const monthKey = alphaMonthMatch[1].toLowerCase();
     const monthName = monthNameMap[monthKey] || alphaMonthMatch[1];
@@ -202,16 +226,16 @@ export const formatSingleDate = (str: string): string => {
   return cleaned;
 };
 
-export const formatResumeDate = (dateStr: string): string => {
+export const formatResumeDate = (dateStr: string, shortMonths: boolean = false): string => {
   if (!dateStr || dateStr === "undefined") return "";
-  
+
   // Split by common separators: " - ", "-", "–", "—", " to "
   const parts = dateStr.split(/(\s*(?:-|–|—|to)\s*)/i);
-  
+
   if (parts.length <= 1) {
-    return formatSingleDate(dateStr);
+    return formatSingleDate(dateStr, shortMonths);
   }
-  
+
   return parts.map((part, index) => {
     if (index % 2 === 1) {
       // Normalize dash separators to " - " for premium look
@@ -220,7 +244,7 @@ export const formatResumeDate = (dateStr: string): string => {
       }
       return part;
     }
-    return formatSingleDate(part);
+    return formatSingleDate(part, shortMonths);
   }).join("");
 };
 

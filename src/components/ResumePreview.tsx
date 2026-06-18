@@ -1250,7 +1250,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
                                           className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                         >
-                                          {formatModernDate(exp.dates)}
+                                          {formatModernDate(exp.dates, selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL)}
                                         </span>
                                       </div>
                                     )}
@@ -1328,7 +1328,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
                                             className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                           >
-                                            {formatModernDate(exp.dates)}
+                                            {formatModernDate(exp.dates, selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL)}
                                           </span>
                                         </span>
                                       )}
@@ -1398,7 +1398,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
                                           className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
                                         >
-                                          {formatModernDate(exp.dates)}
+                                          {formatModernDate(exp.dates, selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL)}
                                         </span>
                                       </div>
                                     )}
@@ -1476,7 +1476,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
                                             className="hover:bg-slate-100 focus:bg-slate-100 transition-colors px-1 rounded cursor-text outline-none"
                                           >
-                                            {formatModernDate(exp.dates)}
+                                            {formatModernDate(exp.dates, selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL)}
                                           </span>
                                         </span>
                                       )}
@@ -1574,7 +1574,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
                                     className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
                                   >
-                                    {formatModernDate(edu.dates)}
+                                    {formatModernDate(edu.dates, selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL)}
                                   </span>
                                 </span>
                               )}

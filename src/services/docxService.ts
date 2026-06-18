@@ -84,6 +84,7 @@ export const generateResumeDoc = async (
   options?: { location?: boolean; phone?: boolean; email?: boolean }
 ): Promise<Blob> => {
   const isModern = format === ResumeFormat.MODERN_EXECUTIVE;
+  const isClassic = !isModern;
   
   // Dynamic Styles
   const FONT_FAMILY = isModern ? "Arial" : "Calibri";
@@ -162,7 +163,7 @@ export const generateResumeDoc = async (
     if (dates && dates !== "undefined") {
       children.push(
         new TextRun({
-          text: `\t${formatModernDate(dates)}`, // Tab to right, then date
+          text: `\t${formatModernDate(dates, isClassic)}`, // Tab to right, then date
           font: FONT_FAMILY,
           size: SIZE_TEXT,
           bold: true,
@@ -185,19 +186,18 @@ export const generateResumeDoc = async (
   };
 
   const createColumnList = (items: string[]) => {
-    const groupedItems = groupBulletPoints(items);
     const maxLen = Math.max(...items.map(i => i.length));
     const numCols = maxLen < 35 ? 3 : 2;
-    const rows = Math.ceil(groupedItems.length / numCols);
+    const rows = Math.ceil(items.length / numCols);
     const tableRows = [];
 
     for (let i = 0; i < rows; i++) {
       const cells = [];
       for (let c = 0; c < numCols; c++) {
         const itemIndex = i + c * rows;
-        const g = groupedItems[itemIndex];
+        const item = items[itemIndex];
         
-        if (!g) {
+        if (!item) {
           cells.push(new TableCell({
             children: [new Paragraph({ text: "" })],
             borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } }
@@ -205,54 +205,19 @@ export const generateResumeDoc = async (
           continue;
         }
 
-        const cellChildren: Paragraph[] = [];
-
-        if (g.key) {
-          if (g.values.length === 1) {
-            cellChildren.push(new Paragraph({
-              spacing: SINGLE_LINE,
-              children: [
-                new TextRun({ text: g.key + ": ", font: FONT_FAMILY, size: SIZE_TEXT, color: COLOR_BLACK, bold: true }),
-                new TextRun({ text: g.values[0].text, font: FONT_FAMILY, size: SIZE_TEXT, color: COLOR_BLACK })
-              ]
-            }));
-          } else {
-            cellChildren.push(new Paragraph({
-              spacing: SINGLE_LINE,
-              children: [
-                new TextRun({ text: g.key + ":", font: FONT_FAMILY, size: SIZE_TEXT, color: COLOR_BLACK, bold: true })
-              ]
-            }));
-            g.values.forEach(v => {
-              cellChildren.push(new Paragraph({
-                numbering: {
-                  reference: "custom-bullet",
-                  level: 0
-                },
-                spacing: SINGLE_LINE,
-                children: [
-                  new TextRun({ text: v.text, font: FONT_FAMILY, size: SIZE_TEXT, color: COLOR_BLACK })
-                ]
-              }));
-            });
-          }
-        } else {
-          g.values.forEach(v => {
-            cellChildren.push(new Paragraph({
+        cells.push(new TableCell({
+          children: [
+            new Paragraph({
               numbering: {
                 reference: "custom-bullet",
                 level: 0
               },
               spacing: SINGLE_LINE,
               children: [
-                new TextRun({ text: v.text, font: FONT_FAMILY, size: SIZE_TEXT, color: COLOR_BLACK })
+                new TextRun({ text: item, font: FONT_FAMILY, size: SIZE_TEXT, color: COLOR_BLACK })
               ]
-            }));
-          });
-        }
-
-        cells.push(new TableCell({
-          children: cellChildren,
+            })
+          ],
           borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
           margins: { top: 0, bottom: 0, left: 0, right: convertInchesToTwip(0.1) }
         }));
@@ -411,7 +376,7 @@ export const generateResumeDoc = async (
                   if (exp.dates && exp.dates !== "undefined") {
                     elements.push(new Paragraph({
                         spacing: SINGLE_LINE,
-                        children: [new TextRun({ text: formatModernDate(exp.dates), font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
+                        children: [new TextRun({ text: formatModernDate(exp.dates, isClassic), font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
                     }));
                   }
                   // Company, Location
@@ -463,7 +428,7 @@ export const generateResumeDoc = async (
                   if (exp.dates && exp.dates !== "undefined") {
                     elements.push(new Paragraph({
                         spacing: SINGLE_LINE,
-                        children: [new TextRun({ text: formatModernDate(exp.dates), font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
+                        children: [new TextRun({ text: formatModernDate(exp.dates, isClassic), font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
                     }));
                   }
                   elements.push(new Paragraph({
@@ -510,12 +475,12 @@ export const generateResumeDoc = async (
                
                if (isModern) {
                    // Modern Layout: Date -> Institution -> Degree
-                   if (edu.dates && edu.dates !== "undefined") {
-                     elements.push(new Paragraph({
-                         spacing: SINGLE_LINE,
-                         children: [new TextRun({ text: formatModernDate(edu.dates), font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
-                     }));
-                   }
+                    if (edu.dates && edu.dates !== "undefined") {
+                      elements.push(new Paragraph({
+                          spacing: SINGLE_LINE,
+                          children: [new TextRun({ text: formatModernDate(edu.dates, isClassic), font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
+                      }));
+                    }
                    elements.push(new Paragraph({
                        spacing: SINGLE_LINE,
                        children: [new TextRun({ text: `${stripTrailingDate(edu.institution)}${edu.location ? `, ${formatLocation(edu.location)}` : ''}`, font: FONT_FAMILY, size: SIZE_TEXT, bold: true, color: COLOR_BLACK })]
