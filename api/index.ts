@@ -14,9 +14,10 @@ import {
   extractResumeDataBackend, 
   analyzeGrammarBackend, 
   checkSpellingBackend, 
-  getUsageStatsBackend 
+  getUsageStatsBackend,
+  updateResumeBackend,
+  rewritePhraseBackend
 } from "../server/gemini";
-
 
 const app = express();
 const PORT = 3000;
@@ -67,6 +68,28 @@ app.post("/api/gemini/check-spelling", async (req, res) => {
   } catch (err: any) {
     console.error("Error in /api/gemini/check-spelling:", err);
     res.status(500).json({ error: err.message || "Failed to check spelling" });
+  }
+});
+
+app.post("/api/gemini/update-resume", async (req, res) => {
+  try {
+    const { data, instruction, targetJobDescription, format, usePro } = req.body;
+    const updated = await updateResumeBackend(data, instruction, targetJobDescription, format, usePro);
+    res.json(updated);
+  } catch (err: any) {
+    console.error("Error in /api/gemini/update-resume:", err);
+    res.status(500).json({ error: err.message || "Failed to update resume data" });
+  }
+});
+
+app.post("/api/gemini/rewrite-phrase", async (req, res) => {
+  try {
+    const { text, instruction, usePro } = req.body;
+    const suggestions = await rewritePhraseBackend(text, instruction, usePro);
+    res.json(suggestions);
+  } catch (err: any) {
+    console.error("Error in /api/gemini/rewrite-phrase:", err);
+    res.status(500).json({ error: err.message || "Failed to rewrite phrase" });
   }
 });
 
@@ -144,6 +167,8 @@ app.post("/api/submit", async (req, res) => {
     }
 
     const uid = typeof userId === 'string' && userId.trim().length > 0 ? userId.trim() : null;
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || req.ip || '';
+    const ip = typeof clientIp === 'string' && clientIp.includes(',') ? clientIp.split(',')[0].trim() : clientIp;
 
     try {
       if (!isFirebaseConfigured()) throw new Error("Firebase not configured");
@@ -153,6 +178,7 @@ app.post("/api/submit", async (req, res) => {
         id: resumeRef.id,
         content,
         status: 'pending',
+        ip_address: ip,
         created_at: new Date().toISOString()
       };
       if (uid) insertData.user_id = uid;
@@ -165,6 +191,7 @@ app.post("/api/submit", async (req, res) => {
         id: logRef.id,
         action: 'resume_submitted',
         details: { resume_id: resumeRef.id },
+        ip_address: ip,
         created_at: new Date().toISOString()
       };
       if (uid) logData.user_id = uid;
@@ -176,7 +203,7 @@ app.post("/api/submit", async (req, res) => {
       console.warn("Database error (falling back to in-memory):", dbError.message);
       
       const resumeId = crypto.randomUUID();
-      const newResume = { id: resumeId, user_id: uid, content, status: 'pending', created_at: new Date().toISOString() };
+      const newResume = { id: resumeId, user_id: uid, content, status: 'pending', ip_address: ip, created_at: new Date().toISOString() };
       inMemoryResumes.push(newResume);
       saveInMemoryResumes();
       

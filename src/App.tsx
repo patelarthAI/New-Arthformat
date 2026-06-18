@@ -505,7 +505,7 @@ const App: React.FC = () => {
         )}
 
         {showAdmin ? (
-          <AdminDashboard />
+          <AdminDashboard onClose={() => setShowAdmin(false)} />
         ) : (
           <>
             {appState !== AppState.REVIEW ? (

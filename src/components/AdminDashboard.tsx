@@ -15,7 +15,11 @@ interface PendingResume {
 
 type StatusFilter = 'pending' | 'approved' | 'rejected';
 
-const AdminDashboard: React.FC = () => {
+interface AdminDashboardProps {
+  onClose?: () => void;
+}
+
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [adminPassword, setAdminPassword] = useState<string | null>(() => {
     return safeStorage.getItem('adminPassword');
   });
@@ -235,6 +239,15 @@ const AdminDashboard: React.FC = () => {
           >
             <LogOut className="w-4 h-4" />
           </button>
+          {onClose && (
+            <button 
+              onClick={onClose}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+              title="Close Admin Panel"
+            >
+              Exit Admin
+            </button>
+          )}
         </div>
       </div>
 
