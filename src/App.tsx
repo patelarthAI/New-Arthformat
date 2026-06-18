@@ -565,7 +565,7 @@ const App: React.FC = () => {
 
                     <h1 className="hero-title font-display text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-none drop-shadow-[0_4px_16px_rgba(0,0,0,0.6)] relative inline-flex items-center justify-center">
                       {/* Desktop: Logo is positioned absolutely to the left of the title so the text's center matches the page center perfectly */}
-                      <span className="hidden md:inline-block absolute right-full top-1/2 -translate-y-1/2 mr-4 lg:mr-6 relative group transition-all duration-500 hover:scale-[1.03] active:scale-[0.98] flex-shrink-0">
+                      <span className="hidden md:inline-block absolute right-full top-1/2 -translate-y-1/2 mr-4 lg:mr-6 group transition-all duration-500 hover:scale-[1.03] active:scale-[0.98] flex-shrink-0">
                         <span className="absolute inset-0 rounded-full bg-gradient-to-tr from-indigo-500/20 via-purple-500/20 to-pink-500/20 blur-2xl opacity-80 pointer-events-none" />
                         <InteractiveLogo size="xl" />
                       </span>
