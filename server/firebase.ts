@@ -9,7 +9,9 @@ import {
   updateDoc, 
   deleteDoc, 
   query, 
-  where
+  where,
+  orderBy,
+  limit
 } from 'firebase/firestore';
 import crypto from 'crypto';
 
@@ -19,6 +21,10 @@ const SYSTEM_SECRET = 'SERVER_SECRET_ee62ff41-5153-437f-b485-66227c47d53d';
 import firebaseConfig from '../firebase-applet-config';
 
 export const isFirebaseConfigured = () => {
+  // Support manual disabling of Firebase via environment variable
+  if (process.env.DISABLE_FIREBASE === 'true') {
+    return false;
+  }
   // Disable Firebase client SDK on Vercel to prevent connection hangs/timeouts,
   // unless explicitly enabled via environment variable.
   if (process.env.VERCEL) {
@@ -150,3 +156,60 @@ class CollectionBuilder {
 }
 
 export const db = new CollectionBuilder();
+
+export const performAutoCleanup = async () => {
+  if (!isFirebaseConfigured()) return;
+  const dbInstance = getFirestoreDb();
+  if (!dbInstance) return;
+
+  try {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgoISO = thirtyDaysAgo.toISOString();
+
+    console.log(`[Firebase Auto-Cleanup] Starting cleanup routine. Threshold date: ${thirtyDaysAgoISO}`);
+
+    // 1. Delete resumes older than 30 days
+    const resumesCol = collection(dbInstance, 'resumes');
+    const oldResumesQuery = query(resumesCol, where('created_at', '<', thirtyDaysAgoISO));
+    const oldResumesSnap = await getDocs(oldResumesQuery);
+    
+    let deletedCount = 0;
+    for (const d of oldResumesSnap.docs) {
+      await deleteDoc(d.ref);
+      deletedCount++;
+    }
+    if (deletedCount > 0) {
+      console.log(`[Firebase Auto-Cleanup] Deleted ${deletedCount} resumes older than 30 days.`);
+    }
+
+    // 2. Delete activity logs older than 30 days
+    const logsCol = collection(dbInstance, 'activity_logs');
+    const oldLogsQuery = query(logsCol, where('created_at', '<', thirtyDaysAgoISO));
+    const oldLogsSnap = await getDocs(oldLogsQuery);
+    
+    let deletedLogsCount = 0;
+    for (const d of oldLogsSnap.docs) {
+      await deleteDoc(d.ref);
+      deletedLogsCount++;
+    }
+    if (deletedLogsCount > 0) {
+      console.log(`[Firebase Auto-Cleanup] Deleted ${deletedLogsCount} activity logs older than 30 days.`);
+    }
+
+    // 3. Keep at most 500 resumes (Quantity-based capping)
+    const capQuery = query(resumesCol, orderBy('created_at', 'desc'));
+    const capSnap = await getDocs(capQuery);
+    
+    if (capSnap.docs.length > 500) {
+      const docsToDelete = capSnap.docs.slice(500);
+      console.log(`[Firebase Auto-Cleanup] Resumes count (${capSnap.docs.length}) exceeds 500 limit. Deleting ${docsToDelete.length} oldest resumes.`);
+      for (const d of docsToDelete) {
+        await deleteDoc(d.ref);
+      }
+    }
+    console.log(`[Firebase Auto-Cleanup] Routine completed successfully.`);
+  } catch (error: any) {
+    console.error(`[Firebase Auto-Cleanup] Error during routine:`, error.message);
+  }
+};

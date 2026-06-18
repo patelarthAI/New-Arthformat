@@ -49,6 +49,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
   const [isChecking, setIsChecking] = useState(false);
   const [issues, setIssues] = useState<GrammarIssue[]>([]);
+  const [globalActiveIssueId, setGlobalActiveIssueId] = useState<string | null>(null);
   
   // Spacing sliders and dropdowns state (0 Credits)
   const [selectedFont, setSelectedFont] = useState<string>(
@@ -344,6 +345,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     
     setSaveStatus('saving');
     setCurrentHistoryIndex(revIndex);
+    setGlobalActiveIssueId(null);
     
     onUpdate(JSON.parse(JSON.stringify(rev.data)));
     
@@ -442,6 +444,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   const handleCheckGrammar = () => {
     if (issues.length > 0) {
       setIssues([]);
+      setGlobalActiveIssueId(null);
       return;
     }
 
@@ -555,6 +558,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
         updateData(newData, `Auto-fixed all (${issues.length}) grammar issues`);
     }
     setIssues([]);
+    setGlobalActiveIssueId(null);
   };
 
   const handleIgnoreIssue = (issue: GrammarIssue) => {
@@ -1280,7 +1284,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                       <GrammarHighlighter 
                                         text={bulletObj.text} 
                                         path={`summary.${bulletObj.originalIndex}`} 
-                                        issues={issues} 
+                                        issues={issues} activeIssueId={globalActiveIssueId} setActiveIssueId={setGlobalActiveIssueId} 
                                         onAccept={handleAcceptIssue} 
                                         onIgnore={handleIgnoreIssue} 
                                         onEdit={(newVal) => handleEditSummaryBullet(bulletObj.originalIndex, newVal)}
@@ -1299,7 +1303,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                     <GrammarHighlighter 
                                       text={item} 
                                       path={`summary.${idx}`} 
-                                      issues={issues} 
+                                      issues={issues} activeIssueId={globalActiveIssueId} setActiveIssueId={setGlobalActiveIssueId} 
                                       onAccept={handleAcceptIssue} 
                                       onIgnore={handleIgnoreIssue} 
                                       onEdit={(newVal) => handleEditSummaryBullet(idx, newVal)}
@@ -1475,7 +1479,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                     <GrammarHighlighter 
                                       text={bulletObj.text} 
                                       path={`experience.${idx}.description.${bulletObj.originalIndex}`}
-                                      issues={issues} 
+                                      issues={issues} activeIssueId={globalActiveIssueId} setActiveIssueId={setGlobalActiveIssueId} 
                                       onAccept={handleAcceptIssue} 
                                       onIgnore={handleIgnoreIssue} 
                                       onEdit={(newVal) => handleEditExpBullet(idx, bulletObj.originalIndex, newVal)}
@@ -1623,7 +1627,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                     <GrammarHighlighter 
                                       text={bulletObj.text} 
                                       path={`internships.${idx}.description.${bulletObj.originalIndex}`} 
-                                      issues={issues} 
+                                      issues={issues} activeIssueId={globalActiveIssueId} setActiveIssueId={setGlobalActiveIssueId} 
                                       onAccept={handleAcceptIssue} 
                                       onIgnore={handleIgnoreIssue} 
                                       onEdit={(newVal) => handleEditInternBullet(idx, bulletObj.originalIndex, newVal)}
@@ -1720,7 +1724,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                       <GrammarHighlighter 
                                         text={bulletObj.text} 
                                         path={`education.${idx}.details.${bulletObj.originalIndex}`} 
-                                        issues={issues} 
+                                        issues={issues} activeIssueId={globalActiveIssueId} setActiveIssueId={setGlobalActiveIssueId} 
                                         onAccept={handleAcceptIssue} 
                                         onIgnore={handleIgnoreIssue} 
                                         onEdit={(newVal) => handleEditEduDetail(idx, bulletObj.originalIndex, newVal)}
@@ -1793,7 +1797,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                                <GrammarHighlighter 
                                                  text={g.values[0].text} 
                                                  path={`customSections.${idx}.items.${g.values[0].originalIndex}`} 
-                                                 issues={issues} 
+                                                 issues={issues} activeIssueId={globalActiveIssueId} setActiveIssueId={setGlobalActiveIssueId} 
                                                  onAccept={handleAcceptIssue} 
                                                  onIgnore={handleIgnoreIssue} 
                                                  onEdit={(newVal) => handleEditCustomSectionItem(idx, g.values[0].originalIndex, newVal)}
@@ -1811,7 +1815,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                                      <GrammarHighlighter 
                                                        text={v.text} 
                                                        path={`customSections.${idx}.items.${v.originalIndex}`} 
-                                                       issues={issues} 
+                                                       issues={issues} activeIssueId={globalActiveIssueId} setActiveIssueId={setGlobalActiveIssueId} 
                                                        onAccept={handleAcceptIssue} 
                                                        onIgnore={handleIgnoreIssue} 
                                                        onEdit={(newVal) => handleEditCustomSectionItem(idx, v.originalIndex, newVal)}
@@ -1829,7 +1833,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                              <GrammarHighlighter 
                                                text={v.text} 
                                                path={`customSections.${idx}.items.${v.originalIndex}`} 
-                                               issues={issues} 
+                                               issues={issues} activeIssueId={globalActiveIssueId} setActiveIssueId={setGlobalActiveIssueId} 
                                                onAccept={handleAcceptIssue} 
                                                onIgnore={handleIgnoreIssue} 
                                                onEdit={(newVal) => handleEditCustomSectionItem(idx, v.originalIndex, newVal)}
@@ -2185,38 +2189,72 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
 
                 {/* 4. History (Version Snapshots & Logs) Tab */}
                 {activeTab === 'logs' && (
-                  <div className="space-y-6">
+                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     {/* Revisions snapshots list */}
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-bold text-slate-400 tracking-wider uppercase font-display">Version History Revisions</h4>
-                      <div className="relative border-l border-white/5 pl-4 ml-1.5 space-y-4 text-left">
-                        {historyStack.map((rev, revIdx) => (
-                          <div key={rev.id} className="relative">
-                            <span className={`absolute -left-[21px] w-2.5 h-2.5 rounded-full border-2 border-[#080b19] transition-colors ${
-                              revIdx === currentHistoryIndex 
-                                ? 'bg-indigo-500 ring-4 ring-indigo-500/20' 
-                                : 'bg-slate-700 hover:bg-slate-500'
-                            }`} />
-                            
-                            <div className="flex flex-col">
-                              <span className="text-xs font-medium text-slate-200">{rev.description}</span>
-                              <span className="text-[10px] text-slate-500 mt-0.5">
-                                {new Date(rev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                              </span>
-                              {revIdx !== currentHistoryIndex && (
-                                <button
-                                  onClick={() => handleRestoreRevision(revIdx)}
-                                  className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 text-left mt-1.5"
-                                >
-                                  Revert to this state
-                                </button>
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <History className="w-4 h-4 text-indigo-400" />
+                        <h4 className="text-xs font-bold text-slate-400 tracking-wider uppercase font-display">Version History Revisions</h4>
+                      </div>
+                      <div className="space-y-3">
+                        {historyStack.map((rev, revIdx) => {
+                          const isActive = revIdx === currentHistoryIndex;
+                          const isAI = rev.description.toLowerCase().includes('ai') || rev.description.toLowerCase().includes('upgrade') || rev.description.toLowerCase().includes('copilot');
+                          
+                          return (
+                            <motion.div 
+                              key={rev.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.2, delay: revIdx * 0.05 }}
+                              className={`p-4 rounded-2xl border transition-all duration-300 text-left relative flex flex-col gap-3 group ${
+                                isActive 
+                                  ? 'bg-indigo-500/[0.03] border-indigo-500/35 shadow-[0_0_20px_rgba(99,102,241,0.08)]' 
+                                  : 'bg-white/[0.01] border-white/5 hover:bg-white/[0.03] hover:border-white/10'
+                              }`}
+                            >
+                              {/* Top Bar inside card */}
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full ${
+                                    isActive 
+                                      ? 'bg-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.8)] animate-pulse' 
+                                      : 'bg-slate-650'
+                                  }`} />
+                                  <span className="text-[10px] text-slate-500 font-medium font-mono">
+                                    {new Date(rev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                  </span>
+                                </div>
+                                <span className={`text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-md ${
+                                  isActive
+                                    ? 'bg-indigo-500/15 text-indigo-350 border border-indigo-500/10'
+                                    : 'bg-white/5 text-slate-400 border border-white/5'
+                                }`}>
+                                  {isActive ? 'Active Version' : 'Snapshot'}
+                                </span>
+                              </div>
+
+                              {/* Title description */}
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-slate-200 flex-1 leading-relaxed">
+                                  {isAI ? '👔 ' : '✏️ '}{rev.description}
+                                </span>
+                              </div>
+
+                              {/* Action Bar */}
+                              {!isActive && (
+                                <div className="flex justify-end pt-1">
+                                  <button
+                                    onClick={() => handleRestoreRevision(revIdx)}
+                                    className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" /> Revert to this version
+                                  </button>
+                                </div>
                               )}
-                              {revIdx === currentHistoryIndex && (
-                                <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider mt-1">Active Version</span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                            </motion.div>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -2224,46 +2262,59 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
 
                     {/* Timeline of edits */}
                     {changeLog.length > 0 && (
-                      <div className="space-y-3">
-                        <h4 className="text-xs font-bold text-slate-400 tracking-wider uppercase font-display">Refiner Logs</h4>
-                        <div className="space-y-3">
-                          {changeLog.map((log) => (
-                            <div key={log.id} className="p-3 rounded-xl bg-white/[0.01] border border-white/[0.04] text-left">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-350 border border-indigo-500/5">
-                                    {log.path.split('.').pop()}
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <Layers className="w-4 h-4 text-indigo-400" />
+                          <h4 className="text-xs font-bold text-slate-400 tracking-wider uppercase font-display">Refiner Logs</h4>
+                        </div>
+                        <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
+                          {changeLog.map((log, logIdx) => (
+                            <motion.div 
+                              key={log.id} 
+                              initial={{ opacity: 0, x: 10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ duration: 0.2, delay: logIdx * 0.05 }}
+                              className="p-3.5 rounded-2xl bg-white/[0.01] border border-white/5 text-left flex flex-col gap-3"
+                            >
+                              {/* Header inside log card */}
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-350 border border-indigo-500/5">
+                                    {log.path.split('.').pop()?.replace(/\[\d+\]/g, '')}
                                 </span>
-                                <span className="text-[9px] text-slate-500 font-medium">
+                                <span className="text-[9px] text-slate-500 font-medium font-mono">
                                     {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </span>
                               </div>
                               
-                              <div className="space-y-1">
+                              {/* Diff Block */}
+                              <div className="space-y-1.5 text-xs font-sans">
                                 {log.path !== "Extraction" && (
-                                  <div className="text-[11px] text-slate-500 line-through opacity-75">
-                                      "{log.original}"
+                                  <div className="px-3 py-1.5 bg-rose-500/5 border border-rose-500/10 rounded-lg text-rose-300 font-light flex items-start gap-2 leading-relaxed">
+                                      <span className="text-rose-450 font-bold select-none">-</span>
+                                      <span className="break-words">"{log.original}"</span>
                                   </div>
                                 )}
-                                <div className="flex items-start gap-1.5 text-xs text-slate-200 leading-relaxed font-light">
-                                    <ArrowRight className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
-                                    <span>"{log.new}"</span>
+                                <div className="px-3 py-1.5 bg-emerald-500/5 border border-emerald-500/10 rounded-lg text-emerald-350 font-light flex items-start gap-2 leading-relaxed">
+                                    <span className="text-emerald-500/70 font-bold select-none">+</span>
+                                    <span className="break-words">"{log.new}"</span>
                                 </div>
                               </div>
 
-                              <div className="mt-3 flex items-center justify-between pt-2.5 border-t border-white/5">
-                                  <span className="text-[10px] text-slate-400 italic">
+                              {/* Footer Action */}
+                              <div className="flex items-center justify-between pt-2 border-t border-white/5 gap-4">
+                                  <span className="text-[10px] text-slate-400 italic truncate flex-1 font-light">
                                       {log.reason}
                                   </span>
                                   {log.path !== "Extraction" && (
                                       <button 
                                           onClick={() => handleUndoChange(log)}
-                                          className="text-[10px] font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 px-2 py-1 rounded"
+                                          className="text-[10px] font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/40 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
                                       >
-                                          Undo
+                                          <Undo2 className="w-3.5 h-3.5" /> Undo
                                       </button>
                                   )}
                               </div>
-                            </div>
+                            </motion.div>
                           ))}
                         </div>
                       </div>

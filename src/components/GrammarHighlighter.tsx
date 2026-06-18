@@ -13,6 +13,8 @@ interface GrammarHighlighterProps {
   className?: string;
   onEdit?: (newText: string) => void;
   onConfirmAI?: (title: string, description: string, cost: number, onConfirm: () => void) => void;
+  activeIssueId?: string | null;
+  setActiveIssueId?: (id: string | null) => void;
 }
 
 const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({ 
@@ -24,9 +26,15 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
   style,
   className,
   onEdit,
-  onConfirmAI
+  onConfirmAI,
+  activeIssueId,
+  setActiveIssueId
 }) => {
-  const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
+  const [localActiveIssueId, setLocalActiveIssueId] = useState<string | null>(null);
+  const isStateControlled = activeIssueId !== undefined && setActiveIssueId !== undefined;
+  const currentActiveIssueId = isStateControlled ? activeIssueId : localActiveIssueId;
+  const changeActiveIssueId = isStateControlled ? setActiveIssueId : setLocalActiveIssueId;
+
   const [popoverPosition, setPopoverPosition] = useState<'top' | 'bottom'>('bottom');
   const spanRef = useRef<HTMLSpanElement>(null);
   const [refineText, setRefineText] = useState<string>('');
@@ -36,7 +44,33 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
   useEffect(() => {
     setRefineText('');
     setIsRefining(false);
-  }, [activeIssueId]);
+  }, [currentActiveIssueId]);
+
+  // Handle clicking outside or Esc key to close suggestion popup
+  useEffect(() => {
+    if (!currentActiveIssueId) return;
+
+    const handleDocumentClick = (e: MouseEvent) => {
+      const triggerSpan = document.getElementById(`issue-${currentActiveIssueId}`);
+      if (triggerSpan && triggerSpan.contains(e.target as Node)) {
+        return;
+      }
+      changeActiveIssueId(null);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        changeActiveIssueId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleDocumentClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [currentActiveIssueId, changeActiveIssueId]);
 
   const handleRefine = async (issue: any) => {
     if (!refineText.trim()) return;
@@ -101,21 +135,17 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
   }
 
   // Sort issues by their position in the text to render them in order
-  // Note: We assume non-overlapping issues for simplicity, which is typical for LLM output
   const sortedIssues = [...fieldIssues]
     .map(issue => {
-        // Clean bullet from errorText just in case AI included it
         let cleanErrorText = issue.errorText.replace(/^\s*([\u2022\u25E6\u2023\u25B8\u25AA\u25AB\-\*\u2013\u2014\u2043\u2219\u25C6\u27A2\uF0D8\u00B7]\s*)+/, '').trim();
         let index = text.indexOf(cleanErrorText);
         
-        // Fallback: case-insensitive search if exact match fails
         if (index === -1) {
             const lowerText = text.toLowerCase();
             const lowerError = cleanErrorText.toLowerCase();
             index = lowerText.indexOf(lowerError);
         }
 
-        // Aggressive fallback: remove all non-alphanumeric characters and search
         if (index === -1) {
             const strip = (s: string) => s.replace(/[^a-z0-9]/gi, '');
             const strippedText = strip(text);
@@ -123,13 +153,10 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
             const strippedIndex = strippedText.indexOf(strippedError);
             
             if (strippedIndex !== -1) {
-                // We found a match in the stripped version, but we need the index in the original text.
-                // This is complex, so we'll just approximate it by finding the first word of the error
                 const firstWord = cleanErrorText.split(/\s+/)[0];
                 if (firstWord) {
                     index = text.toLowerCase().indexOf(firstWord.toLowerCase());
                     if (index !== -1) {
-                        // Adjust cleanErrorText to match the original text length approximately
                         cleanErrorText = text.substring(index, index + cleanErrorText.length);
                     }
                 }
@@ -154,7 +181,6 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
     let lastIndex = 0;
 
     sortedIssues.forEach((issue, idx) => {
-      // Add text before the error
       if (issue.index > lastIndex) {
         result.push(text.substring(lastIndex, issue.index));
       }
@@ -172,10 +198,10 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
           key={issue.id} 
           id={`issue-${issue.id}`}
           className="relative inline-block" 
-          style={{ zIndex: activeIssueId === issue.id ? 50 : 1 }}
+          style={{ zIndex: currentActiveIssueId === issue.id ? 50 : 1 }}
         >
           <span 
-            ref={activeIssueId === issue.id ? spanRef : null}
+            ref={currentActiveIssueId === issue.id ? spanRef : null}
             className={`${animationClass} cursor-pointer rounded-[2px] px-0.5 transition-all duration-200`}
             style={{
               borderBottom: `2px solid ${highlightColor}`,
@@ -183,16 +209,13 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
             }}
             onClick={(e) => {
                 e.stopPropagation();
-                if (activeIssueId === issue.id) {
-                    setActiveIssueId(null);
+                if (currentActiveIssueId === issue.id) {
+                    changeActiveIssueId(null);
                 } else {
-                    setActiveIssueId(issue.id);
-                    // Calculate position after a brief delay to allow render
+                    changeActiveIssueId(issue.id);
                     setTimeout(() => {
                         if (spanRef.current) {
                             const rect = spanRef.current.getBoundingClientRect();
-                            // If less than 250px from top, show below, otherwise top
-                            // But also consider if we are in a scrolling container
                             const container = document.getElementById('resume-preview-content');
                             if (container) {
                                 const containerRect = container.getBoundingClientRect();
@@ -217,7 +240,7 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
             {text.substring(issue.index, issue.index + issue.cleanErrorText.length)}
           </span>
           
-          {activeIssueId === issue.id && (
+          {currentActiveIssueId === issue.id && (
             <div 
               className={`absolute z-50 left-0 w-72 rounded-2xl shadow-2xl border p-4 text-sm font-sans backdrop-blur-xl animate-in fade-in zoom-in duration-250 ${
                 popoverPosition === 'top' ? 'bottom-full mb-2.5' : 'top-full mt-2.5'
@@ -246,7 +269,7 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
                     {(activeIssueSuggestions[issue.id] || issue.suggestions).map((suggestion, sIdx) => (
                         <button
                             key={sIdx}
-                            onClick={() => { onAccept({ ...issue, suggestions: [suggestion] }); setActiveIssueId(null); }}
+                            onClick={() => { onAccept({ ...issue, suggestions: [suggestion] }); changeActiveIssueId(null); }}
                             className={`text-left px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-all border border-transparent cursor-pointer ${
                                 isSpelling 
                                 ? 'hover:bg-red-500/20 text-red-200 border-red-500/20 hover:border-red-500/40 hover:shadow-[0_0_8px_rgba(239,68,68,0.25)]' 
@@ -268,7 +291,7 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
                            key={v}
                            onClick={() => {
                              onAccept({ ...issue, suggestions: [v] });
-                             setActiveIssueId(null);
+                             changeActiveIssueId(null);
                            }}
                            className="px-2 py-0.5 text-[9px] bg-white/5 hover:bg-indigo-500/25 text-indigo-300 hover:text-white rounded border border-white/5 transition-colors cursor-pointer"
                          >
@@ -313,7 +336,7 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
 
               <div className="flex gap-2 justify-end">
                 <button
-                  onClick={() => { onIgnore(issue); setActiveIssueId(null); }}
+                  onClick={() => { onIgnore(issue); changeActiveIssueId(null); }}
                   className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 flex items-center gap-1.5 cursor-pointer text-slate-300 transition-colors"
                 >
                   <X className="w-3.5 h-3.5" /> Ignore
@@ -334,7 +357,6 @@ const GrammarHighlighter: React.FC<GrammarHighlighterProps> = ({
       lastIndex = issue.index + issue.cleanErrorText.length;
     });
 
-    // Add remaining text
     if (lastIndex < text.length) {
       result.push(text.substring(lastIndex));
     }
