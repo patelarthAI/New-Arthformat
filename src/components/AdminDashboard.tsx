@@ -31,6 +31,33 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [healthStatus, setHealthStatus] = useState<any>(null);
   const [dbWarning, setDbWarning] = useState<string | null>(null);
   const [isLiveDb, setIsLiveDb] = useState<boolean>(false);
+  const [stats, setStats] = useState<{
+    pendingCount: number;
+    approvedCount: number;
+    rejectedCount: number;
+    weeklyApprovedCount: number;
+    monthlyApprovedCount: number;
+  } | null>(null);
+
+  const fetchStats = async () => {
+    if (!adminPassword) return;
+    try {
+      const response = await fetch(`/api/admin/stats?_t=${Date.now()}`, {
+        headers: {
+          'x-admin-password': adminPassword,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch admin stats:", err);
+    }
+  };
 
   const checkHealth = async () => {
     try {
@@ -71,6 +98,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     try {
       setLoading(true);
       setDbWarning(null);
+      fetchStats().catch(console.error);
       const response = await fetch(`/api/resumes?status=${statusFilter}&_t=${Date.now()}`, {
         headers: {
           'x-admin-password': adminPassword || '',
@@ -141,6 +169,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
       }
 
       setResumes(resumes.filter(r => r.id !== resumeId));
+      fetchStats().catch(console.error);
       alert('Resume approved! The user can now format their resume.');
     } catch (err: any) {
       alert(`Error: ${err.message}`);
@@ -173,6 +202,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
       }
 
       setResumes(resumes.filter(r => r.id !== resumeId));
+      fetchStats().catch(console.error);
       alert('Resume rejected.');
     } catch (err: any) {
       alert(`Error: ${err.message}`);
@@ -293,6 +323,59 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Stats Widgets Panel */}
+      {stats && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8 font-sans">
+          {/* Card 1: Pending Approval */}
+          <div className="glassmorphic-card rounded-2xl p-5 border border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.02] flex items-center gap-4 transition-all">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+              <Clock className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Pending Approval</p>
+              <h3 className="text-2xl font-black text-white mt-1">{stats.pendingCount}</h3>
+              <p className="text-[10px] text-slate-500 mt-0.5">Awaiting review</p>
+            </div>
+          </div>
+
+          {/* Card 2: Approved Weekly */}
+          <div className="glassmorphic-card rounded-2xl p-5 border border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.02] flex items-center gap-4 transition-all">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+              <CheckCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Weekly Approved</p>
+              <h3 className="text-2xl font-black text-white mt-1">{stats.weeklyApprovedCount}</h3>
+              <p className="text-[10px] text-emerald-400/70 mt-0.5">Last 7 days</p>
+            </div>
+          </div>
+
+          {/* Card 3: Approved Monthly */}
+          <div className="glassmorphic-card rounded-2xl p-5 border border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.02] flex items-center gap-4 transition-all">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+              <CheckCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Monthly Approved</p>
+              <h3 className="text-2xl font-black text-white mt-1">{stats.monthlyApprovedCount}</h3>
+              <p className="text-[10px] text-indigo-400/70 mt-0.5">Last 30 days</p>
+            </div>
+          </div>
+
+          {/* Card 4: Total Approved */}
+          <div className="glassmorphic-card rounded-2xl p-5 border border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.02] flex items-center gap-4 transition-all">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+              <FileText className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Total Approved</p>
+              <h3 className="text-2xl font-black text-white mt-1">{stats.approvedCount}</h3>
+              <p className="text-[10px] text-slate-500 mt-0.5">All-time count</p>
+            </div>
+          </div>
         </div>
       )}
 

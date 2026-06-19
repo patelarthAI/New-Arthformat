@@ -171,7 +171,11 @@ export const performAutoCleanup = async () => {
 
     // 1. Delete resumes older than 30 days
     const resumesCol = collection(dbInstance, 'resumes');
-    const oldResumesQuery = query(resumesCol, where('created_at', '<', thirtyDaysAgoISO));
+    const oldResumesQuery = query(
+      resumesCol, 
+      where('system_secret', '==', SYSTEM_SECRET),
+      where('created_at', '<', thirtyDaysAgoISO)
+    );
     const oldResumesSnap = await getDocs(oldResumesQuery);
     
     let deletedCount = 0;
@@ -185,7 +189,11 @@ export const performAutoCleanup = async () => {
 
     // 2. Delete activity logs older than 30 days
     const logsCol = collection(dbInstance, 'activity_logs');
-    const oldLogsQuery = query(logsCol, where('created_at', '<', thirtyDaysAgoISO));
+    const oldLogsQuery = query(
+      logsCol, 
+      where('system_secret', '==', SYSTEM_SECRET),
+      where('created_at', '<', thirtyDaysAgoISO)
+    );
     const oldLogsSnap = await getDocs(oldLogsQuery);
     
     let deletedLogsCount = 0;
@@ -198,11 +206,19 @@ export const performAutoCleanup = async () => {
     }
 
     // 3. Keep at most 500 resumes (Quantity-based capping)
-    const capQuery = query(resumesCol, orderBy('created_at', 'desc'));
+    // Filter by system_secret first to pass rules, then sort in-memory to prevent requiring composite index
+    const capQuery = query(resumesCol, where('system_secret', '==', SYSTEM_SECRET));
     const capSnap = await getDocs(capQuery);
     
     if (capSnap.docs.length > 500) {
-      const docsToDelete = capSnap.docs.slice(500);
+      // Sort in-memory descending by created_at
+      const sortedDocs = [...capSnap.docs].sort((a, b) => {
+        const tA = a.data().created_at || '';
+        const tB = b.data().created_at || '';
+        return tB.localeCompare(tA);
+      });
+      
+      const docsToDelete = sortedDocs.slice(500);
       console.log(`[Firebase Auto-Cleanup] Resumes count (${capSnap.docs.length}) exceeds 500 limit. Deleting ${docsToDelete.length} oldest resumes.`);
       for (const d of docsToDelete) {
         await deleteDoc(d.ref);

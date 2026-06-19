@@ -390,7 +390,11 @@ app.post("/api/approve", checkAdmin, async (req, res) => {
       if (!isFirebaseConfigured()) throw new Error("Firebase not configured");
       
       const resumeRef = db.collection('resumes').doc(resumeId);
-      await resumeRef.update({ status: 'approved' });
+      const nowStr = new Date().toISOString();
+      await resumeRef.update({ 
+        status: 'approved',
+        approved_at: nowStr
+      });
       
       const docVal = await resumeRef.get();
       const resume = { id: docVal.id, ...docVal.data() };
@@ -401,7 +405,7 @@ app.post("/api/approve", checkAdmin, async (req, res) => {
         id: logRef.id,
         action: 'resume_approved',
         details: { resume_id: resumeId, approved_by: 'admin' },
-        created_at: new Date().toISOString()
+        created_at: nowStr
       });
 
       res.status(200).json({ message: "Resume approved successfully", resume });
@@ -414,12 +418,104 @@ app.post("/api/approve", checkAdmin, async (req, res) => {
       }
       
       inMemoryResumes[resumeIndex].status = 'approved';
+      inMemoryResumes[resumeIndex].approved_at = new Date().toISOString();
       saveInMemoryResumes();
       res.status(200).json({ message: "Resume approved successfully (local database)", resume: inMemoryResumes[resumeIndex] });
     }
   } catch (error: any) {
     console.error("Error approving resume:", error);
     res.status(500).json({ error: error.message || "Failed to approve resume" });
+  }
+});
+
+// API Route for fetching admin dashboard statistics
+app.get("/api/admin/stats", checkAdmin, async (req, res) => {
+  try {
+    let pendingCount = 0;
+    let approvedCount = 0;
+    let rejectedCount = 0;
+    let weeklyApprovedCount = 0;
+    let monthlyApprovedCount = 0;
+
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    try {
+      if (!isFirebaseConfigured()) throw new Error("Firebase not configured");
+      
+      const SYSTEM_SECRET = 'SERVER_SECRET_ee62ff41-5153-437f-b485-66227c47d53d';
+      const resumesSnapshot = await db.collection('resumes').where('system_secret', '==', SYSTEM_SECRET).get();
+      
+      resumesSnapshot.docs.forEach((doc: any) => {
+        const r = doc.data();
+        let status = (r.rejected || r.content?.rejected) ? 'rejected' : r.status;
+        
+        if (status === 'pending') {
+          pendingCount++;
+        } else if (status === 'rejected') {
+          rejectedCount++;
+        } else if (status === 'approved') {
+          approvedCount++;
+          
+          const approvedAtStr = r.approved_at || r.created_at;
+          if (approvedAtStr) {
+            const approvedAt = new Date(approvedAtStr);
+            if (approvedAt >= oneWeekAgo) {
+              weeklyApprovedCount++;
+            }
+            if (approvedAt >= oneMonthAgo) {
+              monthlyApprovedCount++;
+            }
+          }
+        }
+      });
+      
+      res.json({
+        pendingCount,
+        approvedCount,
+        rejectedCount,
+        weeklyApprovedCount,
+        monthlyApprovedCount,
+        usingDatabase: true
+      });
+    } catch (dbError: any) {
+      console.warn("Database error (falling back to in-memory stats):", dbError.message);
+      
+      inMemoryResumes.forEach((r: any) => {
+        const status = r.status;
+        if (status === 'pending') {
+          pendingCount++;
+        } else if (status === 'rejected') {
+          rejectedCount++;
+        } else if (status === 'approved') {
+          approvedCount++;
+          
+          const approvedAtStr = r.approved_at || r.created_at;
+          if (approvedAtStr) {
+            const approvedAt = new Date(approvedAtStr);
+            if (approvedAt >= oneWeekAgo) {
+              weeklyApprovedCount++;
+            }
+            if (approvedAt >= oneMonthAgo) {
+              monthlyApprovedCount++;
+            }
+          }
+        }
+      });
+      
+      res.json({
+        pendingCount,
+        approvedCount,
+        rejectedCount,
+        weeklyApprovedCount,
+        monthlyApprovedCount,
+        usingDatabase: false
+      });
+    }
+  } catch (error: any) {
+    console.error("Error calculating stats:", error);
+    res.status(500).json({ error: error.message || "Failed to calculate statistics" });
   }
 });
 
