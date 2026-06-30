@@ -31,6 +31,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [healthStatus, setHealthStatus] = useState<any>(null);
   const [dbWarning, setDbWarning] = useState<string | null>(null);
   const [isLiveDb, setIsLiveDb] = useState<boolean>(false);
+  const [activeProjectId, setActiveProjectId] = useState<string>('formatai-889f7');
   const [stats, setStats] = useState<{
     pendingCount: number;
     approvedCount: number;
@@ -131,6 +132,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
       const data = await response.json();
       setResumes(data.resumes || []);
       setIsLiveDb(data.usingDatabase === true);
+      if (data.projectId) {
+        setActiveProjectId(data.projectId);
+      }
       if (data.usingDatabase === false) {
         setDbWarning(data.dbError || "Sandbox persistent database is active.");
       } else {
@@ -292,7 +296,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                 <div className="text-sm">
                   <h4 className="font-semibold text-amber-200">Firestore Quota Limit Exceeded</h4>
                   <p className="text-amber-200/70 text-xs mt-1">
-                    Your Firebase project <code className="bg-white/5 px-1 py-0.5 rounded font-mono text-amber-300">formatai-889f7</code> has exceeded its free tier daily read/write quota.
+                    Your Firebase project <code className="bg-white/5 px-1 py-0.5 rounded font-mono text-amber-300">{activeProjectId}</code> has exceeded its free tier daily read/write quota.
                   </p>
                   <p className="text-slate-400 text-xs mt-2">
                     The database has temporarily gone offline until Google resets the daily quota. The app is currently running in <strong>Bypass Sandbox Mode</strong>. No data will be lost. To avoid quota checks, you can upgrade your Firebase project to the pay-as-you-go (Blaze) plan.
@@ -300,7 +304,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                 </div>
               </div>
               <a
-                href="https://console.firebase.google.com/project/formatai-889f7/usage"
+                href={`https://console.firebase.google.com/project/${activeProjectId}/usage`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs rounded-lg shadow-md transition-all shrink-0 text-center inline-flex items-center justify-center gap-1.5 whitespace-nowrap self-start md:self-auto"
@@ -316,7 +320,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                 <div className="text-sm">
                   <h4 className="font-semibold text-rose-200">Cloud Firestore API Disabled</h4>
                   <p className="text-rose-200/70 text-xs mt-1">
-                    Your Firebase service account uploaded for project <code className="bg-white/5 px-1 py-0.5 rounded font-mono text-rose-300">formatai-889f7</code> is loaded, but the <strong>Cloud Firestore API</strong> is not enabled in that project.
+                    Your Firebase service account uploaded for project <code className="bg-white/5 px-1 py-0.5 rounded font-mono text-rose-300">{activeProjectId}</code> is loaded, but the <strong>Cloud Firestore API</strong> is not enabled in that project.
                   </p>
                   <p className="text-slate-400 text-xs mt-2">
                     The app has safely fallen back to <strong>Local Sandbox Server Mode</strong> and is <strong>fully persisting</strong> everything to <code className="bg-white/5 px-1.5 py-0.5 rounded text-indigo-300 font-mono">resumes_db.json</code>. No actions or data will be lost. To activate Google Cloud Firestore, click the button on the right to enable the API.
@@ -324,7 +328,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                 </div>
               </div>
               <a
-                href="https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=formatai-889f7"
+                href={`https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=${activeProjectId}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs rounded-lg shadow-md transition-all shrink-0 text-center inline-flex items-center justify-center gap-1.5 whitespace-nowrap self-start md:self-auto"

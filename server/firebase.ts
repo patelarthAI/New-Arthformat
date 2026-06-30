@@ -19,7 +19,18 @@ import crypto from 'crypto';
 // Define the core server secret token used for secure Attribute-Based Access Control (ABAC) in security rules
 const SYSTEM_SECRET = 'SERVER_SECRET_ee62ff41-5153-437f-b485-66227c47d53d';
 
-import firebaseConfig from '../firebase-applet-config';
+import rawConfig from '../firebase-applet-config';
+
+export const firebaseConfig = {
+  projectId: process.env.FIREBASE_PROJECT_ID || rawConfig.projectId,
+  appId: process.env.FIREBASE_APP_ID || rawConfig.appId,
+  apiKey: process.env.FIREBASE_API_KEY || rawConfig.apiKey,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN || rawConfig.authDomain,
+  firestoreDatabaseId: process.env.FIREBASE_FIRESTORE_DATABASE_ID || rawConfig.firestoreDatabaseId,
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || rawConfig.storageBucket,
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || rawConfig.messagingSenderId,
+  measurementId: process.env.FIREBASE_MEASUREMENT_ID || rawConfig.measurementId,
+};
 
 export const isFirebaseConfigured = () => {
   // Support manual disabling of Firebase via environment variable

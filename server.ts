@@ -11,7 +11,7 @@ import fs from "fs";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-import { db, isFirebaseConfigured, performAutoCleanup } from "./server/firebase";
+import { db, isFirebaseConfigured, performAutoCleanup, firebaseConfig } from "./server/firebase";
 import { 
   extractResumeDataBackend, 
   analyzeGrammarBackend, 
@@ -371,7 +371,7 @@ app.get("/api/resumes", checkAdmin, async (req, res) => {
           return tB - tA;
         });
 
-        res.status(200).json({ resumes, usingDatabase: true });
+        res.status(200).json({ resumes, usingDatabase: true, projectId: firebaseConfig.projectId });
       } catch (dbError: any) {
         console.warn("Database error (falling back to in-memory):", dbError.message);
         if (process.env.VERCEL && process.env.BYPASS_DB_ON_ERROR !== 'true') {
@@ -384,14 +384,14 @@ app.get("/api/resumes", checkAdmin, async (req, res) => {
         if (status && typeof status === 'string') {
           filtered = filtered.filter(r => r.status === status);
         }
-        res.status(200).json({ resumes: filtered, usingDatabase: false, dbError: dbError.message });
+        res.status(200).json({ resumes: filtered, usingDatabase: false, dbError: dbError.message, projectId: firebaseConfig.projectId });
       }
     } else {
       let filtered = inMemoryResumes;
       if (status && typeof status === 'string') {
         filtered = filtered.filter(r => r.status === status);
       }
-      res.status(200).json({ resumes: filtered, usingDatabase: false });
+      res.status(200).json({ resumes: filtered, usingDatabase: false, projectId: firebaseConfig.projectId });
     }
   } catch (error: any) {
     console.error("Error fetching resumes:", error);
