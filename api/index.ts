@@ -237,6 +237,11 @@ app.post("/api/submit", async (req, res) => {
       res.status(200).json({ message: "Resume submitted successfully", resume: insertData });
     } catch (dbError: any) {
       console.warn("Database error (falling back to in-memory):", dbError.message);
+      if (process.env.VERCEL) {
+        return res.status(503).json({ 
+          error: `Database connection failed: ${dbError.message}. If deploying on Vercel, please ensure ENABLE_FIREBASE=true and your Firebase config is set.` 
+        });
+      }
       
       const resumeId = crypto.randomUUID();
       const newResume = { 
@@ -327,6 +332,11 @@ app.get("/api/resumes", checkAdmin, async (req, res) => {
       res.status(200).json({ resumes, usingDatabase: true });
     } catch (dbError: any) {
       console.warn("Database error (falling back to in-memory):", dbError.message);
+      if (process.env.VERCEL) {
+        return res.status(503).json({ 
+          error: `Database connection failed: ${dbError.message}. If deploying on Vercel, please ensure ENABLE_FIREBASE=true.` 
+        });
+      }
       
       let filtered = inMemoryResumes;
       if (status && typeof status === 'string') {
@@ -361,6 +371,11 @@ app.get("/api/resumes/:id/status", async (req, res) => {
       });
     } catch (dbError: any) {
       console.warn("Database error (falling back to in-memory):", dbError.message);
+      if (process.env.VERCEL) {
+        return res.status(503).json({ 
+          error: `Database connection failed: ${dbError.message}.` 
+        });
+      }
       const resume = inMemoryResumes.find(r => r.id === id);
       if (!resume) {
         return res.status(404).json({ error: "Resume not found" });
@@ -411,6 +426,11 @@ app.post("/api/approve", checkAdmin, async (req, res) => {
       res.status(200).json({ message: "Resume approved successfully", resume });
     } catch (dbError: any) {
       console.warn("Database error (falling back to in-memory):", dbError.message);
+      if (process.env.VERCEL) {
+        return res.status(503).json({ 
+          error: `Database connection failed: ${dbError.message}.` 
+        });
+      }
       
       const resumeIndex = inMemoryResumes.findIndex(r => r.id === resumeId);
       if (resumeIndex === -1) {
@@ -481,6 +501,11 @@ app.get("/api/admin/stats", checkAdmin, async (req, res) => {
       });
     } catch (dbError: any) {
       console.warn("Database error (falling back to in-memory stats):", dbError.message);
+      if (process.env.VERCEL) {
+        return res.status(503).json({ 
+          error: `Database connection failed: ${dbError.message}.` 
+        });
+      }
       
       inMemoryResumes.forEach((r: any) => {
         const status = r.status;
@@ -557,6 +582,11 @@ app.post("/api/reject", checkAdmin, async (req, res) => {
       res.status(200).json({ message: "Resume rejected successfully", resume });
     } catch (dbError: any) {
       console.warn("Database error (falling back to in-memory):", dbError.message);
+      if (process.env.VERCEL) {
+        return res.status(503).json({ 
+          error: `Database connection failed: ${dbError.message}.` 
+        });
+      }
       
       const resumeIndex = inMemoryResumes.findIndex(r => r.id === resumeId);
       if (resumeIndex === -1) {
