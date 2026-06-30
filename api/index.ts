@@ -220,45 +220,61 @@ app.post("/api/submit", async (req, res) => {
     // Run Firestore auto-cleanup asynchronously
     performAutoCleanup().catch(err => console.error("[Auto-Cleanup] Trigger failed:", err));
 
-    try {
-      if (!isFirebaseConfigured()) throw new Error("Firebase not configured");
-      
-      const resumeRef = db.collection('resumes').doc();
-      const insertData: any = {
-        id: resumeRef.id,
-        content,
-        status: 'pending',
-        ip_address: ip,
-        device_info: deviceInfo,
-        created_at: new Date().toISOString()
-      };
-      if (uid) insertData.user_id = uid;
+    const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
+    if (useDatabase) {
+      try {
+        const resumeRef = db.collection('resumes').doc();
+        const insertData: any = {
+          id: resumeRef.id,
+          content,
+          status: 'pending',
+          ip_address: ip,
+          device_info: deviceInfo,
+          created_at: new Date().toISOString()
+        };
+        if (uid) insertData.user_id = uid;
 
-      await resumeRef.set(insertData);
+        await resumeRef.set(insertData);
 
-      // 2. Log the action
-      const logRef = db.collection('activity_logs').doc();
-      const logData: any = {
-        id: logRef.id,
-        action: 'resume_submitted',
-        details: { resume_id: resumeRef.id },
-        ip_address: ip,
-        device_info: deviceInfo,
-        created_at: new Date().toISOString()
-      };
-      if (uid) logData.user_id = uid;
+        // 2. Log the action
+        const logRef = db.collection('activity_logs').doc();
+        const logData: any = {
+          id: logRef.id,
+          action: 'resume_submitted',
+          details: { resume_id: resumeRef.id },
+          ip_address: ip,
+          device_info: deviceInfo,
+          created_at: new Date().toISOString()
+        };
+        if (uid) logData.user_id = uid;
 
-      await logRef.set(logData);
+        await logRef.set(logData);
 
-      res.status(200).json({ message: "Resume submitted successfully", resume: insertData });
-    } catch (dbError: any) {
-      console.warn("Database error (falling back to in-memory):", dbError.message);
-      if (process.env.VERCEL) {
-        return res.status(503).json({ 
-          error: `Database connection failed: ${dbError.message}. If deploying on Vercel, please ensure ENABLE_FIREBASE=true and your Firebase config is set.` 
-        });
+        res.status(200).json({ message: "Resume submitted successfully", resume: insertData });
+      } catch (dbError: any) {
+        console.warn("Database error (falling back to in-memory):", dbError.message);
+        if (process.env.VERCEL && process.env.BYPASS_DB_ON_ERROR !== 'true') {
+          return res.status(503).json({ 
+            error: `Database connection failed: ${dbError.message}. If deploying on Vercel, please ensure ENABLE_FIREBASE=true and your Firebase config is set. To temporarily bypass this and run in-memory, set BYPASS_DB_ON_ERROR=true in your environment variables.` 
+          });
+        }
+        
+        const resumeId = crypto.randomUUID();
+        const newResume = { 
+          id: resumeId, 
+          user_id: uid, 
+          content, 
+          status: 'pending', 
+          ip_address: ip, 
+          device_info: deviceInfo, 
+          created_at: new Date().toISOString() 
+        };
+        inMemoryResumes.push(newResume);
+        saveInMemoryResumes();
+        
+        res.status(200).json({ message: "Resume submitted successfully (local database)", resume: newResume });
       }
-      
+    } else {
       const resumeId = crypto.randomUUID();
       const newResume = { 
         id: resumeId, 
@@ -306,59 +322,66 @@ app.get("/api/resumes", checkAdmin, async (req, res) => {
   try {
     const { status } = req.query;
     
-    try {
-      if (!isFirebaseConfigured()) throw new Error("Firebase not configured");
-      
-      let q: any = db.collection('resumes');
-      
-      if (status === 'pending' || status === 'rejected') {
-        q = q.where('status', '==', 'pending');
-      } else if (status === 'approved') {
-        q = q.where('status', '==', 'approved');
-      }
+    const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
+    if (useDatabase) {
+      try {
+        let q: any = db.collection('resumes');
         
-      const snapshot = await q.get();
-      
-      // Map the status for the frontend
-      let resumes = snapshot.docs.map(doc => {
-        const r = doc.data();
-        let currentStatus = (r.rejected || r.content?.rejected) ? 'rejected' : r.status;
-        return {
-          id: doc.id,
-          status: currentStatus,
-          created_at: r.created_at,
-          content: r.content,
-          ip_address: r.ip_address || '',
-          device_info: r.device_info || ''
-        };
-      });
-
-      // Re-filter in memory to account for lazy rejections and the removed pending filter
-      if (status && typeof status === 'string') {
-        resumes = resumes.filter(r => r.status === status);
-      }
-
-      // Sort in memory directly by created_at desc to avoid requiring any custom compound/composite index
-      resumes.sort((a: any, b: any) => {
-        const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
-        return tB - tA;
-      });
-
-      res.status(200).json({ resumes, usingDatabase: true });
-    } catch (dbError: any) {
-      console.warn("Database error (falling back to in-memory):", dbError.message);
-      if (process.env.VERCEL) {
-        return res.status(503).json({ 
-          error: `Database connection failed: ${dbError.message}. If deploying on Vercel, please ensure ENABLE_FIREBASE=true.` 
+        if (status === 'pending' || status === 'rejected') {
+          q = q.where('status', '==', 'pending');
+        } else if (status === 'approved') {
+          q = q.where('status', '==', 'approved');
+        }
+          
+        const snapshot = await q.get();
+        
+        // Map the status for the frontend
+        let resumes = snapshot.docs.map(doc => {
+          const r = doc.data();
+          let currentStatus = (r.rejected || r.content?.rejected) ? 'rejected' : r.status;
+          return {
+            id: doc.id,
+            status: currentStatus,
+            created_at: r.created_at,
+            content: r.content,
+            ip_address: r.ip_address || '',
+            device_info: r.device_info || ''
+          };
         });
+
+        // Re-filter in memory to account for lazy rejections and the removed pending filter
+        if (status && typeof status === 'string') {
+          resumes = resumes.filter(r => r.status === status);
+        }
+
+        // Sort in memory directly by created_at desc to avoid requiring any custom compound/composite index
+        resumes.sort((a: any, b: any) => {
+          const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return tB - tA;
+        });
+
+        res.status(200).json({ resumes, usingDatabase: true });
+      } catch (dbError: any) {
+        console.warn("Database error (falling back to in-memory):", dbError.message);
+        if (process.env.VERCEL && process.env.BYPASS_DB_ON_ERROR !== 'true') {
+          return res.status(503).json({ 
+            error: `Database connection failed: ${dbError.message}. If deploying on Vercel, please ensure ENABLE_FIREBASE=true. To temporarily bypass this and run in-memory, set BYPASS_DB_ON_ERROR=true in your environment variables.` 
+          });
+        }
+        
+        let filtered = inMemoryResumes;
+        if (status && typeof status === 'string') {
+          filtered = filtered.filter(r => r.status === status);
+        }
+        res.status(200).json({ resumes: filtered, usingDatabase: false, dbError: dbError.message });
       }
-      
+    } else {
       let filtered = inMemoryResumes;
       if (status && typeof status === 'string') {
         filtered = filtered.filter(r => r.status === status);
       }
-      res.status(200).json({ resumes: filtered, usingDatabase: false, dbError: dbError.message });
+      res.status(200).json({ resumes: filtered, usingDatabase: false });
     }
   } catch (error: any) {
     console.error("Error fetching resumes:", error);
@@ -371,27 +394,39 @@ app.get("/api/resumes/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
     
-    try {
-      if (!isFirebaseConfigured()) throw new Error("Firebase not configured");
-      const docVal = await db.collection('resumes').doc(id).get();
-      if (!docVal.exists) {
-        throw new Error("Resume not found");
-      }
-      const resume = docVal.data() || {};
-      
-      let currentStatus = resume.content?.rejected ? 'rejected' : resume.status;
+    const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
+    if (useDatabase) {
+      try {
+        const docVal = await db.collection('resumes').doc(id).get();
+        if (!docVal.exists) {
+          throw new Error("Resume not found");
+        }
+        const resume = docVal.data() || {};
+        
+        let currentStatus = resume.content?.rejected ? 'rejected' : resume.status;
 
-      res.status(200).json({ 
-        status: currentStatus,
-        content: resume.content // Send content back so frontend can recover after refresh
-      });
-    } catch (dbError: any) {
-      console.warn("Database error (falling back to in-memory):", dbError.message);
-      if (process.env.VERCEL) {
-        return res.status(503).json({ 
-          error: `Database connection failed: ${dbError.message}.` 
+        res.status(200).json({ 
+          status: currentStatus,
+          content: resume.content // Send content back so frontend can recover after refresh
+        });
+      } catch (dbError: any) {
+        console.warn("Database error (falling back to in-memory):", dbError.message);
+        if (process.env.VERCEL && process.env.BYPASS_DB_ON_ERROR !== 'true') {
+          return res.status(503).json({ 
+            error: `Database connection failed: ${dbError.message}. To temporarily bypass this and run in-memory, set BYPASS_DB_ON_ERROR=true in your environment variables.` 
+          });
+        }
+        const resume = inMemoryResumes.find(r => r.id === id);
+        if (!resume) {
+          return res.status(404).json({ error: "Resume not found" });
+        }
+        
+        res.status(200).json({ 
+          status: resume.status,
+          content: resume.content 
         });
       }
+    } else {
       const resume = inMemoryResumes.find(r => r.id === id);
       if (!resume) {
         return res.status(404).json({ error: "Resume not found" });
@@ -417,37 +452,48 @@ app.post("/api/approve", checkAdmin, async (req, res) => {
       return res.status(400).json({ error: "Resume ID is required" });
     }
 
-    try {
-      if (!isFirebaseConfigured()) throw new Error("Firebase not configured");
-      
-      const resumeRef = db.collection('resumes').doc(resumeId);
-      const nowStr = new Date().toISOString();
-      await resumeRef.update({ 
-        status: 'approved',
-        approved_at: nowStr
-      });
-      
-      const docVal = await resumeRef.get();
-      const resume = { id: docVal.id, ...docVal.data() };
-
-      // 2. Log the approval
-      const logRef = db.collection('activity_logs').doc();
-      await logRef.set({
-        id: logRef.id,
-        action: 'resume_approved',
-        details: { resume_id: resumeId, approved_by: 'admin' },
-        created_at: nowStr
-      });
-
-      res.status(200).json({ message: "Resume approved successfully", resume });
-    } catch (dbError: any) {
-      console.warn("Database error (falling back to in-memory):", dbError.message);
-      if (process.env.VERCEL) {
-        return res.status(503).json({ 
-          error: `Database connection failed: ${dbError.message}.` 
+    const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
+    if (useDatabase) {
+      try {
+        const resumeRef = db.collection('resumes').doc(resumeId);
+        const nowStr = new Date().toISOString();
+        await resumeRef.update({ 
+          status: 'approved',
+          approved_at: nowStr
         });
+        
+        const docVal = await resumeRef.get();
+        const resume = { id: docVal.id, ...docVal.data() };
+
+        // 2. Log the approval
+        const logRef = db.collection('activity_logs').doc();
+        await logRef.set({
+          id: logRef.id,
+          action: 'resume_approved',
+          details: { resume_id: resumeId, approved_by: 'admin' },
+          created_at: nowStr
+        });
+
+        res.status(200).json({ message: "Resume approved successfully", resume });
+      } catch (dbError: any) {
+        console.warn("Database error (falling back to in-memory):", dbError.message);
+        if (process.env.VERCEL && process.env.BYPASS_DB_ON_ERROR !== 'true') {
+          return res.status(503).json({ 
+            error: `Database connection failed: ${dbError.message}. To temporarily bypass this and run in-memory, set BYPASS_DB_ON_ERROR=true in your environment variables.` 
+          });
+        }
+        
+        const resumeIndex = inMemoryResumes.findIndex(r => r.id === resumeId);
+        if (resumeIndex === -1) {
+          return res.status(404).json({ error: "Resume not found in memory" });
+        }
+        
+        inMemoryResumes[resumeIndex].status = 'approved';
+        inMemoryResumes[resumeIndex].approved_at = new Date().toISOString();
+        saveInMemoryResumes();
+        res.status(200).json({ message: "Resume approved successfully (local database)", resume: inMemoryResumes[resumeIndex] });
       }
-      
+    } else {
       const resumeIndex = inMemoryResumes.findIndex(r => r.id === resumeId);
       if (resumeIndex === -1) {
         return res.status(404).json({ error: "Resume not found in memory" });
@@ -477,51 +523,84 @@ app.get("/api/admin/stats", checkAdmin, async (req, res) => {
     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    try {
-      if (!isFirebaseConfigured()) throw new Error("Firebase not configured");
-      
-      // Calculate status counts efficiently using Firestore count queries (only counts documents on server, which counts as 1 read per query or per 1,000 docs)
-      pendingCount = await db.collection('resumes').where('status', '==', 'pending').count();
-      approvedCount = await db.collection('resumes').where('status', '==', 'approved').count();
-      rejectedCount = await db.collection('resumes').where('status', '==', 'rejected').count();
+    const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
+    if (useDatabase) {
+      try {
+        // Calculate status counts efficiently using Firestore count queries (only counts documents on server, which counts as 1 read per query or per 1,000 docs)
+        pendingCount = await db.collection('resumes').where('status', '==', 'pending').count();
+        approvedCount = await db.collection('resumes').where('status', '==', 'approved').count();
+        rejectedCount = await db.collection('resumes').where('status', '==', 'rejected').count();
 
-      // Retrieve recent approved documents to calculate time-series metrics.
-      // This is a single-field range query on approved_at, which uses standard indexing without composite index.
-      const recentSnapshot = await db.collection('resumes')
-        .where('approved_at', '>=', oneMonthAgo.toISOString())
-        .get();
+        // Retrieve recent approved documents to calculate time-series metrics.
+        // This is a single-field range query on approved_at, which uses standard indexing without composite index.
+        const recentSnapshot = await db.collection('resumes')
+          .where('approved_at', '>=', oneMonthAgo.toISOString())
+          .get();
 
-      recentSnapshot.docs.forEach((doc: any) => {
-        const r = doc.data();
-        if (r.status === 'approved') {
-          const approvedAt = r.approved_at ? new Date(r.approved_at) : null;
-          if (approvedAt) {
-            if (approvedAt >= oneWeekAgo) {
-              weeklyApprovedCount++;
-            }
-            if (approvedAt >= oneMonthAgo) {
-              monthlyApprovedCount++;
+        recentSnapshot.docs.forEach((doc: any) => {
+          const r = doc.data();
+          if (r.status === 'approved') {
+            const approvedAt = r.approved_at ? new Date(r.approved_at) : null;
+            if (approvedAt) {
+              if (approvedAt >= oneWeekAgo) {
+                weeklyApprovedCount++;
+              }
+              if (approvedAt >= oneMonthAgo) {
+                monthlyApprovedCount++;
+              }
             }
           }
+        });
+        
+        res.json({
+          pendingCount,
+          approvedCount,
+          rejectedCount,
+          weeklyApprovedCount,
+          monthlyApprovedCount,
+          usingDatabase: true
+        });
+      } catch (dbError: any) {
+        console.warn("Database error (falling back to in-memory stats):", dbError.message);
+        if (process.env.VERCEL && process.env.BYPASS_DB_ON_ERROR !== 'true') {
+          return res.status(503).json({ 
+            error: `Database connection failed: ${dbError.message}. To temporarily bypass this and run in-memory, set BYPASS_DB_ON_ERROR=true in your environment variables.` 
+          });
         }
-      });
-      
-      res.json({
-        pendingCount,
-        approvedCount,
-        rejectedCount,
-        weeklyApprovedCount,
-        monthlyApprovedCount,
-        usingDatabase: true
-      });
-    } catch (dbError: any) {
-      console.warn("Database error (falling back to in-memory stats):", dbError.message);
-      if (process.env.VERCEL) {
-        return res.status(503).json({ 
-          error: `Database connection failed: ${dbError.message}.` 
+        
+        inMemoryResumes.forEach((r: any) => {
+          const status = r.status;
+          if (status === 'pending') {
+            pendingCount++;
+          } else if (status === 'rejected') {
+            rejectedCount++;
+          } else if (status === 'approved') {
+            approvedCount++;
+            
+            const approvedAtStr = r.approved_at || r.created_at;
+            if (approvedAtStr) {
+              const approvedAt = new Date(approvedAtStr);
+              if (approvedAt >= oneWeekAgo) {
+                weeklyApprovedCount++;
+              }
+              if (approvedAt >= oneMonthAgo) {
+                monthlyApprovedCount++;
+              }
+            }
+          }
+        });
+        
+        res.json({
+          pendingCount,
+          approvedCount,
+          rejectedCount,
+          weeklyApprovedCount,
+          monthlyApprovedCount,
+          usingDatabase: false,
+          dbError: dbError.message
         });
       }
-      
+    } else {
       inMemoryResumes.forEach((r: any) => {
         const status = r.status;
         if (status === 'pending') {
@@ -568,44 +647,54 @@ app.post("/api/reject", checkAdmin, async (req, res) => {
       return res.status(400).json({ error: "Resume ID is required" });
     }
 
-    try {
-      if (!isFirebaseConfigured()) throw new Error("Firebase not configured");
-      
-      const resumeRef = db.collection('resumes').doc(resumeId);
-      const docVal = await resumeRef.get();
-      if (!docVal.exists) {
-        throw new Error("Resume not found");
-      }
-      const currentResume = docVal.data() || {};
+    const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
+    if (useDatabase) {
+      try {
+        const resumeRef = db.collection('resumes').doc(resumeId);
+        const docVal = await resumeRef.get();
+        if (!docVal.exists) {
+          throw new Error("Resume not found");
+        }
+        const currentResume = docVal.data() || {};
 
-      // 2. Update status by setting status directly and a flag in the content Map
-      const updatedContent = { ...(currentResume.content || {}), rejected: true };
-      await resumeRef.update({ 
-        status: 'rejected',
-        content: updatedContent 
-      });
-      
-      const newDocVal = await resumeRef.get();
-      const resume = { id: newDocVal.id, ...newDocVal.data() };
-
-      // 3. Log the rejection
-      const logRef = db.collection('activity_logs').doc();
-      await logRef.set({
-        id: logRef.id,
-        action: 'resume_rejected',
-        details: { resume_id: resumeId, rejected_by: 'admin' },
-        created_at: new Date().toISOString()
-      });
-
-      res.status(200).json({ message: "Resume rejected successfully", resume });
-    } catch (dbError: any) {
-      console.warn("Database error (falling back to in-memory):", dbError.message);
-      if (process.env.VERCEL) {
-        return res.status(503).json({ 
-          error: `Database connection failed: ${dbError.message}.` 
+        // 2. Update status by setting status directly and a flag in the content Map
+        const updatedContent = { ...(currentResume.content || {}), rejected: true };
+        await resumeRef.update({ 
+          status: 'rejected',
+          content: updatedContent 
         });
+        
+        const newDocVal = await resumeRef.get();
+        const resume = { id: newDocVal.id, ...newDocVal.data() };
+
+        // 3. Log the rejection
+        const logRef = db.collection('activity_logs').doc();
+        await logRef.set({
+          id: logRef.id,
+          action: 'resume_rejected',
+          details: { resume_id: resumeId, rejected_by: 'admin' },
+          created_at: new Date().toISOString()
+        });
+
+        res.status(200).json({ message: "Resume rejected successfully", resume });
+      } catch (dbError: any) {
+        console.warn("Database error (falling back to in-memory):", dbError.message);
+        if (process.env.VERCEL && process.env.BYPASS_DB_ON_ERROR !== 'true') {
+          return res.status(503).json({ 
+            error: `Database connection failed: ${dbError.message}. To temporarily bypass this and run in-memory, set BYPASS_DB_ON_ERROR=true in your environment variables.` 
+          });
+        }
+        
+        const resumeIndex = inMemoryResumes.findIndex(r => r.id === resumeId);
+        if (resumeIndex === -1) {
+          return res.status(404).json({ error: "Resume not found in memory" });
+        }
+        
+        inMemoryResumes[resumeIndex].status = 'rejected';
+        saveInMemoryResumes();
+        res.status(200).json({ message: "Resume rejected successfully (local database)", resume: inMemoryResumes[resumeIndex] });
       }
-      
+    } else {
       const resumeIndex = inMemoryResumes.findIndex(r => r.id === resumeId);
       if (resumeIndex === -1) {
         return res.status(404).json({ error: "Resume not found in memory" });
