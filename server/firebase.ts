@@ -11,7 +11,8 @@ import {
   query, 
   where,
   orderBy,
-  limit
+  limit,
+  getCountFromServer
 } from 'firebase/firestore';
 import crypto from 'crypto';
 
@@ -146,6 +147,16 @@ class QueryBuilder {
         data: () => d.data()
       }))
     };
+  }
+
+  async count() {
+    const dbInstance = getFirestoreDb();
+    if (!dbInstance) throw new Error("Firestore is not initialized");
+    const colRef = collection(dbInstance, this.colName);
+    // Ensure the system_secret validation is passed by explicitly appending the filter
+    const securityQuery = query(colRef, where('system_secret', '==', SYSTEM_SECRET), ...this.conditions);
+    const snapshot = await getCountFromServer(securityQuery);
+    return snapshot.data().count;
   }
 }
 

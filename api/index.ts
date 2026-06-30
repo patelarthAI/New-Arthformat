@@ -480,23 +480,22 @@ app.get("/api/admin/stats", checkAdmin, async (req, res) => {
     try {
       if (!isFirebaseConfigured()) throw new Error("Firebase not configured");
       
-      const SYSTEM_SECRET = 'SERVER_SECRET_ee62ff41-5153-437f-b485-66227c47d53d';
-      const resumesSnapshot = await db.collection('resumes').where('system_secret', '==', SYSTEM_SECRET).get();
-      
-      resumesSnapshot.docs.forEach((doc: any) => {
+      // Calculate status counts efficiently using Firestore count queries (only counts documents on server, which counts as 1 read per query or per 1,000 docs)
+      pendingCount = await db.collection('resumes').where('status', '==', 'pending').count();
+      approvedCount = await db.collection('resumes').where('status', '==', 'approved').count();
+      rejectedCount = await db.collection('resumes').where('status', '==', 'rejected').count();
+
+      // Retrieve recent approved documents to calculate time-series metrics.
+      // This is a single-field range query on approved_at, which uses standard indexing without composite index.
+      const recentSnapshot = await db.collection('resumes')
+        .where('approved_at', '>=', oneMonthAgo.toISOString())
+        .get();
+
+      recentSnapshot.docs.forEach((doc: any) => {
         const r = doc.data();
-        let status = (r.rejected || r.content?.rejected) ? 'rejected' : r.status;
-        
-        if (status === 'pending') {
-          pendingCount++;
-        } else if (status === 'rejected') {
-          rejectedCount++;
-        } else if (status === 'approved') {
-          approvedCount++;
-          
-          const approvedAtStr = r.approved_at || r.created_at;
-          if (approvedAtStr) {
-            const approvedAt = new Date(approvedAtStr);
+        if (r.status === 'approved') {
+          const approvedAt = r.approved_at ? new Date(r.approved_at) : null;
+          if (approvedAt) {
             if (approvedAt >= oneWeekAgo) {
               weeklyApprovedCount++;
             }
@@ -579,9 +578,12 @@ app.post("/api/reject", checkAdmin, async (req, res) => {
       }
       const currentResume = docVal.data() || {};
 
-      // 2. Update status by setting a flag in the content Map
+      // 2. Update status by setting status directly and a flag in the content Map
       const updatedContent = { ...(currentResume.content || {}), rejected: true };
-      await resumeRef.update({ content: updatedContent });
+      await resumeRef.update({ 
+        status: 'rejected',
+        content: updatedContent 
+      });
       
       const newDocVal = await resumeRef.get();
       const resume = { id: newDocVal.id, ...newDocVal.data() };
