@@ -504,13 +504,17 @@ const App: React.FC = () => {
     
     setAppState(AppState.PROCESSING);
     try {
+      // Strip the large base64 property from stagedContent before submitting to Firestore to avoid the 1MB document size limit
+      const contentToSubmit = { ...stagedContent };
+      delete contentToSubmit.base64;
+
       const response = await fetch('/api/submit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          content: stagedContent,
+          content: contentToSubmit,
           userId: null
         }),
       });
@@ -997,9 +1001,9 @@ const App: React.FC = () => {
                             onClick={() => {
                               if (stagedContent) {
                                 setStagedContent({
-                                  ...stagedContent,
                                   text: ocrText,
-                                  mimeType: 'text/plain'
+                                  mimeType: 'text/plain',
+                                  fileName: stagedContent.fileName
                                 });
                               }
                               setAppState(AppState.STAGING);
