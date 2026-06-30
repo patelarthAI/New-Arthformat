@@ -284,8 +284,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
       {dbWarning && !isLiveDb && (
         <div className="mb-6 flex flex-col gap-4">
-          {/* Specific Cloud Firestore API Disabled Warning */}
-          {dbWarning.includes('firestore.googleapis.com') ? (
+          {/* Specific Cloud Firestore API Warnings */}
+          {dbWarning.toLowerCase().includes('quota') ? (
+            <div className="p-5 bg-amber-500/10 border border-amber-500/20 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <h4 className="font-semibold text-amber-200">Firestore Quota Limit Exceeded</h4>
+                  <p className="text-amber-200/70 text-xs mt-1">
+                    Your Firebase project <code className="bg-white/5 px-1 py-0.5 rounded font-mono text-amber-300">formatai-889f7</code> has exceeded its free tier daily read/write quota.
+                  </p>
+                  <p className="text-slate-400 text-xs mt-2">
+                    The database has temporarily gone offline until Google resets the daily quota. The app is currently running in <strong>Bypass Sandbox Mode</strong>. No data will be lost. To avoid quota checks, you can upgrade your Firebase project to the pay-as-you-go (Blaze) plan.
+                  </p>
+                </div>
+              </div>
+              <a
+                href="https://console.firebase.google.com/project/formatai-889f7/usage"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs rounded-lg shadow-md transition-all shrink-0 text-center inline-flex items-center justify-center gap-1.5 whitespace-nowrap self-start md:self-auto"
+              >
+                View Quota Usage
+                <RefreshCw className="w-3.5 h-3.5 animate-pulse" />
+              </a>
+            </div>
+          ) : dbWarning.includes('firestore.googleapis.com') ? (
             <div className="p-5 bg-rose-500/10 border border-rose-500/20 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-rose-400 mt-0.5 flex-shrink-0" />
