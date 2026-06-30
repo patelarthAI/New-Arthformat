@@ -16,7 +16,8 @@ import {
   checkSpellingBackend, 
   getUsageStatsBackend,
   updateResumeBackend,
-  rewritePhraseBackend
+  rewritePhraseBackend,
+  performOcrBackend
 } from "../server/gemini";
 
 const app = express();
@@ -100,6 +101,21 @@ app.get("/api/gemini/stats", (req, res) => {
     res.json(stats);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/ocr", async (req, res) => {
+  try {
+    const { base64, mimeType, usePro } = req.body;
+    if (!base64 || !mimeType) {
+      return res.status(400).json({ error: "Missing image base64 or mimeType data." });
+    }
+    console.log(`[OCR Request] Starting document scan for mimeType: ${mimeType}`);
+    const text = await performOcrBackend(base64, mimeType, usePro);
+    res.json({ text });
+  } catch (err: any) {
+    console.error("Error in /api/ocr:", err);
+    res.status(500).json({ error: err.message || "Failed to perform OCR on image" });
   }
 });
 

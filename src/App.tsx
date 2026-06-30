@@ -25,7 +25,8 @@ import {
   MapPin,
   Phone,
   Mail,
-  Unlock
+  Unlock,
+  Scan
 } from 'lucide-react';
 
 interface StagedContent {
@@ -51,6 +52,7 @@ const App: React.FC = () => {
   const [stats, setStats] = useState(getUsageStats(usePro));
   const [stagedContent, setStagedContent] = useState<StagedContent | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [ocrText, setOcrText] = useState<string>('');
   const [pendingResumeId, setPendingResumeId] = useState<string | null>(() => {
     return safeStorage.getItem('pendingResumeId');
   });
@@ -83,6 +85,12 @@ const App: React.FC = () => {
         setBackendStatus({ status: 'error', message: err.message });
       });
   }, []);
+
+  useEffect(() => {
+    if (appState === AppState.OCR_PREVIEW && stagedContent?.text) {
+      setOcrText(stagedContent.text);
+    }
+  }, [appState, stagedContent]);
 
   // Preload heavy document parsing libraries in the background to eliminate initial drag & drop latency
   useEffect(() => {
@@ -412,6 +420,39 @@ const App: React.FC = () => {
         });
 
         setStagedContent({ base64: compressedBase64, mimeType: 'image/jpeg', fileName: file.name });
+        
+        // Move to OCR scanning state
+        setAppState(AppState.OCR_SCANNING);
+        
+        // Trigger OCR scan on the backend
+        try {
+          const response = await fetch('/api/ocr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              base64: compressedBase64,
+              mimeType: 'image/jpeg',
+              usePro: usePro
+            })
+          });
+          
+          if (!response.ok) {
+            throw new Error("OCR Scanning failed on the server.");
+          }
+          
+          const data = await response.json();
+          // Put the extracted text in stagedContent and transition to preview state
+          setStagedContent({ 
+            text: data.text, 
+            base64: compressedBase64, 
+            mimeType: 'image/jpeg', 
+            fileName: file.name 
+          });
+          setAppState(AppState.OCR_PREVIEW);
+        } catch (ocrError: any) {
+          console.error("OCR API error:", ocrError);
+          throw new Error("Unable to perform OCR on image. " + ocrError.message);
+        }
         return;
       }
 
@@ -795,6 +836,137 @@ const App: React.FC = () => {
                             </div>
                           </motion.div>
                         )}
+                      </motion.div>
+                    )}
+
+                    {appState === AppState.OCR_SCANNING && (
+                      <motion.div 
+                        key="ocr-scanning"
+                        initial={{ opacity: 0, scale: 0.96 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.96 }}
+                        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                        className="glassmorphic-card rounded-[24px] p-8 lg:p-10 flex flex-col items-center justify-center text-center w-full min-h-[260px] lg:min-h-[300px] relative overflow-hidden"
+                      >
+                        <style dangerouslySetInnerHTML={{__html: `
+                          @keyframes ocr-scan-line {
+                            0% { top: 0%; opacity: 0.8; }
+                            50% { top: 100%; opacity: 0.8; }
+                            100% { top: 0%; opacity: 0.8; }
+                          }
+                          @keyframes breathing-shadow {
+                            0% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.1); }
+                            50% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.3); }
+                            100% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.1); }
+                          }
+                        `}} />
+                        
+                        <div className="w-full max-w-[600px] mx-auto flex flex-col items-center justify-center flex-1 py-2 z-10">
+                          <div className="relative mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.02] p-3 flex items-center justify-center max-w-[180px] max-h-[160px] overflow-hidden group shadow-lg shadow-emerald-500/5 animate-[breathing-shadow_3s_infinite]">
+                            {stagedContent?.base64 ? (
+                              <img 
+                                src={`data:image/jpeg;base64,${stagedContent.base64}`} 
+                                className="max-h-[130px] rounded-lg object-contain opacity-60 filter saturate-50" 
+                                alt="Scanning Resume"
+                              />
+                            ) : (
+                              <div className="w-24 h-32 flex items-center justify-center bg-slate-900/50 rounded-lg">
+                                <FileText className="w-10 h-10 text-emerald-400/50" />
+                              </div>
+                            )}
+                            <div className="absolute left-0 right-0 h-[3px] bg-emerald-400 shadow-[0_0_12px_#10b981,0_0_20px_#10b981] animate-[ocr-scan-line_2.5s_ease-in-out_infinite]" />
+                          </div>
+
+                          <h2 className="text-xl font-bold text-white mb-2 font-display flex items-center gap-2">
+                            <span className="flex h-2.5 w-2.5 relative">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-450 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                            </span>
+                            Scanning Resume Image
+                          </h2>
+                          <p className="text-slate-400 mb-6 text-xs leading-relaxed max-w-sm">
+                            Gemini is performing high-fidelity OCR scanning to extract verbatim text from <span className="text-indigo-400 font-mono font-medium">"{fileName}"</span>...
+                          </p>
+                          
+                          <button 
+                            onClick={handleReset}
+                            className="btn-2026-secondary px-5 py-3 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                          >
+                            Cancel Scan
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {appState === AppState.OCR_PREVIEW && (
+                      <motion.div 
+                        key="ocr-preview"
+                        initial={{ opacity: 0, scale: 0.96 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.96 }}
+                        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                        className="glassmorphic-card rounded-[24px] p-6 lg:p-8 flex flex-col w-full min-h-[360px]"
+                      >
+                        <h2 className="text-xl font-bold text-white mb-1.5 font-display text-left">Verify Extracted Text</h2>
+                        <p className="text-slate-400 mb-5 text-xs text-left leading-relaxed">
+                          We successfully processed your image. Please review and make any necessary edits below to ensure the formatting engine gets perfect data.
+                        </p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full flex-1 min-h-0">
+                          <div className="flex flex-col gap-2">
+                            <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 text-left">Original Scanned Document</label>
+                            <div className="relative border border-white/5 bg-[#080d24]/50 rounded-xl p-4 flex items-center justify-center h-[280px] overflow-hidden shadow-inner">
+                              {stagedContent?.base64 ? (
+                                <img 
+                                  src={`data:image/jpeg;base64,${stagedContent.base64}`} 
+                                  className="max-h-[250px] rounded-md object-contain border border-white/10" 
+                                  alt="Scanned original"
+                                />
+                              ) : (
+                                <span className="text-xs text-slate-600">No preview available</span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="flex flex-col gap-2">
+                            <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 text-left flex items-center gap-1.5">
+                              Extracted Verbatim Text
+                              <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[8px] font-extrabold uppercase tracking-wider border border-emerald-500/20">OCR Success</span>
+                            </label>
+                            <textarea
+                              value={ocrText}
+                              onChange={(e) => setOcrText(e.target.value)}
+                              className="w-full h-[280px] bg-white/[0.01] border border-white/10 rounded-xl p-4 text-white text-[11px] font-mono leading-relaxed focus:outline-none focus:border-indigo-500 transition-colors focus:ring-1 focus:ring-indigo-500/25 resize-none shadow-inner"
+                              placeholder="Extracted text will appear here..."
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-between items-center gap-3 w-full mt-6 pt-4 border-t border-white/5">
+                          <button 
+                            onClick={handleReset}
+                            className="btn-2026-secondary px-5 py-3 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                          >
+                            Scan Another
+                          </button>
+                          
+                          <button 
+                            onClick={() => {
+                              if (stagedContent) {
+                                setStagedContent({
+                                  ...stagedContent,
+                                  text: ocrText,
+                                  mimeType: 'text/plain'
+                                });
+                              }
+                              setAppState(AppState.STAGING);
+                            }}
+                            className="btn-2026-neon px-6 py-3 text-white font-bold text-[10px] uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            Confirm Extracted Text
+                          </button>
+                        </div>
                       </motion.div>
                     )}
 

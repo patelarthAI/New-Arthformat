@@ -83,6 +83,8 @@ export interface ResumeData {
 export enum AppState {
   IDLE = 'IDLE',
   STAGING = 'STAGING',
+  OCR_SCANNING = 'OCR_SCANNING',
+  OCR_PREVIEW = 'OCR_PREVIEW',
   WAITING_APPROVAL = 'WAITING_APPROVAL',
   PROCESSING = 'PROCESSING',
   REVIEW = 'REVIEW',

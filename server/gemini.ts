@@ -692,3 +692,39 @@ ACT AS AN EXECUTIVE RESUME COACH. Provide 3 high-impact direct replacement optio
   }, "rewritePhrase", usePro);
 };
 
+export const performOcrBackend = async (
+  base64: string,
+  mimeType: string,
+  usePro: boolean = false
+): Promise<string> => {
+  return withModelFallback(async (modelId, apiKey) => {
+    const ai = new GoogleGenAI({ 
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              data: base64,
+              mimeType: mimeType,
+            },
+          },
+          {
+            text: "Perform high-fidelity OCR on this resume or document image. Extract all text content verbatim, preserving the order, layout, headings, and bullet points. Do not omit, summarize, or alter any details. Do not add any introductory or concluding remarks, just return the extracted text.",
+          }
+        ]
+      }
+    });
+
+    return response.text || "";
+  }, "OCR", usePro);
+};
+
