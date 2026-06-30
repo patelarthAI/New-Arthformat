@@ -261,7 +261,7 @@ export const generateResumeDoc = async (
                   },
                 },
                 run: {
-                  font: "Arial",
+                  font: FONT_FAMILY,
                   size: 26, // 13pt bullet size
                 },
               },

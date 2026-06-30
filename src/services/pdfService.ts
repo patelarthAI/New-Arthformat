@@ -487,6 +487,7 @@ export const generateResumePDF = async (
       case 'Arial':
       case 'Calibri':
       case 'Verdana':
+      case 'Aptos':
       default:
         return 'Helvetica';
     }

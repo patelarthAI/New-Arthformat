@@ -977,6 +977,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     switch (font) {
       case 'Calibri': return '"Calibri", sans-serif';
       case 'Arial': return '"Arial", sans-serif';
+      case 'Aptos': return '"Aptos", sans-serif';
       case 'Times New Roman': return '"Times New Roman", serif';
       case 'Garamond': return '"Garamond", serif';
       case 'Georgia': return '"Georgia", serif';
@@ -2035,6 +2036,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                         >
                           <option value="Calibri">Calibri (Classic Default)</option>
                           <option value="Arial">Arial (Modern Default)</option>
+                          <option value="Aptos">Aptos (New Office Default)</option>
                           <option value="Times New Roman">Times New Roman</option>
                           <option value="Garamond">Garamond</option>
                           <option value="Georgia">Georgia</option>
