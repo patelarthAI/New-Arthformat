@@ -367,7 +367,7 @@ const App: React.FC = () => {
           setStagedContent({ text: fullText, mimeType: 'text/plain', fileName: file.name });
           return;
         } catch (pdfError: any) {
-          console.warn("PDF Text Extraction Failed, falling back to base64:", pdfError);
+          console.warn("PDF Text Extraction Failed, falling back to OCR scan:", pdfError);
           const base64 = await new Promise<string>((resolve) => {
             const reader = new FileReader();
             reader.readAsDataURL(file);
@@ -376,7 +376,41 @@ const App: React.FC = () => {
               resolve(result.split(',')[1]);
             };
           });
+          
           setStagedContent({ base64, mimeType: 'application/pdf', fileName: file.name });
+          
+          // Move to OCR scanning state
+          setAppState(AppState.OCR_SCANNING);
+          
+          // Trigger OCR scan on the backend for PDF
+          try {
+            const response = await fetch('/api/ocr', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                base64,
+                mimeType: 'application/pdf',
+                usePro: usePro
+              })
+            });
+            
+            if (!response.ok) {
+              throw new Error("OCR Scanning failed on the server.");
+            }
+            
+            const data = await response.json();
+            // Put the extracted text in stagedContent and transition to preview state
+            setStagedContent({ 
+              text: data.text, 
+              base64, 
+              mimeType: 'application/pdf', 
+              fileName: file.name 
+            });
+            setAppState(AppState.OCR_PREVIEW);
+          } catch (ocrError: any) {
+            console.error("OCR API error for PDF:", ocrError);
+            throw new Error("Unable to perform OCR on this scanned PDF. Please ensure it is not password protected.");
+          }
           return;
         }
       }
@@ -862,16 +896,17 @@ const App: React.FC = () => {
                         `}} />
                         
                         <div className="w-full max-w-[600px] mx-auto flex flex-col items-center justify-center flex-1 py-2 z-10">
-                          <div className="relative mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.02] p-3 flex items-center justify-center max-w-[180px] max-h-[160px] overflow-hidden group shadow-lg shadow-emerald-500/5 animate-[breathing-shadow_3s_infinite]">
-                            {stagedContent?.base64 ? (
+                          <div className="relative mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.02] p-3 flex items-center justify-center w-24 h-32 overflow-hidden group shadow-lg shadow-emerald-500/5 animate-[breathing-shadow_3s_infinite]">
+                            {stagedContent?.base64 && stagedContent.mimeType !== 'application/pdf' ? (
                               <img 
                                 src={`data:image/jpeg;base64,${stagedContent.base64}`} 
-                                className="max-h-[130px] rounded-lg object-contain opacity-60 filter saturate-50" 
+                                className="max-h-[110px] rounded-lg object-contain opacity-60 filter saturate-50" 
                                 alt="Scanning Resume"
                               />
                             ) : (
-                              <div className="w-24 h-32 flex items-center justify-center bg-slate-900/50 rounded-lg">
-                                <FileText className="w-10 h-10 text-emerald-400/50" />
+                              <div className="flex flex-col items-center justify-center gap-2">
+                                <FileText className="w-10 h-10 text-emerald-400/80 animate-pulse" />
+                                <span className="text-[9px] font-bold text-emerald-450 uppercase tracking-widest">PDF DOC</span>
                               </div>
                             )}
                             <div className="absolute left-0 right-0 h-[3px] bg-emerald-400 shadow-[0_0_12px_#10b981,0_0_20px_#10b981] animate-[ocr-scan-line_2.5s_ease-in-out_infinite]" />
@@ -917,11 +952,19 @@ const App: React.FC = () => {
                             <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 text-left">Original Scanned Document</label>
                             <div className="relative border border-white/5 bg-[#080d24]/50 rounded-xl p-4 flex items-center justify-center h-[280px] overflow-hidden shadow-inner">
                               {stagedContent?.base64 ? (
-                                <img 
-                                  src={`data:image/jpeg;base64,${stagedContent.base64}`} 
-                                  className="max-h-[250px] rounded-md object-contain border border-white/10" 
-                                  alt="Scanned original"
-                                />
+                                stagedContent.mimeType === 'application/pdf' ? (
+                                  <iframe 
+                                    src={`data:application/pdf;base64,${stagedContent.base64}#toolbar=0&navpanes=0`} 
+                                    className="w-full h-full rounded-md border border-white/10" 
+                                    title="PDF Scanned original"
+                                  />
+                                ) : (
+                                  <img 
+                                    src={`data:image/jpeg;base64,${stagedContent.base64}`} 
+                                    className="max-h-[250px] rounded-md object-contain border border-white/10" 
+                                    alt="Scanned original"
+                                  />
+                                )
                               ) : (
                                 <span className="text-xs text-slate-600">No preview available</span>
                               )}
