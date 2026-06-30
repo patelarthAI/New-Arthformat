@@ -272,7 +272,11 @@ app.post("/api/submit", async (req, res) => {
         inMemoryResumes.push(newResume);
         saveInMemoryResumes();
         
-        res.status(200).json({ message: "Resume submitted successfully (local database)", resume: newResume });
+        res.status(200).json({ 
+          message: "Resume submitted successfully (local database)", 
+          resume: newResume,
+          bypassApproval: process.env.VERCEL === 'true'
+        });
       }
     } else {
       const resumeId = crypto.randomUUID();
@@ -288,7 +292,11 @@ app.post("/api/submit", async (req, res) => {
       inMemoryResumes.push(newResume);
       saveInMemoryResumes();
       
-      res.status(200).json({ message: "Resume submitted successfully (local database)", resume: newResume });
+      res.status(200).json({ 
+        message: "Resume submitted successfully (local database)", 
+        resume: newResume,
+        bypassApproval: process.env.VERCEL === 'true'
+      });
     }
   } catch (error: any) {
     console.error("Error submitting resume:", error);

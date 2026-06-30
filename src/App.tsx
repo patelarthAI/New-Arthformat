@@ -520,6 +520,15 @@ const App: React.FC = () => {
       });
 
       if (!response.ok) {
+        // If the database has a quota limit error or connection issue, bypass the approval gate entirely and format the resume directly!
+        const isDbError = response.status === 503 || response.status === 504;
+        if (isDbError) {
+          console.warn("Database is offline or quota exceeded. Bypassing approval gate and formatting directly.");
+          setPendingResumeId(null);
+          await processApprovedResume(stagedContent);
+          return;
+        }
+
         let errorMessage = 'Failed to submit resume';
         let responseText = "";
         try {
@@ -539,14 +548,25 @@ const App: React.FC = () => {
       }
 
       const data = await response.json();
-      if (data.resume && data.resume.id) {
-        setPendingResumeId(data.resume.id);
+      if (data.bypassApproval) {
+        console.log("Stateless fallback detected. Bypassing approval gate and formatting directly.");
+        setPendingResumeId(null);
+        await processApprovedResume(stagedContent);
+      } else {
+        if (data.resume && data.resume.id) {
+          setPendingResumeId(data.resume.id);
+        }
+        setAppState(AppState.WAITING_APPROVAL);
       }
-      
-      setAppState(AppState.WAITING_APPROVAL);
     } catch (err: any) {
-      setErrorMsg(err.message);
-      setAppState(AppState.ERROR);
+      console.warn("Submission failed with error. Bypassing approval gate to format directly:", err.message);
+      setPendingResumeId(null);
+      try {
+        await processApprovedResume(stagedContent);
+      } catch (procErr: any) {
+        setErrorMsg(procErr.message);
+        setAppState(AppState.ERROR);
+      }
     }
   };
 
