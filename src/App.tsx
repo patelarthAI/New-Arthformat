@@ -157,6 +157,13 @@ const App: React.FC = () => {
             console.log("Approval status response:", data);
             if (data.status === 'approved') {
               clearInterval(intervalId);
+              const resumeToClean = pendingResumeId;
+              setPendingResumeId(null);
+              // Trigger asynchronous delete from the database immediately to respect user privacy
+              fetch(`/api/resumes/${resumeToClean}`, { method: 'DELETE' })
+                .then(() => console.log("Successfully auto-deleted resume after approval"))
+                .catch(err => console.error("Error auto-deleting resume after approval:", err));
+
               // Restore content from backend if we lost it due to refresh
               if (!stagedContent && data.content) {
                 setStagedContent(data.content);
@@ -164,13 +171,19 @@ const App: React.FC = () => {
               processApprovedResume(data.content || stagedContent);
             } else if (data.status === 'rejected') {
               clearInterval(intervalId);
+              const resumeToClean = pendingResumeId;
+              setPendingResumeId(null);
+              // Trigger asynchronous delete from the database immediately to respect user privacy
+              fetch(`/api/resumes/${resumeToClean}`, { method: 'DELETE' })
+                .then(() => console.log("Successfully auto-deleted resume after rejection"))
+                .catch(err => console.error("Error auto-deleting resume after rejection:", err));
+
               if (data.content?.auto_rejected) {
                 setErrorMsg("Your resume submission timed out (2 minutes) and was automatically rejected.");
               } else {
                 setErrorMsg("Your resume submission was rejected by the administrator.");
               }
               setAppState(AppState.ERROR);
-              setPendingResumeId(null);
             }
           }
         } catch (err) {

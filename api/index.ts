@@ -451,6 +451,33 @@ app.get("/api/resumes/:id/status", async (req, res) => {
   }
 });
 
+app.delete("/api/resumes/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
+    
+    if (useDatabase) {
+      try {
+        await db.collection('resumes').doc(id).delete();
+        res.status(200).json({ message: "Resume deleted successfully from database" });
+      } catch (dbError: any) {
+        console.warn("Database error during delete fallback:", dbError.message);
+        // Fallback to in-memory deletion
+        inMemoryResumes = inMemoryResumes.filter(r => r.id !== id);
+        await saveInMemoryResumes();
+        res.status(200).json({ message: "Resume deleted successfully (local database)" });
+      }
+    } else {
+      inMemoryResumes = inMemoryResumes.filter(r => r.id !== id);
+      await saveInMemoryResumes();
+      res.status(200).json({ message: "Resume deleted successfully (local database)" });
+    }
+  } catch (error: any) {
+    console.error("Error deleting resume:", error);
+    res.status(500).json({ error: error.message || "Failed to delete resume" });
+  }
+});
+
 // API Route for approving a resume
 app.post("/api/approve", checkAdmin, async (req, res) => {
   try {
