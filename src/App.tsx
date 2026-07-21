@@ -168,7 +168,7 @@ const App: React.FC = () => {
               if (!stagedContent && data.content) {
                 setStagedContent(data.content);
               }
-              processApprovedResume(data.content || stagedContent);
+              processApprovedResume(stagedContent || data.content);
             } else if (data.status === 'rejected') {
               clearInterval(intervalId);
               const resumeToClean = pendingResumeId;
