@@ -341,9 +341,13 @@ export const extractResumeDataBackend = async (
         parts: parts,
       },
       config: {
+        maxOutputTokens: 8192,
         systemInstruction: `
-ACT AS A STRICT DATA EXTRACTOR. Your ONLY job is to map the provided text into the JSON schema. You are FORBIDDEN from summarizing, shortening, rewriting, or omitting any information from the original text. Every word must be preserved.
-CRITICAL: Clean up artificial spacing or ligature-splitting errors introduced by PDF text extraction (e.g. convert 'fi eld' to 'field', 'o ffi ce' to 'office', 'sta ff' to 'staff', 'effi cient' to 'efficient', 'manha an' to 'manhattan', 'spearheaded' to 'spearheaded', 'technician' to 'technician'). Do not leave artificial spaces inside words, but do not change any other wording or data.
+ACT AS A STRICT DATA EXTRACTOR. Your ONLY job is to map the provided text into the JSON schema. 
+- You are strictly FORBIDDEN from summarizing, shortening, rephrasing, rewriting, or omitting any information or sections from the original text. Every single word and phrase must be preserved exactly as written.
+- Ensure that EVERY experience entry, job title, company name, education entry, custom section, and bullet point is extracted. Do not skip any historic jobs or older experiences.
+- Do not improve, polish, or edit the content. Keep it 100% verbatim.
+- CRITICAL: Clean up artificial spacing or ligature-splitting errors introduced by PDF text extraction (e.g. convert 'fi eld' to 'field', 'o ffi ce' to 'office', 'sta ff' to 'staff', 'effi cient' to 'efficient'). Do not leave artificial spaces inside words, but do not change any other wording, details, or data.
 `,
         tools: [{ functionDeclarations: [saveResumeTool] }],
         toolConfig: { 
@@ -513,8 +517,12 @@ export const checkSpellingBackend = async (data: ResumeData, format: ResumeForma
         ],
       },
       config: {
+        maxOutputTokens: 8192,
         systemInstruction: `
-ACT AS A STRICT PROOFREADER. You are only allowed to fix objective spelling and grammar errors. You are forbidden from making stylistic changes, changing vocabulary, or altering the tone.
+ACT AS A STRICT PROOFREADER. You are only allowed to fix clear, objective spelling and grammar errors. 
+- You are strictly forbidden from summarizing, rephrasing, shortening, or deleting any experiences, bullet points, or sections. 
+- Do not make any stylistic changes, vocabulary alterations, or tone modifications. Keep every word identical to the input unless correcting a spelling mistake.
+- You must preserve the schema structure and use the 'save_resume_data' tool to return the modified data.
 `,
         tools: [{ functionDeclarations: [saveResumeTool] }],
         toolConfig: { 
@@ -606,8 +614,12 @@ export const updateResumeBackend = async (
         ],
       },
       config: {
+        maxOutputTokens: 8192,
         systemInstruction: `
-ACT AS AN EXPERT RESUME EDITOR. Modify the JSON resume data strictly following the user's instructions. You must preserve the schema structure and use the 'save_resume_data' tool to return the modified data.
+ACT AS AN EXPERT RESUME EDITOR. Modify the JSON resume data strictly following the user's instructions. 
+- You are forbidden from summarizing, shortening, deleting, or omitting any experiences, custom sections, or bullet points unless the user explicitly instructs you to do so.
+- Keep all parts of the resume that are not affected by the user's instruction 100% identical to the original, verbatim.
+- You must preserve the schema structure and use the 'save_resume_data' tool to return the modified data.
 `,
         tools: [{ functionDeclarations: [saveResumeTool] }],
         toolConfig: { 
