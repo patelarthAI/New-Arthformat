@@ -154,6 +154,9 @@ const saveInMemoryResumes = async () => {
   }
   isSaving = true;
   try {
+    if (inMemoryResumes.length > 50) {
+      inMemoryResumes = inMemoryResumes.slice(-50);
+    }
     await fs.promises.writeFile(DB_FILE, JSON.stringify(inMemoryResumes, null, 2), 'utf8');
     console.log(`[Persistence Fallback] Saved ${inMemoryResumes.length} resumes to ${DB_FILE}`);
   } catch (e: any) {
@@ -166,6 +169,15 @@ const saveInMemoryResumes = async () => {
     }
   }
 };
+
+// Global process error handlers for long-running server stability
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Process Security] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[Process Security] Uncaught Exception:', error);
+});
 
 
 // Background task to clean up old pending resumes
