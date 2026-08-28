@@ -221,11 +221,19 @@ const saveResumeTool: FunctionDeclaration = {
         items: {
           type: Type.OBJECT,
           properties: {
-            title: { type: Type.STRING, description: "Exact Section Header, e.g. 'CORE TECHNICAL EXPERTISE', 'TECHNICAL SKILLS', 'CERTIFICATIONS'" },
-            items: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of items or lines in this section" }
-          }
+            title: { 
+              type: Type.STRING, 
+              description: "EXACT original title of ANY non-standard section header found in the resume. Examples: 'PUBLICATIONS', 'PATENTS', 'AWARDS & HONORS', 'KEY PROJECTS', 'VOLUNTEER EXPERIENCE', 'SPEAKING ENGAGEMENTS', 'LANGUAGES', 'TECHNICAL SKILLS', 'AFFILIATIONS', 'REFERENCES', or ANY OTHER section title." 
+            },
+            items: { 
+              type: Type.ARRAY, 
+              items: { type: Type.STRING }, 
+              description: "Verbatim lines or bullet points under this custom section." 
+            }
+          },
+          required: ["title", "items"]
         },
-        description: "All other custom sections such as Certifications, Technical Expertise, Skills, Languages, Projects. Extract ALL items verbatim."
+        description: "CRITICAL: EVERY single section header or title in the input document that is not mapped to summary, experience, internships, or education MUST be added here with its EXACT original title and all content lines. NEVER skip or drop ANY custom title or section."
       },
       
       extractionChanges: {
@@ -328,10 +336,11 @@ export const extractResumeDataBackend = async (
         : "- Abbreviate months to 3 letters (e.g., 'Jan')."}
       
       GENERAL INSTRUCTIONS:
-      Extract EVERY single section in the document! 
-      Map all work history, employment history, career history, roles, key accomplishments, technical experience, and projects into 'experience' or 'customSections'. 
-      Do NOT stop after the first section or page. Read through to the very end of the text and extract every job, title, company, bullet point, skill, certification, and education item.
-      If a work experience section contains bullet points without an explicit job title or company name, populate company as 'Professional Experience' or the section title, title as 'Key Responsibilities / Achievements', and put all bullet points into 'description'.
+      - ZERO DATA LOSS GUARANTEE: Extract 100% of ALL sections, headers, titles, and content present in the document.
+      - Map standard sections (Summary, Professional Experience, Internships, Education) to their respective fields.
+      - ANY OTHER section header or title (e.g. 'PUBLICATIONS', 'PATENTS', 'AWARDS & HONORS', 'VOLUNTEER WORK', 'KEY PROJECTS', 'PROJECTS', 'LANGUAGES', 'AFFILIATIONS', 'REFERENCES', 'CERTIFICATIONS', 'COMPETENCIES', 'OTHER EXPERIENCE', or ANY custom header title) MUST be extracted into 'customSections' with its EXACT section title as written in the original resume.
+      - Do NOT stop after the first section or page. Read through to the very end of the text and extract every job, title, company, bullet point, skill, certification, and education item.
+      - If a work experience section contains bullet points without an explicit job title or company name, populate company as 'Professional Experience' or the section title, title as 'Key Responsibilities / Achievements', and put all bullet points into 'description'.
       CRITICAL: For contactInfo.location, extract City, State, and Zip Code if available. 
       CRITICAL: For dates, if a month is present, abbreviate it to 3 letters (e.g., 'Jan'). If NO month is present, DO NOT add one (e.g., keep '2023' as '2023'). 
       CRITICAL: Remove ALL phone numbers and email addresses from the main content, but keep them in the contactInfo fields if found. 
