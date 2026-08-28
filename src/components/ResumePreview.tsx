@@ -251,8 +251,23 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     }
   };
   
-  // Page fit checker state
+  // Target Page Count (user adjustable)
+  const [targetPages, setTargetPages] = useState<number>(1);
   const [pageFitInfo, setPageFitInfo] = useState({ pages: 1, overflowLines: 0, percentUsed: 100 });
+
+  // Auto-detect initial page count on mount
+  useEffect(() => {
+    const checkInitialHeight = () => {
+      const el = document.getElementById("resume-preview-content");
+      if (el) {
+        const height = el.scrollHeight;
+        const initialPages = Math.ceil(height / 1140);
+        setTargetPages(Math.max(1, Math.min(4, initialPages)));
+      }
+    };
+    const timer = setTimeout(checkInitialHeight, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const checkHeight = () => {
@@ -261,16 +276,20 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
         const height = el.scrollHeight;
         const pageHeight = 1140; // A4 print height threshold
         const pages = Math.ceil(height / pageHeight);
-        const percentUsed = Math.round((height / pageHeight) * 100);
-        const excess = height % pageHeight;
-        const overflowLines = excess > 0 && height > pageHeight ? Math.round(excess / 22) : 0;
+        
+        // Calculate percentage used and overflow based on targetPages
+        const targetHeight = targetPages * pageHeight;
+        const percentUsed = Math.round((height / targetHeight) * 100);
+        const excess = height - targetHeight;
+        const overflowLines = excess > 0 ? Math.round(excess / 22) : 0;
+        
         setPageFitInfo({ pages, overflowLines, percentUsed });
       }
     };
     
     const timer = setTimeout(checkHeight, 350);
     return () => clearTimeout(timer);
-  }, [data, selectedFormat, comparisonMode, sidebarOpen]); // Re-run when layout or data changes
+  }, [data, selectedFormat, comparisonMode, sidebarOpen, targetPages]); // Re-run when layout, data or targetPages changes
 
   const triggerHighlight = (sectionId: string) => {
     setHighlightedSection(sectionId);
@@ -1184,20 +1203,24 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                 lineHeight: styles.lineHeight
               }}
             >
-              {/* Visual Page Break Guide */}
-              {pageFitInfo.pages > 1 && (
-                <div 
-                  className="absolute left-0 right-0 border-t-2 border-dashed border-rose-500/30 flex items-center justify-between px-8 pointer-events-none select-none z-10"
-                  style={{ top: '1140px', height: '0px' }}
-                >
-                  <span className="text-[9px] font-mono font-bold text-rose-500 bg-white px-2 py-0.5 rounded border border-rose-200 -translate-y-1/2 shadow-sm">
-                    A4 Page Break Boundary
-                  </span>
-                  <span className="text-[9px] font-mono font-bold text-rose-500 bg-white px-2 py-0.5 rounded border border-rose-200 -translate-y-1/2 shadow-sm">
-                    ✂️ Page 2 Content Starts Below
-                  </span>
-                </div>
-              )}
+              {/* Visual Page Break Guides */}
+              {pageFitInfo.pages > 1 && Array.from({ length: pageFitInfo.pages - 1 }).map((_, idx) => {
+                const topOffset = 1140 * (idx + 1);
+                return (
+                  <div 
+                    key={idx}
+                    className="absolute left-0 right-0 border-t border-dashed border-rose-500/40 flex items-center justify-between px-8 pointer-events-none select-none z-10"
+                    style={{ top: `${topOffset}px`, height: '0px' }}
+                  >
+                    <span className="text-[9px] font-mono font-bold text-rose-500 bg-white px-2 py-0.5 rounded border border-rose-200 -translate-y-1/2 shadow-sm">
+                      Page Break (Page {idx + 1} / {idx + 2})
+                    </span>
+                    <span className="text-[9px] font-mono font-bold text-rose-500 bg-white px-2 py-0.5 rounded border border-rose-200 -translate-y-1/2 shadow-sm">
+                      ✂️ Page {idx + 2} Content Starts Below
+                    </span>
+                  </div>
+                );
+              })}
 
               {/* 1. Name & Contact Details (Always at the top) */}
               <div 
@@ -1859,21 +1882,41 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
 
             {/* Live A4 Page-Fit Optimizer status bar */}
             <div className="w-full max-w-[820px] mt-2 mb-6 flex-shrink-0 flex items-center justify-between px-4 py-2.5 bg-[#090d24]/60 border border-white/[0.05] rounded-xl text-slate-400 text-xs backdrop-blur-md">
-              <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${pageFitInfo.pages > 1 ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
-                <span className="font-medium text-slate-350">
-                  A4 Spacing Fit: {pageFitInfo.pages} {pageFitInfo.pages > 1 ? 'pages' : 'page'} used ({pageFitInfo.percentUsed}%)
-                </span>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${pageFitInfo.overflowLines > 0 ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+                  <span className="font-medium text-slate-350">
+                    A4 Height: {pageFitInfo.pages} {pageFitInfo.pages > 1 ? 'pages' : 'page'} ({pageFitInfo.percentUsed}%)
+                  </span>
+                </div>
+                
+                <div className="h-3 w-[1px] bg-white/10" />
+                
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Target Limit:</span>
+                  <select 
+                    value={targetPages} 
+                    onChange={(e) => setTargetPages(Number(e.target.value))}
+                    className="bg-[#0b0f2a] border border-white/10 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    <option value={1}>1 Page</option>
+                    <option value={2}>2 Pages</option>
+                    <option value={3}>3 Pages</option>
+                    <option value={4}>4 Pages</option>
+                  </select>
+                </div>
               </div>
+              
               <div className="text-[11px]">
-                {pageFitInfo.pages > 1 ? (
+                {pageFitInfo.overflowLines > 0 ? (
                   <span className="text-amber-400 font-medium flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5" />
-                    Overflow Warning: Exceeds 1 page limit by approx {pageFitInfo.overflowLines} lines. Consider shortening summary or bullet points.
+                    Exceeds {targetPages} page target by approx {pageFitInfo.overflowLines} lines.
                   </span>
                 ) : (
-                  <span className="text-emerald-400 font-medium">
-                    Perfect single-page length for automated recruiter screening.
+                  <span className="text-emerald-400 font-medium flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" />
+                    Fits within {targetPages} page target ({pageFitInfo.percentUsed}% used).
                   </span>
                 )}
               </div>
