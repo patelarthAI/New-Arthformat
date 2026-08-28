@@ -1405,32 +1405,95 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                         </span>
                                       </div>
                                     )}
-                                    <div style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black, marginBottom: '2px' }}>
-                                        <span
-                                          contentEditable={!tempUpdatedData}
-                                          suppressContentEditableWarning
-                                          onBlur={(e) => handleEditExpCompany(idx, e.currentTarget.textContent || "")}
-                                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                          className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`experience.${idx}.company`) ? 'field-diff-modified' : ''}`}
-                                        >
-                                          {stripTrailingDate(exp.company)}
-                                        </span>
-                                        {exp.location && (
-                                          <>
-                                            {", "}
+                                    {exp.company && exp.company.trim() !== "" && exp.company.toLowerCase() !== 'professional experience' && exp.company.toLowerCase() !== 'work history' && (
+                                      <div style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black, marginBottom: '2px' }}>
+                                          <span
+                                            contentEditable={!tempUpdatedData}
+                                            suppressContentEditableWarning
+                                            onBlur={(e) => handleEditExpCompany(idx, e.currentTarget.textContent || "")}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                            className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`experience.${idx}.company`) ? 'field-diff-modified' : ''}`}
+                                          >
+                                            {stripTrailingDate(exp.company)}
+                                          </span>
+                                          {exp.location && (
+                                            <>
+                                              {", "}
+                                              <span
+                                                contentEditable={!tempUpdatedData}
+                                                suppressContentEditableWarning
+                                                onBlur={(e) => handleEditExpLocation(idx, e.currentTarget.textContent || "")}
+                                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                                className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`experience.${idx}.location`) ? 'field-diff-modified' : ''}`}
+                                              >
+                                                {formatLocation(exp.location)}
+                                              </span>
+                                            </>
+                                          )}
+                                      </div>
+                                    )}
+                                    {exp.title && exp.title.trim() !== "" && exp.title.toLowerCase() !== 'key responsibilities / achievements' && exp.title.toLowerCase() !== 'responsibilities' && (
+                                      <div style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black, marginBottom: '4px' }} className={isFieldModified(`experience.${idx}.title`) ? 'field-diff-modified' : ''}>
+                                          <span
+                                            contentEditable={!tempUpdatedData}
+                                            suppressContentEditableWarning
+                                            onBlur={(e) => handleEditExpTitle(idx, e.currentTarget.textContent || "")}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                            className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
+                                          >
+                                            {stripTrailingDate(exp.title)}
+                                          </span>
+                                      </div>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    {(exp.company || exp.location || exp.dates) && (
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                                        <span style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black }}>
+                                          {exp.company && exp.company.trim() !== "" && exp.company.toLowerCase() !== 'professional experience' && exp.company.toLowerCase() !== 'work history' && (
                                             <span
                                               contentEditable={!tempUpdatedData}
                                               suppressContentEditableWarning
-                                              onBlur={(e) => handleEditExpLocation(idx, e.currentTarget.textContent || "")}
+                                              onBlur={(e) => handleEditExpCompany(idx, e.currentTarget.textContent || "")}
                                               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                              className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`experience.${idx}.location`) ? 'field-diff-modified' : ''}`}
+                                              className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`experience.${idx}.company`) ? 'field-diff-modified' : ''}`}
                                             >
-                                              {formatLocation(exp.location)}
+                                              {stripTrailingDate(exp.company)}
                                             </span>
-                                          </>
+                                          )}
+                                          {exp.location && (
+                                            <>
+                                              {exp.company ? ", " : ""}
+                                              <span
+                                                contentEditable={!tempUpdatedData}
+                                                suppressContentEditableWarning
+                                                onBlur={(e) => handleEditExpLocation(idx, e.currentTarget.textContent || "")}
+                                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                                className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`experience.${idx}.location`) ? 'field-diff-modified' : ''}`}
+                                              >
+                                                {formatLocation(exp.location)}
+                                              </span>
+                                            </>
+                                          )}
+                                        </span>
+                                        {exp.dates && exp.dates !== "undefined" && (
+                                          <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: currentFontSize, color: black }} className={isFieldModified(`experience.${idx}.dates`) ? 'field-diff-modified' : ''}>
+                                            <span
+                                              contentEditable={!tempUpdatedData}
+                                              suppressContentEditableWarning
+                                              onBlur={(e) => handleEditExpDates(idx, e.currentTarget.textContent || "")}
+                                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                                              className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
+                                            >
+                                              {formatModernDate(exp.dates, selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL)}
+                                            </span>
+                                          </span>
                                         )}
-                                    </div>
-                                    <div style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black, marginBottom: '4px' }} className={isFieldModified(`experience.${idx}.title`) ? 'field-diff-modified' : ''}>
+                                      </div>
+                                    )}
+                                    {exp.title && exp.title.trim() !== "" && exp.title.toLowerCase() !== 'key responsibilities / achievements' && exp.title.toLowerCase() !== 'responsibilities' && (
+                                      <div style={{ fontWeight: 'bold', marginBottom: 0, fontSize: currentFontSize, color: black }} className={isFieldModified(`experience.${idx}.title`) ? 'field-diff-modified' : ''}>
                                         <span
                                           contentEditable={!tempUpdatedData}
                                           suppressContentEditableWarning
@@ -1440,61 +1503,8 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                                         >
                                           {stripTrailingDate(exp.title)}
                                         </span>
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                                      <span style={{ fontWeight: 'bold', fontSize: currentFontSize, color: black }}>
-                                        <span
-                                          contentEditable={!tempUpdatedData}
-                                          suppressContentEditableWarning
-                                          onBlur={(e) => handleEditExpCompany(idx, e.currentTarget.textContent || "")}
-                                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                          className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`experience.${idx}.company`) ? 'field-diff-modified' : ''}`}
-                                        >
-                                          {stripTrailingDate(exp.company)}
-                                        </span>
-                                        {exp.location && (
-                                          <>
-                                            {", "}
-                                            <span
-                                              contentEditable={!tempUpdatedData}
-                                              suppressContentEditableWarning
-                                              onBlur={(e) => handleEditExpLocation(idx, e.currentTarget.textContent || "")}
-                                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                              className={`editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text ${isFieldModified(`experience.${idx}.location`) ? 'field-diff-modified' : ''}`}
-                                            >
-                                              {formatLocation(exp.location)}
-                                            </span>
-                                          </>
-                                        )}
-                                      </span>
-                                      {exp.dates && exp.dates !== "undefined" && (
-                                        <span style={{ fontWeight: 'bold', textAlign: 'right', fontSize: currentFontSize, color: black }} className={isFieldModified(`experience.${idx}.dates`) ? 'field-diff-modified' : ''}>
-                                          <span
-                                            contentEditable={!tempUpdatedData}
-                                            suppressContentEditableWarning
-                                            onBlur={(e) => handleEditExpDates(idx, e.currentTarget.textContent || "")}
-                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                            className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
-                                          >
-                                            {formatModernDate(exp.dates, selectedFormat === ResumeFormat.CLASSIC_PROFESSIONAL)}
-                                          </span>
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div style={{ fontWeight: 'bold', marginBottom: 0, fontSize: currentFontSize, color: black }} className={isFieldModified(`experience.${idx}.title`) ? 'field-diff-modified' : ''}>
-                                      <span
-                                        contentEditable={!tempUpdatedData}
-                                        suppressContentEditableWarning
-                                        onBlur={(e) => handleEditExpTitle(idx, e.currentTarget.textContent || "")}
-                                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                                        className="editable-field-cue focus:outline-none transition-colors px-1 rounded cursor-text"
-                                      >
-                                        {stripTrailingDate(exp.title)}
-                                      </span>
-                                    </div>
+                                      </div>
+                                    )}
                                 </>
                             )}
                             <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem', marginTop: 0 }}>

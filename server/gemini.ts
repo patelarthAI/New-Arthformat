@@ -340,7 +340,7 @@ export const extractResumeDataBackend = async (
       - Map standard sections (Summary, Professional Experience, Internships, Education) to their respective fields.
       - ANY OTHER section header or title (e.g. 'PUBLICATIONS', 'PATENTS', 'AWARDS & HONORS', 'VOLUNTEER WORK', 'KEY PROJECTS', 'PROJECTS', 'LANGUAGES', 'AFFILIATIONS', 'REFERENCES', 'CERTIFICATIONS', 'COMPETENCIES', 'OTHER EXPERIENCE', or ANY custom header title) MUST be extracted into 'customSections' with its EXACT section title as written in the original resume.
       - Do NOT stop after the first section or page. Read through to the very end of the text and extract every job, title, company, bullet point, skill, certification, and education item.
-      - If a work experience section contains bullet points without an explicit job title or company name, populate company as 'Professional Experience' or the section title, title as 'Key Responsibilities / Achievements', and put all bullet points into 'description'.
+      - If a work experience section contains bullet points without an explicit company name or job title header in the text, set company and title to empty strings "". DO NOT insert fake, duplicate, or redundant placeholder strings like 'Professional Experience' or 'Key Responsibilities'. Put all bullet points cleanly into 'description'.
       CRITICAL: For contactInfo.location, extract City, State, and Zip Code if available. 
       CRITICAL: For dates, if a month is present, abbreviate it to 3 letters (e.g., 'Jan'). If NO month is present, DO NOT add one (e.g., keep '2023' as '2023'). 
       CRITICAL: Remove ALL phone numbers and email addresses from the main content, but keep them in the contactInfo fields if found. 
@@ -400,14 +400,27 @@ ACT AS A STRICT DATA EXTRACTOR. Your ONLY job is to map the provided text into t
        // Clean bullets
        if (data.summary) {
           if (typeof data.summary === 'string') {
-              data.summary = [data.summary];
+              data.summary = [(data as any).summary];
           }
-          data.summary = data.summary.map(cleanText);
+          data.summary = data.summary
+            .map(cleanText)
+            .filter(item => 
+              item.trim().toLowerCase() !== "summary" && 
+              item.trim().toLowerCase() !== "core technical expertise" &&
+              item.trim().toLowerCase() !== "profile summary"
+            );
+          if (data.summary.length === 0) delete (data as any).summary;
        }
        if (data.experience) {
          data.experience.forEach(exp => {
            if (exp.description) exp.description = exp.description.map(cleanText);
            if (exp.dates) exp.dates = normalizeDates(exp.dates);
+           if (exp.company && (exp.company.toLowerCase() === 'professional experience' || exp.company.toLowerCase() === 'work history')) {
+             exp.company = "";
+           }
+           if (exp.title && (exp.title.toLowerCase() === 'key responsibilities / achievements' || exp.title.toLowerCase() === 'responsibilities')) {
+             exp.title = "";
+           }
          });
        }
        if (data.internships) {
@@ -417,14 +430,28 @@ ACT AS A STRICT DATA EXTRACTOR. Your ONLY job is to map the provided text into t
           });
        }
        if (data.education) {
-          data.education.forEach(edu => {
-              if (edu.details) edu.details = edu.details.map(cleanText);
-              if (edu.dates) edu.dates = normalizeDates(edu.dates);
+          data.education = data.education.filter(edu => {
+             if (edu.details) {
+                 edu.details = edu.details.map(cleanText).filter(item => 
+                   item.trim().toLowerCase() !== (edu.institution || "").trim().toLowerCase() &&
+                   item.trim().toLowerCase() !== "education"
+                 );
+             }
+             const inst = (edu.institution || "").trim().toLowerCase();
+             const deg = (edu.degree || "").trim().toLowerCase();
+             const hasInst = inst !== "" && inst !== "education";
+             const hasDeg = deg !== "" && deg !== "education";
+             const hasDetails = edu.details && edu.details.length > 0;
+             return hasInst || hasDeg || hasDetails;
           });
        }
        if (data.customSections) {
-           data.customSections.forEach(sec => {
-               if (sec.items) sec.items = sec.items.map(cleanText);
+           data.customSections = data.customSections.filter(sec => {
+               if (!sec.title) return false;
+               if (sec.items) {
+                   sec.items = sec.items.map(cleanText).filter(item => item.trim().toLowerCase() !== sec.title.trim().toLowerCase());
+               }
+               return sec.items && sec.items.length > 0;
            });
        }
 
