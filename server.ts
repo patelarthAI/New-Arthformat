@@ -771,7 +771,10 @@ app.post("/api/extract-doc", async (req, res) => {
     const buffer = Buffer.from(fileBase64, 'base64');
     const extractor = new Extractor();
     const extracted = await extractor.extract(buffer);
-    const text = extracted.getBody();
+    const bodyText = extracted.getBody() || "";
+    const headerText = extracted.getHeaders() || "";
+    const footerText = extracted.getFooters() || "";
+    const text = [headerText, bodyText, footerText].filter(t => t && t.trim().length > 0).join("\n\n");
 
     if (!text || text.trim().length === 0) {
       return res.status(400).json({ error: "Could not extract text from this .doc file." });

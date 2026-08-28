@@ -236,26 +236,11 @@ const App: React.FC = () => {
     try {
       const fileNameLower = file.name.toLowerCase();
 
-      // 1. DOCX Handling
+      // 1. DOCX and .doc Handling
       if (
         file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
-        fileNameLower.endsWith('.docx')
-      ) {
-        const arrayBuffer = await file.arrayBuffer();
-        const mammoth = await import('mammoth');
-        const mammothInstance = (mammoth as any).default || mammoth;
-        const result = await mammothInstance.extractRawText({ arrayBuffer });
-        const text = result.value;
-        if (!text || text.trim().length === 0) {
-          throw new Error("Could not extract text from this Word document.");
-        }
-        setStagedContent({ text, mimeType: 'text/plain', fileName: file.name });
-        return;
-      }
-
-      // 1.5. Legacy .doc Handling (Server-side)
-      if (
-        file.type === 'application/msword' || 
+        file.type === 'application/msword' ||
+        fileNameLower.endsWith('.docx') ||
         fileNameLower.endsWith('.doc')
       ) {
         const base64Data = await new Promise<string>((resolve, reject) => {
@@ -268,7 +253,28 @@ const App: React.FC = () => {
           };
           reader.onerror = (error) => reject(error);
         });
-        
+
+        // First attempt mammoth extraction (works for .docx and .doc files formatted as OpenXML)
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const mammoth = await import('mammoth');
+          const mammothInstance = (mammoth as any).default || mammoth;
+          const result = await mammothInstance.extractRawText({ arrayBuffer });
+          const text = result.value;
+          if (text && text.trim().length > 30) {
+            setStagedContent({ 
+              text, 
+              base64: base64Data, 
+              mimeType: file.type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
+              fileName: file.name 
+            });
+            return;
+          }
+        } catch (mammothErr) {
+          console.log("Mammoth client-side extraction skipped or failed for .doc, proceeding to server-side extractor:", mammothErr);
+        }
+
+        // Fallback to server-side .doc extractor
         const response = await fetch('/api/extract-doc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -295,7 +301,7 @@ const App: React.FC = () => {
         }
 
         const { text } = await response.json();
-        setStagedContent({ text, mimeType: 'text/plain', fileName: file.name });
+        setStagedContent({ text, base64: base64Data, mimeType: file.type || 'application/msword', fileName: file.name });
         return;
       }
 
