@@ -303,16 +303,19 @@ export const extractResumeDataBackend = async (
     });
     const parts: any[] = [];
     
-    if (payload.base64) {
+    // CRITICAL FIX: Prioritize full extracted text if available.
+    // When base64 was checked first, Gemini multimodal vision received only the base64 binary and truncated multimodal processing after Page 1.
+    // Client-side text parsers (pdfjs/mammoth) extract text from ALL pages, so text must be passed first.
+    if (payload.text && payload.text.trim().length > 0) {
+      parts.push({
+        text: `Here is the COMPLETE, FULL VERBATIM raw text content extracted from all pages of the multi-page resume:\n\n${payload.text}`
+      });
+    } else if (payload.base64) {
       parts.push({
         inlineData: {
           data: payload.base64,
           mimeType: payload.mimeType,
         },
-      });
-    } else if (payload.text) {
-      parts.push({
-        text: `Here is the raw text content of a resume:\n\n${payload.text}`
       });
     }
 
@@ -325,7 +328,9 @@ export const extractResumeDataBackend = async (
         : "- Abbreviate months to 3 letters (e.g., 'Jan')."}
       
       GENERAL INSTRUCTIONS:
-      Do not miss ANY sections. Map Work to Experience, Internships to Internships, Education to Education. Put 'Soft Skills', 'Technical Skills', 'Languages', 'Tools', 'Projects' into customSections. 
+      Extract EVERY single page and section in the document! 
+      Map all work history, employment history, career history, roles, key accomplishments, technical experience, and projects into 'experience' or 'customSections'. 
+      Do NOT stop after the first section or page. Read through to the very end of the text and extract every job, title, company, bullet point, skill, certification, and education item.
       CRITICAL: For contactInfo.location, extract City, State, and Zip Code if available. 
       CRITICAL: For dates, if a month is present, abbreviate it to 3 letters (e.g., 'Jan'). If NO month is present, DO NOT add one (e.g., keep '2023' as '2023'). 
       CRITICAL: Remove ALL phone numbers and email addresses from the main content, but keep them in the contactInfo fields if found. 
@@ -345,7 +350,7 @@ export const extractResumeDataBackend = async (
         systemInstruction: `
 ACT AS A STRICT DATA EXTRACTOR. Your ONLY job is to map the provided text into the JSON schema. 
 - You are strictly FORBIDDEN from summarizing, shortening, rephrasing, rewriting, or omitting any information or sections from the original text. Every single word and phrase must be preserved exactly as written.
-- Ensure that EVERY experience entry, job title, company name, education entry, custom section, and bullet point is extracted. Do not skip any historic jobs or older experiences.
+- Ensure that EVERY experience entry, job title, company name, education entry, custom section, and bullet point from ALL pages is extracted. Do not skip any historic jobs or older experiences regardless of how many pages the document is.
 - Do not improve, polish, or edit the content. Keep it 100% verbatim.
 - CRITICAL: Clean up artificial spacing or ligature-splitting errors introduced by PDF text extraction (e.g. convert 'fi eld' to 'field', 'o ffi ce' to 'office', 'sta ff' to 'staff', 'effi cient' to 'efficient'). Do not leave artificial spaces inside words, but do not change any other wording, details, or data.
 `,
