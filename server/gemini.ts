@@ -221,11 +221,11 @@ const saveResumeTool: FunctionDeclaration = {
         items: {
           type: Type.OBJECT,
           properties: {
-            title: { type: Type.STRING, description: "Exact Section Header, e.g. 'SOFT SKILLS', 'TECHNICAL SKILLS'" },
+            title: { type: Type.STRING, description: "Exact Section Header, e.g. 'CORE TECHNICAL EXPERTISE', 'TECHNICAL SKILLS', 'CERTIFICATIONS'" },
             items: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of items or lines in this section" }
           }
         },
-        description: "All other sections not covered above. MUST NOT BE EMPTY if other sections exist."
+        description: "All other custom sections such as Certifications, Technical Expertise, Skills, Languages, Projects. Extract ALL items verbatim."
       },
       
       extractionChanges: {
@@ -328,9 +328,10 @@ export const extractResumeDataBackend = async (
         : "- Abbreviate months to 3 letters (e.g., 'Jan')."}
       
       GENERAL INSTRUCTIONS:
-      Extract EVERY single page and section in the document! 
+      Extract EVERY single section in the document! 
       Map all work history, employment history, career history, roles, key accomplishments, technical experience, and projects into 'experience' or 'customSections'. 
       Do NOT stop after the first section or page. Read through to the very end of the text and extract every job, title, company, bullet point, skill, certification, and education item.
+      If a work experience section contains bullet points without an explicit job title or company name, populate company as 'Professional Experience' or the section title, title as 'Key Responsibilities / Achievements', and put all bullet points into 'description'.
       CRITICAL: For contactInfo.location, extract City, State, and Zip Code if available. 
       CRITICAL: For dates, if a month is present, abbreviate it to 3 letters (e.g., 'Jan'). If NO month is present, DO NOT add one (e.g., keep '2023' as '2023'). 
       CRITICAL: Remove ALL phone numbers and email addresses from the main content, but keep them in the contactInfo fields if found. 
@@ -351,6 +352,7 @@ export const extractResumeDataBackend = async (
 ACT AS A STRICT DATA EXTRACTOR. Your ONLY job is to map the provided text into the JSON schema. 
 - You are strictly FORBIDDEN from summarizing, shortening, rephrasing, rewriting, or omitting any information or sections from the original text. Every single word and phrase must be preserved exactly as written.
 - Ensure that EVERY experience entry, job title, company name, education entry, custom section, and bullet point from ALL pages is extracted. Do not skip any historic jobs or older experiences regardless of how many pages the document is.
+- Extract ALL sections present: Profile/Summary -> summary, Job History/Roles -> experience, Internships -> internships, Education -> education, Skills/Certifications/Projects -> customSections.
 - Do not improve, polish, or edit the content. Keep it 100% verbatim.
 - CRITICAL: Clean up artificial spacing or ligature-splitting errors introduced by PDF text extraction (e.g. convert 'fi eld' to 'field', 'o ffi ce' to 'office', 'sta ff' to 'staff', 'effi cient' to 'efficient'). Do not leave artificial spaces inside words, but do not change any other wording, details, or data.
 `,
@@ -364,47 +366,60 @@ ACT AS A STRICT DATA EXTRACTOR. Your ONLY job is to map the provided text into t
       },
     });
 
+    let data: ResumeData | null = null;
+
     const functionCalls = response.functionCalls;
     if (functionCalls && functionCalls.length > 0) {
       const call = functionCalls[0];
       if (call.name === "save_resume_data") {
-         const data = call.args as unknown as ResumeData;
-         
-         if (!data.contactInfo) data.contactInfo = {};
-
-         // Clean bullets
-         if (data.summary) {
-            if (typeof data.summary === 'string') {
-                data.summary = [data.summary];
-            }
-            data.summary = data.summary.map(cleanText);
-         }
-         if (data.experience) {
-           data.experience.forEach(exp => {
-             if (exp.description) exp.description = exp.description.map(cleanText);
-             if (exp.dates) exp.dates = normalizeDates(exp.dates);
-           });
-         }
-         if (data.internships) {
-            data.internships.forEach(exp => {
-              if (exp.description) exp.description = exp.description.map(cleanText);
-              if (exp.dates) exp.dates = normalizeDates(exp.dates);
-            });
-         }
-         if (data.education) {
-            data.education.forEach(edu => {
-                if (edu.details) edu.details = edu.details.map(cleanText);
-                if (edu.dates) edu.dates = normalizeDates(edu.dates);
-            });
-         }
-         if (data.customSections) {
-             data.customSections.forEach(sec => {
-                 if (sec.items) sec.items = sec.items.map(cleanText);
-             });
-         }
-
-         return data;
+         data = call.args as unknown as ResumeData;
       }
+    }
+
+    if (!data && response.text) {
+      try {
+        const cleanedText = response.text.replace(/```json/g, "").replace(/```/g, "").trim();
+        data = JSON.parse(cleanedText);
+      } catch (e) {
+        console.warn("Failed to parse response.text as JSON:", e);
+      }
+    }
+
+    if (data) {
+       if (!data.contactInfo) data.contactInfo = {};
+
+       // Clean bullets
+       if (data.summary) {
+          if (typeof data.summary === 'string') {
+              data.summary = [data.summary];
+          }
+          data.summary = data.summary.map(cleanText);
+       }
+       if (data.experience) {
+         data.experience.forEach(exp => {
+           if (exp.description) exp.description = exp.description.map(cleanText);
+           if (exp.dates) exp.dates = normalizeDates(exp.dates);
+         });
+       }
+       if (data.internships) {
+          data.internships.forEach(exp => {
+            if (exp.description) exp.description = exp.description.map(cleanText);
+            if (exp.dates) exp.dates = normalizeDates(exp.dates);
+          });
+       }
+       if (data.education) {
+          data.education.forEach(edu => {
+              if (edu.details) edu.details = edu.details.map(cleanText);
+              if (edu.dates) edu.dates = normalizeDates(edu.dates);
+          });
+       }
+       if (data.customSections) {
+           data.customSections.forEach(sec => {
+               if (sec.items) sec.items = sec.items.map(cleanText);
+           });
+       }
+
+       return data;
     }
     
     throw new Error("The AI model did not trigger the extraction tool correctly.");
