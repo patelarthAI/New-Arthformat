@@ -757,30 +757,60 @@ app.post("/api/reject", checkAdmin, async (req, res) => {
   }
 });
 
-// Helper to extract clean printable text sequences from raw binary buffer if word-extractor fails
-function extractFallbackDocText(buffer: Buffer): string {
-  const printable: string[] = [];
-  let currentWord: string[] = [];
-  
-  for (let i = 0; i < buffer.length; i++) {
-    const byte = buffer[i];
-    // Printable ASCII or newline/tab
-    if ((byte >= 32 && byte <= 126) || byte === 10 || byte === 13 || byte === 9) {
-      currentWord.push(String.fromCharCode(byte));
-    } else {
-      if (currentWord.length >= 4) { // Only keep phrases of at least 4 printable chars
-        const word = currentWord.join('').trim();
-        if (word.length > 0) printable.push(word);
-      }
-      currentWord = [];
+// Helper to extract clean printable text sequences from raw binary buffer if word-extractor truncates
+function extractAllDocText(buffer: Buffer): string {
+  const resultLines: string[] = [];
+  const seenLines = new Set<string>();
+
+  function addLine(line: string) {
+    const trimmed = line.trim();
+    if (trimmed.length < 3) return;
+    if (trimmed.startsWith('CompObj') || trimmed.startsWith('ObjectPool') || trimmed.includes('Microsoft Word Document') || trimmed.startsWith('WordDocument')) return;
+    
+    const clean = trimmed.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (clean.length >= 3 && !seenLines.has(clean.toLowerCase())) {
+      seenLines.add(clean.toLowerCase());
+      resultLines.push(clean);
     }
   }
-  if (currentWord.length >= 4) {
-    const word = currentWord.join('').trim();
-    if (word.length > 0) printable.push(word);
+
+  // Stream 1: UTF-16LE Text Extraction (Word 97-2003 Unicode text streams)
+  let currentUtf16: string[] = [];
+  for (let i = 0; i < buffer.length - 1; i += 2) {
+    const code = buffer.readUInt16LE(i);
+    if ((code >= 32 && code <= 126) || code === 10 || code === 13 || code === 9 || (code >= 160 && code <= 0x02FF)) {
+      if (code === 10 || code === 13) {
+        if (currentUtf16.length >= 3) addLine(currentUtf16.join(''));
+        currentUtf16 = [];
+      } else {
+        currentUtf16.push(String.fromCharCode(code));
+      }
+    } else {
+      if (currentUtf16.length >= 3) addLine(currentUtf16.join(''));
+      currentUtf16 = [];
+    }
   }
-  
-  return printable.join('\n');
+  if (currentUtf16.length >= 3) addLine(currentUtf16.join(''));
+
+  // Stream 2: 8-bit ANSI / Compressed Text Extraction
+  let currentAnsi: string[] = [];
+  for (let i = 0; i < buffer.length; i++) {
+    const byte = buffer[i];
+    if ((byte >= 32 && byte <= 126) || byte === 10 || byte === 13 || byte === 9 || (byte >= 160 && byte <= 255)) {
+      if (byte === 10 || byte === 13) {
+        if (currentAnsi.length >= 4) addLine(currentAnsi.join(''));
+        currentAnsi = [];
+      } else {
+        currentAnsi.push(String.fromCharCode(byte));
+      }
+    } else {
+      if (currentAnsi.length >= 4) addLine(currentAnsi.join(''));
+      currentAnsi = [];
+    }
+  }
+  if (currentAnsi.length >= 4) addLine(currentAnsi.join(''));
+
+  return resultLines.join('\n');
 }
 
 // API Route for .doc extraction
@@ -815,8 +845,13 @@ app.post("/api/extract-doc", async (req, res) => {
       console.warn("word-extractor failed, using binary text fallback:", extractErr);
     }
 
+    // Binary stream scanner ensures NO section/page is missed due to piece-table truncation
+    const binaryText = extractAllDocText(buffer);
+
     if (!text || text.trim().length < 20) {
-      text = extractFallbackDocText(buffer);
+      text = binaryText;
+    } else if (binaryText && binaryText.length > text.length + 50) {
+      text = text + "\n\n" + binaryText;
     }
 
     if (!text || text.trim().length === 0) {
