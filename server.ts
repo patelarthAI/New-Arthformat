@@ -182,9 +182,39 @@ process.on('uncaughtException', (error) => {
 });
 
 
-// Background task to clean up old pending resumes
-const autoRejectOldResumes = async () => {
-  // Auto-rejection logic removed as per user request
+// Background task to clean up old pending resumes and enforce zero-bloat RAM usage
+const performAutoCleanup = async () => {
+  try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    
+    // 1. Clean up in-memory records older than 30 days or cap at max 20 lightweight items
+    inMemoryResumes = inMemoryResumes.filter(r => {
+      if (!r.created_at) return true;
+      const created = new Date(r.created_at);
+      return created >= thirtyDaysAgo;
+    });
+
+    if (inMemoryResumes.length > 20) {
+      inMemoryResumes = inMemoryResumes.slice(-20);
+    }
+    await saveInMemoryResumes();
+
+    // 2. Clean up Firestore database if configured
+    if (isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory') {
+      const oldSnapshot = await db.collection('resumes')
+        .where('created_at', '<', thirtyDaysAgo.toISOString())
+        .get();
+      
+      if (!oldSnapshot.empty) {
+        const batch = db.batch();
+        oldSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        console.log(`[Auto-Cleanup] Auto-deleted ${oldSnapshot.size} old resume records from Firestore.`);
+      }
+    }
+  } catch (err: any) {
+    console.warn("[Auto-Cleanup] Warning during auto-delete:", err.message);
+  }
 };
 
 const getDeviceInfoFromUA = (ua: string): string => {
@@ -207,7 +237,7 @@ const getDeviceInfoFromUA = (ua: string): string => {
   return `${os} / ${browser}`;
 };
 
-// API Route for submitting a resume
+// API Route for submitting a resume (stores lightweight metadata only)
 app.post("/api/submit", async (req, res) => {
   try {
     const { content, userId } = req.body;
@@ -231,8 +261,20 @@ app.post("/api/submit", async (req, res) => {
     const userAgent = req.headers['user-agent'] || '';
     const deviceInfo = getDeviceInfoFromUA(userAgent);
 
-    // Run Firestore auto-cleanup asynchronously
+    // Run auto-cleanup asynchronously to purge old records
     performAutoCleanup().catch(err => console.error("[Auto-Cleanup] Trigger failed:", err));
+
+    // Store lightweight summary metadata (no heavy bullet text or full resume payload) to save 99% RAM & storage
+    const candidateName = typeof content === 'object' && content?.name 
+      ? String(content.name).slice(0, 50) 
+      : "Candidate Submission";
+      
+    const lightweightContent = {
+      name: candidateName,
+      hasSummary: !!content?.summary,
+      experienceCount: Array.isArray(content?.experience) ? content.experience.length : 0,
+      educationCount: Array.isArray(content?.education) ? content.education.length : 0
+    };
 
     const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
     if (useDatabase) {
@@ -240,7 +282,7 @@ app.post("/api/submit", async (req, res) => {
         const resumeRef = db.collection('resumes').doc();
         const insertData: any = {
           id: resumeRef.id,
-          content,
+          content: lightweightContent,
           status: 'pending',
           ip_address: ip,
           device_info: deviceInfo,
@@ -277,7 +319,7 @@ app.post("/api/submit", async (req, res) => {
         const newResume = { 
           id: resumeId, 
           user_id: uid, 
-          content, 
+          content: lightweightContent, 
           status: 'pending', 
           ip_address: ip, 
           device_info: deviceInfo, 
@@ -297,7 +339,7 @@ app.post("/api/submit", async (req, res) => {
       const newResume = { 
         id: resumeId, 
         user_id: uid, 
-        content, 
+        content: lightweightContent, 
         status: 'pending', 
         ip_address: ip, 
         device_info: deviceInfo, 
@@ -489,6 +531,32 @@ app.delete("/api/resumes/:id", async (req, res) => {
   } catch (error: any) {
     console.error("Error deleting resume:", error);
     res.status(500).json({ error: error.message || "Failed to delete resume" });
+  }
+});
+
+// API Route for purging all storage and memory logs
+app.post("/api/admin/purge", checkAdmin, async (req, res) => {
+  try {
+    inMemoryResumes = [];
+    await saveInMemoryResumes();
+
+    const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
+    if (useDatabase) {
+      try {
+        const snapshot = await db.collection('resumes').get();
+        if (!snapshot.empty) {
+          const batch = db.batch();
+          snapshot.docs.forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
+        }
+      } catch (dbErr: any) {
+        console.warn("Firestore purge warning:", dbErr.message);
+      }
+    }
+    res.json({ success: true, message: "All submission logs and memory storage purged successfully." });
+  } catch (err: any) {
+    console.error("Error purging records:", err);
+    res.status(500).json({ error: err.message || "Failed to purge database records" });
   }
 });
 
