@@ -759,6 +759,32 @@ app.post("/api/reject", checkAdmin, async (req, res) => {
   }
 });
 
+// Helper to extract clean printable text sequences from raw binary buffer if word-extractor fails
+function extractFallbackDocText(buffer: Buffer): string {
+  const printable: string[] = [];
+  let currentWord: string[] = [];
+  
+  for (let i = 0; i < buffer.length; i++) {
+    const byte = buffer[i];
+    // Printable ASCII or newline/tab
+    if ((byte >= 32 && byte <= 126) || byte === 10 || byte === 13 || byte === 9) {
+      currentWord.push(String.fromCharCode(byte));
+    } else {
+      if (currentWord.length >= 4) { // Only keep phrases of at least 4 printable chars
+        const word = currentWord.join('').trim();
+        if (word.length > 0) printable.push(word);
+      }
+      currentWord = [];
+    }
+  }
+  if (currentWord.length >= 4) {
+    const word = currentWord.join('').trim();
+    if (word.length > 0) printable.push(word);
+  }
+  
+  return printable.join('\n');
+}
+
 // API Route for .doc extraction
 app.post("/api/extract-doc", async (req, res) => {
   try {
@@ -769,12 +795,28 @@ app.post("/api/extract-doc", async (req, res) => {
     }
 
     const buffer = Buffer.from(fileBase64, 'base64');
-    const extractor = new Extractor();
-    const extracted = await extractor.extract(buffer);
-    const bodyText = extracted.getBody() || "";
-    const headerText = extracted.getHeaders() || "";
-    const footerText = extracted.getFooters() || "";
-    const text = [headerText, bodyText, footerText].filter(t => t && t.trim().length > 0).join("\n\n");
+    let text = "";
+
+    try {
+      const extractor = new Extractor();
+      const extracted = await extractor.extract(buffer);
+      const bodyText = extracted.getBody() || "";
+      const textboxText = typeof extracted.getTextboxes === 'function' ? (extracted.getTextboxes() || "") : "";
+      const headerText = typeof extracted.getHeaders === 'function' ? (extracted.getHeaders() || "") : "";
+      const footerText = typeof extracted.getFooters === 'function' ? (extracted.getFooters() || "") : "";
+      const footnoteText = typeof extracted.getFootnotes === 'function' ? (extracted.getFootnotes() || "") : "";
+      const endnoteText = typeof extracted.getEndnotes === 'function' ? (extracted.getEndnotes() || "") : "";
+      
+      text = [headerText, bodyText, textboxText, footerText, footnoteText, endnoteText]
+        .filter(t => typeof t === 'string' && t.trim().length > 0)
+        .join("\n\n");
+    } catch (extractErr) {
+      console.warn("word-extractor failed, using binary text fallback:", extractErr);
+    }
+
+    if (!text || text.trim().length < 20) {
+      text = extractFallbackDocText(buffer);
+    }
 
     if (!text || text.trim().length === 0) {
       return res.status(400).json({ error: "Could not extract text from this .doc file." });
