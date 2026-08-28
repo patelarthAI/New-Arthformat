@@ -345,8 +345,9 @@ export const extractResumeDataBackend = async (
       CRITICAL: Remove ALL phone numbers and email addresses from the main content, but keep them in the contactInfo fields if found. 
       CRITICAL: Split inline lists separated by "◆", "•", or "|" into separate array items.
       
-      ABSOLUTE MOST IMPORTANT RULE:
-      DO NOT SUMMARIZE, TRUNCATE, OR OMIT ANY INFORMATION. You must extract EVERY SINGLE WORD from the original text. If a bullet point is long, keep it long. If there are many skills, extract all of them exactly as written. Do not rewrite or shorten anything. Loss of data is unacceptable.`,
+      ABSOLUTE STRICTEST RULE - ZERO ALTERATION & ZERO LOSS:
+      1. ZERO REWRITING / ZERO REPHRASING: You are strictly FORBIDDEN from altering, polishing, rephrasing, rewriting, summarizing, or changing any wording. Every single word must be copied 100% verbatim.
+      2. ZERO DATA LOSS: Extract EVERY SINGLE WORD, bullet point, job role, skill, and line from ALL pages of the input text. Loss of any data or section is unacceptable.`,
     });
 
     const response = await ai.models.generateContent({
@@ -357,12 +358,11 @@ export const extractResumeDataBackend = async (
       config: {
         maxOutputTokens: 8192,
         systemInstruction: `
-ACT AS A STRICT DATA EXTRACTOR. Your ONLY job is to map the provided text into the JSON schema. 
-- You are strictly FORBIDDEN from summarizing, shortening, rephrasing, rewriting, or omitting any information or sections from the original text. Every single word and phrase must be preserved exactly as written.
-- Ensure that EVERY experience entry, job title, company name, education entry, custom section, and bullet point from ALL pages is extracted. Do not skip any historic jobs or older experiences regardless of how many pages the document is.
-- Extract ALL sections present: Profile/Summary -> summary, Job History/Roles -> experience, Internships -> internships, Education -> education, Skills/Certifications/Projects -> customSections.
-- Do not improve, polish, or edit the content. Keep it 100% verbatim.
-- CRITICAL: Clean up artificial spacing or ligature-splitting errors introduced by PDF text extraction (e.g. convert 'fi eld' to 'field', 'o ffi ce' to 'office', 'sta ff' to 'staff', 'effi cient' to 'efficient'). Do not leave artificial spaces inside words, but do not change any other wording, details, or data.
+STRICT DATA EXTRACTOR DIRECTIVE:
+1. ZERO ALTERATION: You are strictly FORBIDDEN from changing, rephrasing, rewriting, polishing, summarizing, or modifying ANY words, bullet points, or sentences. Preserve 100% exact verbatim original text.
+2. ZERO OMISSION: Extract EVERY experience entry, job title, company name, education entry, custom section, bullet point, and line from ALL pages. Never drop or skip any historical job or detail regardless of length or number of pages.
+3. VERBATIM SECTION MAPPING: Profile/Summary -> summary, Job History/Roles -> experience, Internships -> internships, Education -> education, Skills/Certifications/Projects -> customSections.
+4. Clean up artificial spacing/ligature splitting from PDF text extraction (e.g. convert 'fi eld' to 'field', 'sta ff' to 'staff'), but NEVER alter any words or content.
 `,
         tools: [{ functionDeclarations: [saveResumeTool] }],
         toolConfig: { 
