@@ -37,17 +37,27 @@ const getNextApiKey = () => {
 };
 
 const FALLBACK_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-1.5-flash",
-  "gemini-1.5-pro"
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-flash-lite",
+  "gemini-3.1-pro",
+  "gemini-2.5-pro",
+  "gemini-flash-latest",
+  "gemini-pro-latest"
 ];
 
 const PRO_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-1.5-pro",
-  "gemini-2.0-flash-lite",
-  "gemini-1.5-flash"
+  "gemini-3.7-flash",
+  "gemini-3.1-pro",
+  "gemini-2.5-pro",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-flash-latest",
+  "gemini-pro-latest"
 ];
 
 async function withModelFallback<T>(
@@ -64,9 +74,9 @@ async function withModelFallback<T>(
 
   const models = usePro ? PRO_MODELS : FALLBACK_MODELS;
 
-  // We try up to 12 times total across keys and models
+  // We try up to 15 attempts total across active models and keys
   let totalAttempts = 0;
-  const maxAttempts = 12;
+  const maxAttempts = 15;
 
   for (const modelId of models) {
     for (let i = 0; i < pool.length; i++) {
@@ -77,54 +87,28 @@ async function withModelFallback<T>(
       try {
         return await operation(modelId, apiKey);
       } catch (error: any) {
+        totalAttempts++;
+        lastError = error;
         const errorString = error?.toString() || "";
         const errorStatus = error?.status;
+        
         const isRateLimit = errorStatus === 429 || 
           error?.status === "RESOURCE_EXHAUSTED" || 
           errorString.includes("429") || 
           errorString.includes("Quota exceeded") ||
           errorString.includes("RESOURCE_EXHAUSTED");
           
-        const isInvalidKey = errorStatus === 400 || 
-          errorStatus === 403 || 
-          errorStatus === 401 ||
-          errorString.includes("API key not valid") || 
-          errorString.includes("API_KEY_INVALID") ||
-          errorString.includes("unauthorized") ||
-          errorString.includes("Unauthorized");
-          
-        const isServerError = errorStatus === 500 || 
-          errorStatus === 503 || 
-          errorString.includes("500") || 
-          errorString.includes("503") ||
-          errorString.includes("Internal Server Error") ||
-          errorString.includes("Service Unavailable") ||
-          errorString.includes("UNAVAILABLE") ||
-          errorString.includes("experiencing high demand");
+        if (isRateLimit) rateLimitHits++;
 
-        const isModelLevelIssue = isServerError || isRateLimit || 
-          errorStatus === 404 || 
-          errorString.includes("not found") || 
-          errorString.includes("not supported");
-
-        totalAttempts++;
-        lastError = error;
-
-        if (isModelLevelIssue) {
-          if (isRateLimit) rateLimitHits++;
-          console.warn(`[${operationName}] Model ${modelId} with Key index ${currentKeyIndex % pool.length} failed (${isRateLimit ? "Rate Limit" : "Model Overloaded/Unavailable"}). Retrying with next model as fallback.`);
-          // Breaking out of inner loop to try the next model immediately
-          break;
-        }
-
-        if (isInvalidKey) {
-          console.warn(`[${operationName}] API Key failed (Invalid/Unauthorized) with Model ${modelId}. Rotating key.`);
-          currentKeyIndex++; // Move to next key
-          continue; 
-        }
+        console.warn(`[${operationName}] Model ${modelId} with Key index ${currentKeyIndex % pool.length} returned error (${errorStatus || "API Error"}: ${errorString.substring(0, 120)}). Cascading to next fallback model.`);
         
-        console.error(`[${operationName}] Fatal error with model ${modelId}:`, error);
-        throw error;
+        // Key rotation for key-specific errors
+        if (errorStatus === 400 || errorStatus === 403 || errorStatus === 401 || errorString.includes("API key not valid")) {
+          currentKeyIndex++;
+        }
+
+        // Break to try the next model immediately
+        break;
       }
     }
     if (totalAttempts >= maxAttempts) break;
