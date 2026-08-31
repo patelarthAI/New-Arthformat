@@ -180,6 +180,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     }
   };
 
+  const handlePurgeAll = async () => {
+    if (!adminPassword) return;
+    if (!window.confirm("Are you sure you want to purge all resume submission logs and memory storage? This will clear memory to 0KB.")) return;
+    
+    try {
+      setLoading(true);
+      const response = await fetch('/api/admin/purge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': adminPassword
+        }
+      });
+      if (response.ok) {
+        setResumes([]);
+        fetchStats();
+      }
+    } catch (err: any) {
+      console.error("Failed to purge storage:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleReject = async (resumeId: string) => {
     if (!adminPassword) return;
     
@@ -461,10 +485,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                 </div>
                 <div>
                   <h4 className="text-white font-bold break-all">
-                    {(resume as any).fileName || resume.content?.fileName || 'Unnamed Resume'}
+                    {(resume as any).fileName || resume.content?.fileName || resume.content?.name || 'Candidate Submission'}
                   </h4>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400 mt-1">
-                    <span>{new Date(resume.created_at).toLocaleDateString()}</span>
+                    <span>{resume.created_at ? new Date(resume.created_at).toLocaleDateString() : 'Just Now'}</span>
                     <span>•</span>
                     <span className="font-mono bg-white/[0.04] px-1.5 py-0.5 rounded border border-white/[0.06] text-[10.5px]">
                       IP: {resume.ip_address || 'N/A'}
