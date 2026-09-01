@@ -36,28 +36,34 @@ const getNextApiKey = () => {
   return key;
 };
 
+// Model priority: Full Flash first (1M context, 65K output capacity for complete multi-page extraction),
+// then Pro (deep reasoning), then Flash-Lite as high-throughput fallback when free-tier rate limits hit,
+// then auto aliases as final safety nets. All models are free-tier compatible.
 const FALLBACK_MODELS = [
-  "gemini-3.5-flash-lite",
-  "gemini-3.1-flash-lite",
-  "gemini-2.5-flash-lite",
-  "gemini-3.7-flash",
-  "gemini-3.6-flash",
-  "gemini-3.5-flash",
-  "gemini-3.1-pro",
-  "gemini-2.5-pro",
-  "gemini-flash-latest",
-  "gemini-pro-latest"
+  "gemini-2.5-flash",       // Primary: proven stable, 1M context, full 65K output, free tier
+  "gemini-3.5-flash",       // 1M context, high output capacity, free tier
+  "gemini-3.7-flash",       // Flagship reasoning, 1M context, free tier
+  "gemini-3.6-flash",       // 1M context, free tier
+  "gemini-2.5-pro",         // Deep reasoning Pro, free tier
+  "gemini-3.1-pro",         // Deep reasoning Pro, free tier
+  "gemini-3.5-flash-lite",  // Fallback: highest RPM (15), lower output ceiling
+  "gemini-3.1-flash-lite",  // Fallback: high-throughput lite
+  "gemini-2.5-flash-lite",  // Fallback: high-throughput lite
+  "gemini-flash-latest",    // Auto-updating alias safety net
+  "gemini-pro-latest"       // Auto-updating alias safety net
 ];
 
 const PRO_MODELS = [
-  "gemini-3.5-flash-lite",
-  "gemini-3.7-flash",
-  "gemini-3.1-pro",
-  "gemini-2.5-pro",
-  "gemini-3.6-flash",
-  "gemini-3.5-flash",
-  "gemini-flash-latest",
-  "gemini-pro-latest"
+  "gemini-2.5-pro",         // Primary: deep reasoning Pro, free tier
+  "gemini-3.1-pro",         // Deep reasoning Pro, free tier
+  "gemini-2.5-flash",       // Strong extraction, 1M context, free tier
+  "gemini-3.7-flash",       // Flagship reasoning, free tier
+  "gemini-3.5-flash",       // High output capacity, free tier
+  "gemini-3.6-flash",       // 1M context, free tier
+  "gemini-3.5-flash-lite",  // Fallback: high-throughput lite
+  "gemini-3.1-flash-lite",  // Fallback: high-throughput lite
+  "gemini-flash-latest",    // Auto-updating alias safety net
+  "gemini-pro-latest"       // Auto-updating alias safety net
 ];
 
 async function withModelFallback<T>(
@@ -335,7 +341,7 @@ export const extractResumeDataBackend = async (
         parts: parts,
       },
       config: {
-        maxOutputTokens: 8192,
+        maxOutputTokens: 65536,
         systemInstruction: `
 STRICT DATA EXTRACTOR DIRECTIVE:
 1. ZERO ALTERATION: You are strictly FORBIDDEN from changing, rephrasing, rewriting, polishing, summarizing, or modifying ANY words, bullet points, or sentences. Preserve 100% exact verbatim original text.
@@ -551,7 +557,7 @@ export const checkSpellingBackend = async (data: ResumeData, format: ResumeForma
         ],
       },
       config: {
-        maxOutputTokens: 8192,
+        maxOutputTokens: 65536,
         systemInstruction: `
 ACT AS A STRICT PROOFREADER. You are only allowed to fix clear, objective spelling and grammar errors. 
 - You are strictly forbidden from summarizing, rephrasing, shortening, or deleting any experiences, bullet points, or sections. 
@@ -648,7 +654,7 @@ export const updateResumeBackend = async (
         ],
       },
       config: {
-        maxOutputTokens: 8192,
+        maxOutputTokens: 65536,
         systemInstruction: `
 ACT AS AN EXPERT RESUME EDITOR. Modify the JSON resume data strictly following the user's instructions. 
 - You are forbidden from summarizing, shortening, deleting, or omitting any experiences, custom sections, or bullet points unless the user explicitly instructs you to do so.
