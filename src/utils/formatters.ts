@@ -259,6 +259,40 @@ const DATE_RANGE_REGEX = new RegExp(
   'i'
 );
 
+const ACRONYMS = new Set([
+  "IT", "AI", "ML", "PMO", "QA", "QC", "UI", "UX", "VP", "SVP", "EVP", "AVP",
+  "CEO", "CTO", "CFO", "COO", "CIO", "CISO", "HR", "BI", "ETL", "SQL", "AWS",
+  "GCP", "ERP", "CRM", "API", "PM", "BA", "DBA", "SRE", "DEVOPS", "II", "III", "IV", "V"
+]);
+
+const MINOR_WORDS = new Set(["and", "as", "at", "but", "by", "for", "in", "of", "on", "or", "the", "to", "with"]);
+
+export const toTitleCaseIfAllCaps = (text: string): string => {
+  if (!text) return "";
+  const trimmed = text.trim();
+  const hasLetters = /[A-Z]/.test(trimmed);
+  const isAllCaps = trimmed === trimmed.toUpperCase() && hasLetters;
+
+  if (!isAllCaps) return text; // Already mixed case, preserve verbatim!
+
+  return trimmed
+    .split(/\s+/)
+    .map((word, idx) => {
+      const pureAlpha = word.replace(/[^A-Za-z]/g, "");
+      if (ACRONYMS.has(pureAlpha.toUpperCase())) {
+        return word.replace(pureAlpha, pureAlpha.toUpperCase());
+      }
+      
+      const lower = word.toLowerCase();
+      if (idx > 0 && MINOR_WORDS.has(lower)) {
+        return lower;
+      }
+
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+};
+
 export const stripTrailingDate = (text: string): string => {
   if (!text) return "";
   let cleaned = text.trim();
@@ -273,5 +307,5 @@ export const stripTrailingDate = (text: string): string => {
   cleaned = cleaned.replace(trailingDateRegex, '').trim();
   cleaned = cleaned.replace(/[,;\-\\|(\s]+$/, '').trim();
   
-  return cleaned;
+  return toTitleCaseIfAllCaps(cleaned);
 };
