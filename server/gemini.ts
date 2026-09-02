@@ -36,30 +36,35 @@ const getNextApiKey = () => {
   return key;
 };
 
-// Model priority: Full Flash first (1M context, higher output capacity for multi-page extraction),
-// then Flash-Lite as high-throughput fallback when rate limits hit, then auto aliases.
-// All models are free-tier compatible with multiple API key rotation.
+// Model priority: Full Flash first (1M context, high output capacity for multi-page extraction),
+// then Pro (deep reasoning), then Flash-Lite, then proven 1.5 endpoints and auto aliases.
+// Guaranteed compatibility across all free-tier and paid Google API keys.
 const FALLBACK_MODELS = [
-  "gemini-2.5-flash",       // Primary: stable, 1M context, free tier
-  "gemini-3.5-flash",       // 1M context, high output, free tier
-  "gemini-3.7-flash",       // Flagship reasoning, free tier
-  "gemini-2.0-flash",       // Proven stable, free tier
-  "gemini-3.5-flash-lite",  // Fallback: highest RPM, lower output ceiling
-  "gemini-3.1-flash-lite",  // Fallback: high-throughput lite
-  "gemini-2.5-flash-lite",  // Fallback: high-throughput lite
-  "gemini-flash-latest",    // Auto-updating alias safety net
-  "gemini-pro-latest"       // Auto-updating alias safety net
+  "gemini-2.5-flash",       // Primary: 2.5 Flash 1M context
+  "gemini-1.5-flash",       // Proven stable 1.5 Flash 1M context
+  "gemini-3.5-flash",       // 3.5 Flash
+  "gemini-3.7-flash",       // 3.7 Flash flagship
+  "gemini-2.0-flash",       // 2.0 Flash
+  "gemini-1.5-pro",         // 1.5 Pro deep reasoning
+  "gemini-2.5-pro",         // 2.5 Pro deep reasoning
+  "gemini-3.5-flash-lite",  // High-throughput Flash-Lite
+  "gemini-3.1-flash-lite",  // High-throughput Flash-Lite
+  "gemini-2.5-flash-lite",  // High-throughput Flash-Lite
+  "gemini-flash-latest",    // Auto-updating Flash alias
+  "gemini-pro-latest"       // Auto-updating Pro alias
 ];
 
 const PRO_MODELS = [
-  "gemini-2.5-pro",         // Primary: deep reasoning Pro, free tier
-  "gemini-2.5-flash",       // Strong extraction, 1M context, free tier
-  "gemini-3.5-flash",       // High output capacity, free tier
-  "gemini-3.7-flash",       // Flagship reasoning, free tier
-  "gemini-2.0-flash",       // Proven stable, free tier
-  "gemini-3.5-flash-lite",  // Fallback: high-throughput lite
-  "gemini-flash-latest",    // Auto-updating alias safety net
-  "gemini-pro-latest"       // Auto-updating alias safety net
+  "gemini-2.5-pro",         // Primary 2.5 Pro
+  "gemini-1.5-pro",         // Proven 1.5 Pro
+  "gemini-2.5-flash",       // 2.5 Flash
+  "gemini-1.5-flash",       // 1.5 Flash
+  "gemini-3.5-flash",       // 3.5 Flash
+  "gemini-3.7-flash",       // 3.7 Flash
+  "gemini-2.0-flash",       // 2.0 Flash
+  "gemini-3.5-flash-lite",  // High-throughput Flash-Lite
+  "gemini-flash-latest",    // Auto-updating Flash alias
+  "gemini-pro-latest"       // Auto-updating Pro alias
 ];
 
 async function withModelFallback<T>(
@@ -127,7 +132,8 @@ async function withModelFallback<T>(
     throw new Error("Content Blocked: The AI model flagged this document for safety reasons. Please ensure the content is professional and try again.");
   }
 
-  throw new Error("Processing Interrupted: We encountered an unexpected issue while analyzing your resume. This usually resolves with a quick retry.");
+  const detail = lastError?.message || errorString.substring(0, 150) || "Unknown API error";
+  throw new Error(`Processing Interrupted: ${detail}`);
 }
 
 const saveResumeTool: FunctionDeclaration = {
