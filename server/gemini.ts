@@ -40,24 +40,26 @@ const getNextApiKey = () => {
 // then Flash-Lite as high-throughput fallback when rate limits hit, then auto aliases.
 // All models are free-tier compatible with multiple API key rotation.
 const FALLBACK_MODELS = [
-  "gemini-2.5-flash-preview-05-20", // Primary: proven stable, 1M context, free tier
-  "gemini-3.5-flash",               // 1M context, high output, free tier
-  "gemini-3.7-flash",               // Flagship reasoning, free tier
-  "gemini-3.5-flash-lite",          // Fallback: highest RPM, lower output ceiling
-  "gemini-3.1-flash-lite",          // Fallback: high-throughput lite
-  "gemini-2.5-flash-lite",          // Fallback: high-throughput lite
-  "gemini-flash-latest",            // Auto-updating alias safety net
-  "gemini-pro-latest"               // Auto-updating alias safety net
+  "gemini-2.5-flash",       // Primary: stable, 1M context, free tier
+  "gemini-3.5-flash",       // 1M context, high output, free tier
+  "gemini-3.7-flash",       // Flagship reasoning, free tier
+  "gemini-2.0-flash",       // Proven stable, free tier
+  "gemini-3.5-flash-lite",  // Fallback: highest RPM, lower output ceiling
+  "gemini-3.1-flash-lite",  // Fallback: high-throughput lite
+  "gemini-2.5-flash-lite",  // Fallback: high-throughput lite
+  "gemini-flash-latest",    // Auto-updating alias safety net
+  "gemini-pro-latest"       // Auto-updating alias safety net
 ];
 
 const PRO_MODELS = [
-  "gemini-2.5-pro-preview-06-05",   // Primary: deep reasoning Pro, free tier
-  "gemini-2.5-flash-preview-05-20", // Strong extraction, 1M context, free tier
-  "gemini-3.5-flash",               // High output capacity, free tier
-  "gemini-3.7-flash",               // Flagship reasoning, free tier
-  "gemini-3.5-flash-lite",          // Fallback: high-throughput lite
-  "gemini-flash-latest",            // Auto-updating alias safety net
-  "gemini-pro-latest"               // Auto-updating alias safety net
+  "gemini-2.5-pro",         // Primary: deep reasoning Pro, free tier
+  "gemini-2.5-flash",       // Strong extraction, 1M context, free tier
+  "gemini-3.5-flash",       // High output capacity, free tier
+  "gemini-3.7-flash",       // Flagship reasoning, free tier
+  "gemini-2.0-flash",       // Proven stable, free tier
+  "gemini-3.5-flash-lite",  // Fallback: high-throughput lite
+  "gemini-flash-latest",    // Auto-updating alias safety net
+  "gemini-pro-latest"       // Auto-updating alias safety net
 ];
 
 async function withModelFallback<T>(
