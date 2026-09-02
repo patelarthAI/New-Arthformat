@@ -376,7 +376,7 @@ const App: React.FC = () => {
               lastHeight = currentHeight;
             }
             
-            fullText += pageText + '\n';
+            fullText += `\n\n=== RESUME PAGE ${i} OF ${pdf.numPages} ===\n` + pageText + '\n';
           }
           
           if (!fullText.trim()) {

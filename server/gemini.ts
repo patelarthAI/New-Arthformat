@@ -317,25 +317,19 @@ export const extractResumeDataBackend = async (
     });
     const parts: any[] = [];
     
-    // Gemini API only supports inlineData for PDF and Images.
-    // DOCX/DOC files must be passed as raw text to avoid 400 Unsupported MIME Type errors.
-    const isSupportedMultimodal = 
-      payload.mimeType === 'application/pdf' || 
-      (payload.mimeType && payload.mimeType.startsWith('image/'));
-
-    if (payload.base64 && isSupportedMultimodal) {
+    // CRITICAL FIX: Prioritize full extracted raw text if available.
+    // When base64 was sent alongside or before text, Gemini multimodal vision received the binary and truncated processing after Page 1.
+    // Client-side text parsers (pdfjs/mammoth) extract text from ALL pages, so text MUST be passed as the primary input.
+    if (payload.text && payload.text.trim().length > 0) {
+      parts.push({
+        text: `Here is the COMPLETE, FULL VERBATIM raw text content extracted from all pages of the multi-page resume:\n\n${payload.text}`
+      });
+    } else if (payload.base64 && isSupportedMultimodal) {
       parts.push({
         inlineData: {
           data: payload.base64,
           mimeType: payload.mimeType,
         },
-      });
-    }
-
-    // Include extracted raw text (for complete multi-page verbatim text accuracy)
-    if (payload.text && payload.text.trim().length > 0) {
-      parts.push({
-        text: `Here is the COMPLETE, FULL VERBATIM raw text content extracted from all pages of the multi-page resume:\n\n${payload.text}`
       });
     }
 
@@ -347,8 +341,9 @@ export const extractResumeDataBackend = async (
         ? "- Ensure location (City, State, Zip) is clearly extracted. Abbreviate months to 3 letters (e.g., 'Jan') for internal normalization." 
         : "- Abbreviate months to 3 letters (e.g., 'Jan')."}
       
-      GENERAL INSTRUCTIONS:
-      - ZERO DATA LOSS GUARANTEE: Extract 100% of ALL sections, headers, titles, and content present in the document.
+      MANDATORY MULTI-PAGE COMPLETION RULES:
+      - NEVER CONDENSE TO 1 PAGE. If the input document contains 2, 3, 4, or 5 pages of history, YOU MUST EXTRACT EVERY SINGLE PAGE THROUGH TO THE VERY LAST PAGE.
+      - Extract EVERY single historical role, job title, company name, employment dates, bullet point, project, skill, and certification from ALL pages.
       - Map standard sections (Summary, Professional Experience, Internships, Education) to their respective fields.
       - ANY OTHER section header or title (e.g. 'PUBLICATIONS', 'PATENTS', 'AWARDS & HONORS', 'VOLUNTEER WORK', 'KEY PROJECTS', 'PROJECTS', 'LANGUAGES', 'AFFILIATIONS', 'REFERENCES', 'CERTIFICATIONS', 'COMPETENCIES', 'OTHER EXPERIENCE', or ANY custom header title) MUST be extracted into 'customSections' with its EXACT section title as written in the original resume.
       - Do NOT stop after the first section or page. Read through to the very end of the text and extract every job, title, company, bullet point, skill, certification, and education item.
@@ -373,7 +368,7 @@ export const extractResumeDataBackend = async (
         systemInstruction: `
 STRICT DATA EXTRACTOR DIRECTIVE:
 1. ZERO ALTERATION: You are strictly FORBIDDEN from changing, rephrasing, rewriting, polishing, summarizing, or modifying ANY words, bullet points, or sentences. Preserve 100% exact verbatim original text.
-2. ZERO OMISSION: Extract EVERY experience entry, job title, company name, education entry, custom section, bullet point, and line from ALL pages. Never drop or skip any historical job or detail regardless of length or number of pages.
+2. ZERO OMISSION - ALL PAGES MANDATORY: The input resume is a multi-page document. You MUST extract EVERY experience entry, job title, company name, education entry, custom section, bullet point, and line from Page 1, Page 2, Page 3, and all following pages. Never drop or skip any historical job or detail to fit a 1-page layout. Page limits DO NOT APPLY.
 3. VERBATIM SECTION MAPPING: Profile/Summary -> summary, Job History/Roles -> experience, Internships -> internships, Education -> education, Skills/Certifications/Projects -> customSections.
 4. Clean up artificial spacing/ligature splitting from PDF text extraction (e.g. convert 'fi eld' to 'field', 'sta ff' to 'staff'), but NEVER alter any words or content.
 `,
