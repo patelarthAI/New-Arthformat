@@ -1203,20 +1203,20 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                 lineHeight: styles.lineHeight
               }}
             >
-              {/* Visual Page Break Guides */}
+              {/* Visual Page Break Guides (Non-Intrusive) */}
               {pageFitInfo.pages > 1 && Array.from({ length: pageFitInfo.pages - 1 }).map((_, idx) => {
                 const topOffset = 1140 * (idx + 1);
                 return (
                   <div 
                     key={idx}
-                    className="absolute left-0 right-0 border-t border-dashed border-rose-500/40 flex items-center justify-between px-8 pointer-events-none select-none z-10"
+                    className="absolute left-0 right-0 border-t border-dashed border-rose-400/30 flex items-center justify-between px-2 pointer-events-none select-none z-10"
                     style={{ top: `${topOffset}px`, height: '0px' }}
                   >
-                    <span className="text-[9px] font-mono font-bold text-rose-500 bg-white px-2 py-0.5 rounded border border-rose-200 -translate-y-1/2 shadow-sm">
-                      Page Break (Page {idx + 1} / {idx + 2})
+                    <span className="text-[8px] font-mono font-medium text-rose-400 bg-rose-50/90 px-1.5 py-0.5 rounded border border-rose-200/60 -translate-y-1/2 shadow-xs">
+                      Page Break ({idx + 1} / {idx + 2})
                     </span>
-                    <span className="text-[9px] font-mono font-bold text-rose-500 bg-white px-2 py-0.5 rounded border border-rose-200 -translate-y-1/2 shadow-sm">
-                      ✂️ Page {idx + 2} Content Starts Below
+                    <span className="text-[8px] font-mono font-medium text-rose-400 bg-rose-50/90 px-1.5 py-0.5 rounded border border-rose-200/60 -translate-y-1/2 shadow-xs">
+                      Page {idx + 2} Starts Below
                     </span>
                   </div>
                 );

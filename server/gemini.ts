@@ -18,15 +18,19 @@ export const getUsageStatsBackend = (usePro: boolean = false) => {
 };
 
 const getKeyPool = (): string[] => {
-  const keys = [
+  const rawKeys = [
     process.env.VITE_GEMINI_KEY_1,
     process.env.VITE_GEMINI_KEY_2,
     process.env.VITE_GEMINI_KEY_3,
+    process.env.VITE_GEMINI_KEY_4,
+    process.env.VITE_GEMINI_KEY_5,
     process.env.VITE_GEMINI_API_KEY,
     process.env.GEMINI_API_KEY,
   ].filter(Boolean) as string[];
   
-  return keys;
+  // Deduplicate and trim whitespace to ensure key validity
+  const uniqueKeys = Array.from(new Set(rawKeys.map(k => k.trim()))).filter(k => k.length > 5);
+  return uniqueKeys;
 };
 
 const getNextApiKey = () => {
@@ -83,18 +87,24 @@ async function withModelFallback<T>(
 
   const models = usePro ? PRO_MODELS : FALLBACK_MODELS;
 
-  // We try up to 15 attempts total across active models and keys
+  // Maximum attempts across active models and keys
   let totalAttempts = 0;
-  const maxAttempts = 15;
+  const maxAttempts = 25;
 
   for (const modelId of models) {
+    // Attempt with each available key for this model before abandoning the model
     for (let i = 0; i < pool.length; i++) {
       if (totalAttempts >= maxAttempts) break;
 
-      const apiKey = getNextApiKey();
+      const keyIdx = (currentKeyIndex + i) % pool.length;
+      const apiKey = pool[keyIdx];
       totalRequests++;
+
       try {
-        return await operation(modelId, apiKey);
+        const result = await operation(modelId, apiKey);
+        // On success, advance currentKeyIndex to distribute traffic across keys
+        currentKeyIndex = (keyIdx + 1) % pool.length;
+        return result;
       } catch (error: any) {
         totalAttempts++;
         lastError = error;
@@ -109,14 +119,22 @@ async function withModelFallback<T>(
           
         if (isRateLimit) rateLimitHits++;
 
-        console.warn(`[${operationName}] Model ${modelId} with Key index ${currentKeyIndex % pool.length} returned error (${errorStatus || "API Error"}: ${errorString.substring(0, 120)}). Cascading to next fallback model.`);
-        
-        // Key rotation for key-specific errors
-        if (errorStatus === 400 || errorStatus === 403 || errorStatus === 401 || errorString.includes("API key not valid")) {
-          currentKeyIndex++;
+        const isAuthError = (errorStatus === 400 && errorString.includes("API key not valid")) || 
+          errorStatus === 403 || errorStatus === 401;
+
+        console.warn(`[${operationName}] Model ${modelId} with Key #${keyIdx + 1} failed (${errorStatus || "API Error"}: ${errorString.substring(0, 100)}).`);
+
+        // If this specific key hit rate limits or auth error, try the NEXT key with the same model
+        if (isRateLimit || isAuthError) {
+          continue;
         }
 
-        // Break to try the next model immediately
+        // If the model itself is not found (404) or unsupported for generateContent, skip to next model
+        if (errorStatus === 404 || errorString.includes("not found") || errorString.includes("not supported")) {
+          break;
+        }
+
+        // For other unexpected model-level errors, cascade to next model
         break;
       }
     }
