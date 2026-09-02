@@ -37,11 +37,12 @@ const getNextApiKey = () => {
 };
 
 // Model priority: Full Flash first (1M context, high output capacity for multi-page extraction),
-// then Pro (deep reasoning), then Flash-Lite, then proven 1.5 endpoints and auto aliases.
+// then Pro (deep reasoning), then Flash-Lite & 8B lightweight models, then proven 1.5 endpoints and auto aliases.
 // Guaranteed compatibility across all free-tier and paid Google API keys.
 const FALLBACK_MODELS = [
   "gemini-2.5-flash",       // Primary: 2.5 Flash 1M context
   "gemini-1.5-flash",       // Proven stable 1.5 Flash 1M context
+  "gemini-1.5-flash-8b",    // Fast lightweight 8B free tier model
   "gemini-3.5-flash",       // 3.5 Flash
   "gemini-3.7-flash",       // 3.7 Flash flagship
   "gemini-2.0-flash",       // 2.0 Flash
@@ -59,6 +60,7 @@ const PRO_MODELS = [
   "gemini-1.5-pro",         // Proven 1.5 Pro
   "gemini-2.5-flash",       // 2.5 Flash
   "gemini-1.5-flash",       // 1.5 Flash
+  "gemini-1.5-flash-8b",    // Fast 8B free tier model
   "gemini-3.5-flash",       // 3.5 Flash
   "gemini-3.7-flash",       // 3.7 Flash
   "gemini-2.0-flash",       // 2.0 Flash
@@ -297,8 +299,13 @@ export const extractResumeDataBackend = async (
     });
     const parts: any[] = [];
     
-    // Include base64 binary (for visual layout and header/footer understanding)
-    if (payload.base64) {
+    // Gemini API only supports inlineData for PDF and Images.
+    // DOCX/DOC files must be passed as raw text to avoid 400 Unsupported MIME Type errors.
+    const isSupportedMultimodal = 
+      payload.mimeType === 'application/pdf' || 
+      (payload.mimeType && payload.mimeType.startsWith('image/'));
+
+    if (payload.base64 && isSupportedMultimodal) {
       parts.push({
         inlineData: {
           data: payload.base64,
