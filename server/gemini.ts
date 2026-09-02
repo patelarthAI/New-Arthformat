@@ -297,19 +297,20 @@ export const extractResumeDataBackend = async (
     });
     const parts: any[] = [];
     
-    // CRITICAL FIX: Prioritize full extracted text if available.
-    // When base64 was checked first, Gemini multimodal vision received only the base64 binary and truncated multimodal processing after Page 1.
-    // Client-side text parsers (pdfjs/mammoth) extract text from ALL pages, so text must be passed first.
-    if (payload.text && payload.text.trim().length > 0) {
-      parts.push({
-        text: `Here is the COMPLETE, FULL VERBATIM raw text content extracted from all pages of the multi-page resume:\n\n${payload.text}`
-      });
-    } else if (payload.base64) {
+    // Include base64 binary (for visual layout and header/footer understanding)
+    if (payload.base64) {
       parts.push({
         inlineData: {
           data: payload.base64,
           mimeType: payload.mimeType,
         },
+      });
+    }
+
+    // Include extracted raw text (for complete multi-page verbatim text accuracy)
+    if (payload.text && payload.text.trim().length > 0) {
+      parts.push({
+        text: `Here is the COMPLETE, FULL VERBATIM raw text content extracted from all pages of the multi-page resume:\n\n${payload.text}`
       });
     }
 
@@ -433,7 +434,9 @@ STRICT DATA EXTRACTOR DIRECTIVE:
        }
        if (data.customSections) {
            data.customSections = data.customSections.filter(sec => {
-               if (!sec.title) return false;
+               if (!sec.title || sec.title.trim() === "") {
+                   sec.title = "TECHNICAL SKILLS & DETAILS";
+               }
                if (sec.items) {
                    sec.items = sec.items.map(cleanText).filter(item => item.trim().toLowerCase() !== sec.title.trim().toLowerCase());
                }
