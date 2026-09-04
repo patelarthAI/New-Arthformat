@@ -2,7 +2,8 @@
   "version": 2,
   "functions": {
     "api/index.ts": {
-      "maxDuration": 60
+      "maxDuration": 300,
+      "memory": 1024
     }
   },
   "rewrites": [
@@ -12,3 +13,4 @@
     }
   ]
 }
+

@@ -354,6 +354,10 @@ export const extractResumeDataBackend = async (
     // CRITICAL FIX: Prioritize full extracted raw text if available.
     // When base64 was sent alongside or before text, Gemini multimodal vision received the binary and truncated processing after Page 1.
     // Client-side text parsers (pdfjs/mammoth) extract text from ALL pages, so text MUST be passed as the primary input.
+    const isSupportedMultimodal =
+      payload.mimeType === 'application/pdf' ||
+      (payload.mimeType && payload.mimeType.startsWith('image/'));
+
     if (payload.text && payload.text.trim().length > 0) {
       parts.push({
         text: `Here is the COMPLETE, FULL VERBATIM raw text content extracted from all pages of the multi-page resume:\n\n${payload.text}`
