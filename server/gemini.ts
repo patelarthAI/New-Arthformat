@@ -40,37 +40,24 @@ const getNextApiKey = () => {
   return key;
 };
 
-// Model priority: Full Flash first (1M context, high output capacity for multi-page extraction),
-// then Pro (deep reasoning), then Flash-Lite & 8B lightweight models, then proven 1.5 endpoints and auto aliases.
-// Guaranteed compatibility across all free-tier and paid Google API keys.
+// VERIFIED real Gemini model IDs. Non-existent IDs cause 404 delays (3-5s each) before fallback.
+// Keep this list lean: only models confirmed to exist on the Gemini API.
 const FALLBACK_MODELS = [
-  "gemini-2.5-flash",       // Primary: 2.5 Flash 1M context
-  "gemini-1.5-flash",       // Proven stable 1.5 Flash 1M context
-  "gemini-1.5-flash-8b",    // Fast lightweight 8B free tier model
-  "gemini-3.5-flash",       // 3.5 Flash
-  "gemini-3.7-flash",       // 3.7 Flash flagship
-  "gemini-2.0-flash",       // 2.0 Flash
-  "gemini-1.5-pro",         // 1.5 Pro deep reasoning
-  "gemini-2.5-pro",         // 2.5 Pro deep reasoning
-  "gemini-3.5-flash-lite",  // High-throughput Flash-Lite
-  "gemini-3.1-flash-lite",  // High-throughput Flash-Lite
-  "gemini-2.5-flash-lite",  // High-throughput Flash-Lite
-  "gemini-flash-latest",    // Auto-updating Flash alias
-  "gemini-pro-latest"       // Auto-updating Pro alias
+  "gemini-2.5-flash",       // Primary: 2.5 Flash — 1M context, best free-tier model
+  "gemini-2.0-flash",       // 2.0 Flash — fast, wide availability
+  "gemini-1.5-flash",       // 1.5 Flash — proven stable fallback
+  "gemini-1.5-flash-8b",    // 1.5 Flash-8B — fastest lightweight free-tier model
+  "gemini-1.5-pro",         // 1.5 Pro — deep reasoning fallback
+  "gemini-2.5-pro",         // 2.5 Pro — most capable, rate-limited on free tier
 ];
 
 const PRO_MODELS = [
-  "gemini-2.5-pro",         // Primary 2.5 Pro
-  "gemini-1.5-pro",         // Proven 1.5 Pro
+  "gemini-2.5-pro",         // Primary: best reasoning
   "gemini-2.5-flash",       // 2.5 Flash
-  "gemini-1.5-flash",       // 1.5 Flash
-  "gemini-1.5-flash-8b",    // Fast 8B free tier model
-  "gemini-3.5-flash",       // 3.5 Flash
-  "gemini-3.7-flash",       // 3.7 Flash
   "gemini-2.0-flash",       // 2.0 Flash
-  "gemini-3.5-flash-lite",  // High-throughput Flash-Lite
-  "gemini-flash-latest",    // Auto-updating Flash alias
-  "gemini-pro-latest"       // Auto-updating Pro alias
+  "gemini-1.5-pro",         // 1.5 Pro
+  "gemini-1.5-flash",       // 1.5 Flash
+  "gemini-1.5-flash-8b",    // Lightweight fallback
 ];
 
 async function withModelFallback<T>(

@@ -263,8 +263,9 @@ app.post("/api/submit", async (req, res) => {
     performAutoCleanup().catch(err => console.error("[Auto-Cleanup] Trigger failed:", err));
 
     // Store lightweight summary metadata (no heavy bullet text or full resume payload) to save 99% RAM & storage
-    const candidateName = typeof content === 'object' && content?.name 
-      ? String(content.name).slice(0, 50) 
+    // content.fileName is the original file name sent from the client (e.g. "John_Smith_Resume.pdf")
+    const candidateName = typeof content === 'object' && (content?.fileName || content?.name)
+      ? String(content.fileName || content.name).replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').slice(0, 50)
       : "Candidate Submission";
       
     const lightweightContent = {
