@@ -17,8 +17,10 @@ import {
   getUsageStatsBackend,
   updateResumeBackend,
   rewritePhraseBackend,
-  performOcrBackend
+  performOcrBackend,
+  getKeyPool
 } from "../server/gemini";
+import { GoogleGenAI } from "@google/genai";
 
 const app = express();
 const PORT = 3000;
@@ -29,12 +31,34 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 console.log("Express JSON middleware loaded with 50mb limit");
 
-// Health check
-app.get("/api/health", (req, res) => {
+// Health check and model connectivity diagnostic
+app.get("/api/health", async (req, res) => {
+  const pool = getKeyPool();
+  const testModels = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-3.1-pro-preview", "gemini-1.5-pro"];
+  const modelResults: Record<string, string> = {};
+
+  if (req.query.test === "true" && pool.length > 0) {
+    for (const m of testModels) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: pool[0] });
+        const resp = await ai.models.generateContent({
+          model: m,
+          contents: "hi",
+          config: { maxOutputTokens: 5 }
+        });
+        modelResults[m] = "OK: " + (resp.text || "").trim().slice(0, 30);
+      } catch (err: any) {
+        modelResults[m] = err.message || err.toString();
+      }
+    }
+  }
+
   res.json({ 
     status: "ok", 
     env: process.env.NODE_ENV,
-    hasApiKey: !!(process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY)
+    keyCount: pool.length,
+    hasApiKey: pool.length > 0,
+    ...(req.query.test === "true" ? { models: modelResults } : {})
   });
 });
 

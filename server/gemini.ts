@@ -17,15 +17,20 @@ export const getUsageStatsBackend = (usePro: boolean = false) => {
   };
 };
 
-const getKeyPool = (): string[] => {
+export const getKeyPool = (): string[] => {
   const rawKeys = [
+    process.env.GEMINI_API_KEY,
+    process.env.VITE_GEMINI_API_KEY,
+    process.env.GEMINI_KEY_1,
+    process.env.GEMINI_KEY_2,
+    process.env.GEMINI_KEY_3,
+    process.env.GEMINI_KEY_4,
+    process.env.GEMINI_KEY_5,
     process.env.VITE_GEMINI_KEY_1,
     process.env.VITE_GEMINI_KEY_2,
     process.env.VITE_GEMINI_KEY_3,
     process.env.VITE_GEMINI_KEY_4,
     process.env.VITE_GEMINI_KEY_5,
-    process.env.VITE_GEMINI_API_KEY,
-    process.env.GEMINI_API_KEY,
   ].filter(Boolean) as string[];
   
   // Deduplicate and trim whitespace to ensure key validity
@@ -40,23 +45,22 @@ const getNextApiKey = () => {
   return key;
 };
 
-// VERIFIED working Gemini model IDs (Sep 2026).
-// gemini-1.5-flash-8b was removed — confirmed 404 "not found for API version v1beta".
-// Keep this list to ONLY real, tested endpoints to avoid slow 404 fallback delays.
+// VERIFIED working Gemini model IDs (September 2026).
+// Removed gemini-2.5-pro and gemini-2.5-flash (Google retired them: "no longer available to new users").
+// Google explicitly directs users to gemini-3.1-pro-preview.
+// Production GA models: gemini-2.0-flash and gemini-1.5-flash.
 const FALLBACK_MODELS = [
-  "gemini-2.5-flash",   // PRIMARY — best free-tier, 1M context, fast
-  "gemini-2.0-flash",   // Strong fallback, widely available
-  "gemini-1.5-flash",   // Proven stable, very widely available
-  "gemini-1.5-pro",     // Deep reasoning, slower but reliable
-  "gemini-2.5-pro",     // Most capable — rate-limited on free tier, last resort
+  "gemini-2.0-flash",       // PRIMARY GA production model: fast, robust, 1M context
+  "gemini-1.5-flash",       // Proven stable GA fallback
+  "gemini-3.1-pro-preview", // Google's recommended latest reasoning model
+  "gemini-1.5-pro",         // Proven Pro fallback
 ];
 
 const PRO_MODELS = [
-  "gemini-2.5-pro",     // PRIMARY for PRO mode
-  "gemini-2.5-flash",   // Fast fallback
-  "gemini-2.0-flash",   // Reliable fallback
-  "gemini-1.5-pro",     // Proven stable Pro
-  "gemini-1.5-flash",   // Flash fallback
+  "gemini-3.1-pro-preview", // PRIMARY PRO: Google's recommended pro model
+  "gemini-1.5-pro",         // Stable GA Pro
+  "gemini-2.0-flash",       // Fast high-capacity fallback
+  "gemini-1.5-flash",       // Stable Flash fallback
 ];
 
 async function withModelFallback<T>(
@@ -106,16 +110,18 @@ async function withModelFallback<T>(
           errorStatus === 403 ||
           errorStatus === 401;
 
+        const lowerError = errorString.toLowerCase();
         const isModelNotFound =
           errorStatus === 404 ||
-          errorString.includes("not found") ||
-          errorString.includes("not supported") ||
+          lowerError.includes("not found") ||
+          lowerError.includes("not supported") ||
+          lowerError.includes("no longer available") ||
           errorString.includes("NOT_FOUND");
 
         if (isRateLimit) rateLimitHits++;
 
-        // If this failure was NOT a rate limit, it's a real model/auth error
-        if (!isRateLimit) allRateLimited = false;
+        // If this failure was NOT a rate limit and NOT an invalid model ID, it's a real model/auth error
+        if (!isRateLimit && !isModelNotFound) allRateLimited = false;
 
         console.warn(
           `[${operationName}] ${modelId} / Key#${keyIdx + 1} failed — ` +
@@ -126,7 +132,7 @@ async function withModelFallback<T>(
         // Rate limit or auth error → try next key with same model
         if (isRateLimit || isAuthError) continue;
 
-        // Model not found / not supported → skip ALL keys, go to next model immediately
+        // Model not found / not supported / deprecated → skip ALL keys, go to next model immediately
         if (isModelNotFound) break;
 
         // Any other model-level error → try next model
@@ -410,7 +416,7 @@ export const extractResumeDataBackend = async (
         parts: parts,
       },
       config: {
-        maxOutputTokens: 16384,
+        maxOutputTokens: 8192,
         systemInstruction: `
 STRICT DATA EXTRACTOR DIRECTIVE:
 1. ZERO ALTERATION: You are strictly FORBIDDEN from changing, rephrasing, rewriting, polishing, summarizing, or modifying ANY words, bullet points, or sentences. Preserve 100% exact verbatim original text.
@@ -632,7 +638,7 @@ export const checkSpellingBackend = async (data: ResumeData, format: ResumeForma
         ],
       },
       config: {
-        maxOutputTokens: 16384,
+        maxOutputTokens: 8192,
         systemInstruction: `
 ACT AS A STRICT PROOFREADER. You are only allowed to fix clear, objective spelling and grammar errors. 
 - You are strictly forbidden from summarizing, rephrasing, shortening, or deleting any experiences, bullet points, or sections. 
@@ -729,7 +735,7 @@ export const updateResumeBackend = async (
         ],
       },
       config: {
-        maxOutputTokens: 16384,
+        maxOutputTokens: 8192,
         systemInstruction: `
 ACT AS AN EXPERT RESUME EDITOR. Modify the JSON resume data strictly following the user's instructions. 
 - You are forbidden from summarizing, shortening, deleting, or omitting any experiences, custom sections, or bullet points unless the user explicitly instructs you to do so.
