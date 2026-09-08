@@ -40,24 +40,23 @@ const getNextApiKey = () => {
   return key;
 };
 
-// VERIFIED real Gemini model IDs. Non-existent IDs cause 404 delays (3-5s each) before fallback.
-// Keep this list lean: only models confirmed to exist on the Gemini API.
+// VERIFIED working Gemini model IDs (Sep 2026).
+// gemini-1.5-flash-8b was removed — confirmed 404 "not found for API version v1beta".
+// Keep this list to ONLY real, tested endpoints to avoid slow 404 fallback delays.
 const FALLBACK_MODELS = [
-  "gemini-2.5-flash",       // Primary: 2.5 Flash — 1M context, best free-tier model
-  "gemini-2.0-flash",       // 2.0 Flash — fast, wide availability
-  "gemini-1.5-flash",       // 1.5 Flash — proven stable fallback
-  "gemini-1.5-flash-8b",    // 1.5 Flash-8B — fastest lightweight free-tier model
-  "gemini-1.5-pro",         // 1.5 Pro — deep reasoning fallback
-  "gemini-2.5-pro",         // 2.5 Pro — most capable, rate-limited on free tier
+  "gemini-2.5-flash",   // PRIMARY — best free-tier, 1M context, fast
+  "gemini-2.0-flash",   // Strong fallback, widely available
+  "gemini-1.5-flash",   // Proven stable, very widely available
+  "gemini-1.5-pro",     // Deep reasoning, slower but reliable
+  "gemini-2.5-pro",     // Most capable — rate-limited on free tier, last resort
 ];
 
 const PRO_MODELS = [
-  "gemini-2.5-pro",         // Primary: best reasoning
-  "gemini-2.5-flash",       // 2.5 Flash
-  "gemini-2.0-flash",       // 2.0 Flash
-  "gemini-1.5-pro",         // 1.5 Pro
-  "gemini-1.5-flash",       // 1.5 Flash
-  "gemini-1.5-flash-8b",    // Lightweight fallback
+  "gemini-2.5-pro",     // PRIMARY for PRO mode
+  "gemini-2.5-flash",   // Fast fallback
+  "gemini-2.0-flash",   // Reliable fallback
+  "gemini-1.5-pro",     // Proven stable Pro
+  "gemini-1.5-flash",   // Flash fallback
 ];
 
 async function withModelFallback<T>(
@@ -66,6 +65,7 @@ async function withModelFallback<T>(
   usePro: boolean = false
 ): Promise<T> {
   let lastError: any;
+  let allRateLimited = true; // Track if ALL failures were rate limits (no real model error)
   const pool = getKeyPool();
   
   if (pool.length === 0) {
@@ -74,12 +74,10 @@ async function withModelFallback<T>(
 
   const models = usePro ? PRO_MODELS : FALLBACK_MODELS;
 
-  // Maximum attempts across active models and keys
   let totalAttempts = 0;
-  const maxAttempts = 25;
+  const maxAttempts = models.length * pool.length; // Try every key for every model
 
   for (const modelId of models) {
-    // Attempt with each available key for this model before abandoning the model
     for (let i = 0; i < pool.length; i++) {
       if (totalAttempts >= maxAttempts) break;
 
@@ -89,7 +87,6 @@ async function withModelFallback<T>(
 
       try {
         const result = await operation(modelId, apiKey);
-        // On success, advance currentKeyIndex to distribute traffic across keys
         currentKeyIndex = (keyIdx + 1) % pool.length;
         return result;
       } catch (error: any) {
@@ -97,51 +94,75 @@ async function withModelFallback<T>(
         lastError = error;
         const errorString = error?.toString() || "";
         const errorStatus = error?.status;
-        
-        const isRateLimit = errorStatus === 429 || 
-          error?.status === "RESOURCE_EXHAUSTED" || 
-          errorString.includes("429") || 
+
+        const isRateLimit =
+          errorStatus === 429 ||
+          errorString.includes("429") ||
           errorString.includes("Quota exceeded") ||
           errorString.includes("RESOURCE_EXHAUSTED");
-          
+
+        const isAuthError =
+          (errorStatus === 400 && errorString.includes("API key not valid")) ||
+          errorStatus === 403 ||
+          errorStatus === 401;
+
+        const isModelNotFound =
+          errorStatus === 404 ||
+          errorString.includes("not found") ||
+          errorString.includes("not supported") ||
+          errorString.includes("NOT_FOUND");
+
         if (isRateLimit) rateLimitHits++;
 
-        const isAuthError = (errorStatus === 400 && errorString.includes("API key not valid")) || 
-          errorStatus === 403 || errorStatus === 401;
+        // If this failure was NOT a rate limit, it's a real model/auth error
+        if (!isRateLimit) allRateLimited = false;
 
-        console.warn(`[${operationName}] Model ${modelId} with Key #${keyIdx + 1} failed (${errorStatus || "API Error"}: ${errorString.substring(0, 100)}).`);
+        console.warn(
+          `[${operationName}] ${modelId} / Key#${keyIdx + 1} failed — ` +
+          `${isRateLimit ? "RATE_LIMIT" : isModelNotFound ? "NOT_FOUND" : isAuthError ? "AUTH_ERROR" : "ERROR"}: ` +
+          `${errorString.substring(0, 80)}`
+        );
 
-        // If this specific key hit rate limits or auth error, try the NEXT key with the same model
-        if (isRateLimit || isAuthError) {
-          continue;
-        }
+        // Rate limit or auth error → try next key with same model
+        if (isRateLimit || isAuthError) continue;
 
-        // If the model itself is not found (404) or unsupported for generateContent, skip to next model
-        if (errorStatus === 404 || errorString.includes("not found") || errorString.includes("not supported")) {
-          break;
-        }
+        // Model not found / not supported → skip ALL keys, go to next model immediately
+        if (isModelNotFound) break;
 
-        // For other unexpected model-level errors, cascade to next model
+        // Any other model-level error → try next model
         break;
       }
     }
     if (totalAttempts >= maxAttempts) break;
   }
-  
-  console.error(`[${operationName}] All attempts exhausted.`, lastError);
-  
-  const errorString = lastError?.toString() || "";
-  if (errorString.includes("429") || errorString.includes("Quota exceeded") || errorString.includes("RESOURCE_EXHAUSTED")) {
-    throw new Error("High Traffic Detected: Our AI engines are currently at capacity. Please wait 30-60 seconds and try again.");
-  }
-  
-  if (errorString.includes("safety") || errorString.includes("blocked")) {
-    throw new Error("Content Blocked: The AI model flagged this document for safety reasons. Please ensure the content is professional and try again.");
+
+  console.error(`[${operationName}] All ${totalAttempts} attempts exhausted. allRateLimited=${allRateLimited}`, lastError);
+
+  // If every single attempt was a rate limit, give a clear friendly message
+  if (allRateLimited || rateLimitHits >= totalAttempts) {
+    throw new Error(
+      "All AI engines are currently at capacity (rate limited). This usually resolves within 60 seconds. " +
+      "Please wait a moment and try uploading again."
+    );
   }
 
-  const detail = lastError?.message || errorString.substring(0, 150) || "Unknown API error";
-  throw new Error(`Processing Interrupted: ${detail}`);
+  const errorString = lastError?.toString() || "";
+  if (errorString.includes("429") || errorString.includes("Quota exceeded") || errorString.includes("RESOURCE_EXHAUSTED")) {
+    throw new Error("All AI engines are currently at capacity. Please wait 30-60 seconds and try again.");
+  }
+
+  if (errorString.includes("safety") || errorString.includes("blocked")) {
+    throw new Error("Content Blocked: The AI model flagged this document. Please ensure it is a professional resume and try again.");
+  }
+
+  if (errorString.includes("API key not valid") || errorString.includes("API_KEY_INVALID")) {
+    throw new Error("API Key Error: One or more Gemini API keys are invalid. Please check your Vercel environment variables.");
+  }
+
+  const detail = lastError?.message || errorString.substring(0, 200) || "Unknown API error";
+  throw new Error(`Processing failed after trying all models. Details: ${detail}`);
 }
+
 
 const saveResumeTool: FunctionDeclaration = {
   name: "save_resume_data",
