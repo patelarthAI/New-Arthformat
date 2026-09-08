@@ -45,22 +45,22 @@ const getNextApiKey = () => {
   return key;
 };
 
-// VERIFIED working Gemini model IDs (September 2026).
-// Removed gemini-2.5-pro and gemini-2.5-flash (Google retired them: "no longer available to new users").
-// Google explicitly directs users to gemini-3.1-pro-preview.
-// Production GA models: gemini-2.0-flash and gemini-1.5-flash.
+// ACTIVE Gemini model IDs (September 2026).
+// Google API error response explicitly directs:
+// - Flash: "Please update your code to use models/gemini-3.6-flash"
+// - Pro: "Please update your code to use models/gemini-3.1-pro-preview"
 const FALLBACK_MODELS = [
-  "gemini-2.0-flash",       // PRIMARY GA production model: fast, robust, 1M context
-  "gemini-1.5-flash",       // Proven stable GA fallback
-  "gemini-3.1-pro-preview", // Google's recommended latest reasoning model
-  "gemini-1.5-pro",         // Proven Pro fallback
+  "gemini-3.6-flash",       // PRIMARY Flash model directly recommended by Google
+  "gemini-3.5-flash",       // Secondary Flash
+  "gemini-3.1-pro-preview", // Google's recommended reasoning model
+  "gemini-3.1-pro",         // Pro alias
 ];
 
 const PRO_MODELS = [
-  "gemini-3.1-pro-preview", // PRIMARY PRO: Google's recommended pro model
-  "gemini-1.5-pro",         // Stable GA Pro
-  "gemini-2.0-flash",       // Fast high-capacity fallback
-  "gemini-1.5-flash",       // Stable Flash fallback
+  "gemini-3.1-pro-preview", // PRIMARY PRO recommended by Google
+  "gemini-3.1-pro",         // Pro alias
+  "gemini-3.6-flash",       // High-capacity Flash
+  "gemini-3.5-flash",       // Secondary Flash
 ];
 
 async function withModelFallback<T>(

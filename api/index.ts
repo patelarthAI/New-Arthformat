@@ -34,21 +34,31 @@ console.log("Express JSON middleware loaded with 50mb limit");
 // Health check and model connectivity diagnostic
 app.get("/api/health", async (req, res) => {
   const pool = getKeyPool();
-  const testModels = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-3.1-pro-preview", "gemini-1.5-pro"];
-  const modelResults: Record<string, string> = {};
+  const testModels = [
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.0-flash",
+    "gemini-3.1-pro-preview",
+    "gemini-3.1-pro"
+  ];
+  const modelResults: Record<string, any> = {};
 
   if (req.query.test === "true" && pool.length > 0) {
-    for (const m of testModels) {
-      try {
-        const ai = new GoogleGenAI({ apiKey: pool[0] });
-        const resp = await ai.models.generateContent({
-          model: m,
-          contents: "hi",
-          config: { maxOutputTokens: 5 }
-        });
-        modelResults[m] = "OK: " + (resp.text || "").trim().slice(0, 30);
-      } catch (err: any) {
-        modelResults[m] = err.message || err.toString();
+    for (let k = 0; k < pool.length; k++) {
+      const keyLabel = `Key_${k + 1}`;
+      modelResults[keyLabel] = {};
+      const ai = new GoogleGenAI({ apiKey: pool[k] });
+      for (const m of testModels) {
+        try {
+          const resp = await ai.models.generateContent({
+            model: m,
+            contents: "hi",
+            config: { maxOutputTokens: 5 }
+          });
+          modelResults[keyLabel][m] = "OK: " + (resp.text || "").trim().slice(0, 30);
+        } catch (err: any) {
+          modelResults[keyLabel][m] = err.message || err.toString();
+        }
       }
     }
   }
@@ -58,7 +68,7 @@ app.get("/api/health", async (req, res) => {
     env: process.env.NODE_ENV,
     keyCount: pool.length,
     hasApiKey: pool.length > 0,
-    ...(req.query.test === "true" ? { models: modelResults } : {})
+    ...(req.query.test === "true" ? { results: modelResults } : {})
   });
 });
 
