@@ -38,8 +38,16 @@ app.get("/api/health", async (req, res) => {
     "gemini-3.6-flash",
     "gemini-3.5-flash",
     "gemini-3.0-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-latest",
+    "gemini-2.5-pro",
+    "gemini-2.5-pro-latest",
+    "gemini-2.5-pro-preview-06-05",
+    "gemini-2.5-pro-preview-05-06",
     "gemini-3.1-pro-preview",
-    "gemini-3.1-pro"
+    "gemini-3.1-pro",
+    "gemini-exp-1206",
+    "learnlm-2.0-flash-experimental",
   ];
   const modelResults: Record<string, any> = {};
 
