@@ -65,13 +65,13 @@ const PRO_MODELS = [
   "gemini-3.5-flash",       // Secondary flash
 ];
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function withModelFallback<T>(
   operation: (modelId: string, apiKey: string) => Promise<T>,
   operationName: string,
   usePro: boolean = false
 ): Promise<T> {
-  let lastError: any;
-  let allRateLimited = true; // Track if ALL failures were rate limits (no real model error)
   const pool = getKeyPool();
   
   if (pool.length === 0) {
@@ -79,89 +79,105 @@ async function withModelFallback<T>(
   }
 
   const models = usePro ? PRO_MODELS : FALLBACK_MODELS;
+  
+  // Try up to 3 full cycles with a delay between cycles when rate-limited
+  const MAX_CYCLES = 3;
+  const RETRY_DELAY_MS = 12000; // 12 seconds between retry cycles
 
-  let totalAttempts = 0;
-  const maxAttempts = models.length * pool.length; // Try every key for every model
+  let lastError: any;
+  let lastWasRateLimit = false;
 
-  for (const modelId of models) {
-    for (let i = 0; i < pool.length; i++) {
-      if (totalAttempts >= maxAttempts) break;
+  for (let cycle = 0; cycle < MAX_CYCLES; cycle++) {
+    // On retry cycles, wait before trying again (rate limits reset per minute)
+    if (cycle > 0) {
+      console.log(`[${operationName}] Cycle ${cycle + 1}/${MAX_CYCLES}: waiting ${RETRY_DELAY_MS / 1000}s for rate limit reset...`);
+      await sleep(RETRY_DELAY_MS);
+    }
 
-      const keyIdx = (currentKeyIndex + i) % pool.length;
-      const apiKey = pool[keyIdx];
-      totalRequests++;
+    let allRateLimited = true;
+    let cycleAttempts = 0;
+    lastWasRateLimit = false;
 
-      try {
-        const result = await operation(modelId, apiKey);
-        currentKeyIndex = (keyIdx + 1) % pool.length;
-        return result;
-      } catch (error: any) {
-        totalAttempts++;
-        lastError = error;
-        const errorString = error?.toString() || "";
-        const errorStatus = error?.status;
-        const lowerError = errorString.toLowerCase();
+    for (const modelId of models) {
+      for (let i = 0; i < pool.length; i++) {
+        const keyIdx = (currentKeyIndex + i) % pool.length;
+        const apiKey = pool[keyIdx];
+        totalRequests++;
 
-        // 429 = quota exceeded, 503 = model overloaded → both are transient, try next key
-        const isRateLimit =
-          errorStatus === 429 ||
-          errorStatus === 503 ||
-          errorString.includes("429") ||
-          errorString.includes("Quota exceeded") ||
-          errorString.includes("RESOURCE_EXHAUSTED") ||
-          lowerError.includes("unavailable") ||
-          lowerError.includes("high demand") ||
-          lowerError.includes("try again later");
+        try {
+          const result = await operation(modelId, apiKey);
+          currentKeyIndex = (keyIdx + 1) % pool.length;
+          if (cycle > 0) console.log(`[${operationName}] Succeeded on retry cycle ${cycle + 1} with ${modelId}`);
+          return result;
+        } catch (error: any) {
+          cycleAttempts++;
+          lastError = error;
+          const errorString = error?.toString() || "";
+          const errorStatus = error?.status;
+          const lowerError = errorString.toLowerCase();
 
-        const isAuthError =
-          (errorStatus === 400 && errorString.includes("API key not valid")) ||
-          errorStatus === 403 ||
-          errorStatus === 401;
+          // 429 = quota exceeded, 503 = model overloaded → both transient, try next key
+          const isRateLimit =
+            errorStatus === 429 ||
+            errorStatus === 503 ||
+            errorString.includes("429") ||
+            errorString.includes("Quota exceeded") ||
+            errorString.includes("RESOURCE_EXHAUSTED") ||
+            lowerError.includes("unavailable") ||
+            lowerError.includes("high demand") ||
+            lowerError.includes("try again later");
 
-        // 404 = model ID doesn't exist → skip immediately, don't waste time on other keys
-        const isModelNotFound =
-          errorStatus === 404 ||
-          lowerError.includes("not found") ||
-          lowerError.includes("not supported") ||
-          lowerError.includes("no longer available") ||
-          errorString.includes("NOT_FOUND");
+          const isAuthError =
+            (errorStatus === 400 && errorString.includes("API key not valid")) ||
+            errorStatus === 403 ||
+            errorStatus === 401;
 
-        if (isRateLimit) rateLimitHits++;
+          // 404 = model ID is dead/retired → skip immediately to next model
+          const isModelNotFound =
+            errorStatus === 404 ||
+            lowerError.includes("not found") ||
+            lowerError.includes("not supported") ||
+            lowerError.includes("no longer available") ||
+            errorString.includes("NOT_FOUND");
 
-        // If this failure was NOT a rate limit and NOT an invalid model ID, it's a real error
-        if (!isRateLimit && !isModelNotFound) allRateLimited = false;
+          if (isRateLimit) {
+            rateLimitHits++;
+            lastWasRateLimit = true;
+          }
+          if (!isRateLimit && !isModelNotFound) allRateLimited = false;
 
-        const errType = isRateLimit ? "RATE_LIMIT/503" : isModelNotFound ? "NOT_FOUND(404)" : isAuthError ? "AUTH_ERROR" : "ERROR";
-        console.warn(`[${operationName}] ${modelId} / Key#${keyIdx + 1} → ${errType}: ${errorString.substring(0, 80)}`);
+          const errType = isRateLimit ? "RATE_LIMIT/503" : isModelNotFound ? "NOT_FOUND(404)" : isAuthError ? "AUTH_ERROR" : "ERROR";
+          console.warn(`[${operationName}] cycle${cycle + 1} ${modelId}/Key#${keyIdx + 1} → ${errType}: ${errorString.substring(0, 80)}`);
 
-        // Rate limit (429) or overload (503) or auth error → try next key with same model
-        if (isRateLimit || isAuthError) continue;
+          // Rate limit or overload or auth error → try next key for same model
+          if (isRateLimit || isAuthError) continue;
 
-        // Model not found (404) → skip ALL keys for this model, go to next model immediately
-        if (isModelNotFound) break;
+          // Dead model (404) → skip all keys for this model
+          if (isModelNotFound) break;
 
-        // Any other unexpected error → also skip to next model
-        break;
+          // Other error → try next model
+          break;
+        }
       }
     }
-    if (totalAttempts >= maxAttempts) break;
+
+    // If this cycle had non-rate-limit errors, don't bother retrying
+    if (!allRateLimited) break;
+    
+    console.warn(`[${operationName}] Cycle ${cycle + 1}: all ${cycleAttempts} attempts rate-limited.`);
   }
 
-  console.error(`[${operationName}] All ${totalAttempts} attempts exhausted. allRateLimited=${allRateLimited}`, lastError);
+  console.error(`[${operationName}] All retry cycles exhausted. lastWasRateLimit=${lastWasRateLimit}`, lastError);
 
-  // If every single attempt was a rate limit, give a clear friendly message
-  if (allRateLimited || rateLimitHits >= totalAttempts) {
+  if (lastWasRateLimit) {
     throw new Error(
-      "All AI engines are currently at capacity (rate limited). This usually resolves within 60 seconds. " +
-      "Please wait a moment and try uploading again."
+      "All AI engines are currently at capacity. " +
+      "This happens when many resumes are processed in a short time on free API keys. " +
+      "Please wait 1-2 minutes and try again."
     );
   }
 
   const errorString = lastError?.toString() || "";
-  if (errorString.includes("429") || errorString.includes("Quota exceeded") || errorString.includes("RESOURCE_EXHAUSTED")) {
-    throw new Error("All AI engines are currently at capacity. Please wait 30-60 seconds and try again.");
-  }
-
   if (errorString.includes("safety") || errorString.includes("blocked")) {
     throw new Error("Content Blocked: The AI model flagged this document. Please ensure it is a professional resume and try again.");
   }
@@ -173,6 +189,7 @@ async function withModelFallback<T>(
   const detail = lastError?.message || errorString.substring(0, 200) || "Unknown API error";
   throw new Error(`Processing failed after trying all models. Details: ${detail}`);
 }
+
 
 
 const saveResumeTool: FunctionDeclaration = {
