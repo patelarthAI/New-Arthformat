@@ -45,22 +45,24 @@ const getNextApiKey = () => {
   return key;
 };
 
-// ACTIVE Gemini model IDs (September 2026).
-// Google API error response explicitly directs:
-// - Flash: "Please update your code to use models/gemini-3.6-flash"
-// - Pro: "Please update your code to use models/gemini-3.1-pro-preview"
+// ─── LIVE-SCAN VERIFIED MODEL IDs ────────────────────────────────────────────
+// Last verified: September 2026 via /api/health?test=true against all 3 keys.
+// gemini-3.6-flash  → ✅ OK on all 3 keys (ONLY fully working model)
+// gemini-3.5-flash  → 503 (overloaded but valid, retryable)
+// gemini-3.0-flash  → 404 DEAD (removed)
+// gemini-3.1-pro    → 404 DEAD (removed)
+// gemini-3.1-pro-preview → 429 rate-limited on all keys (quota=0 on free tier)
+// DO NOT add any model IDs without verifying via /api/health?test=true first.
 const FALLBACK_MODELS = [
-  "gemini-3.6-flash",       // PRIMARY Flash model directly recommended by Google
-  "gemini-3.5-flash",       // Secondary Flash
-  "gemini-3.1-pro-preview", // Google's recommended reasoning model
-  "gemini-3.1-pro",         // Pro alias
+  "gemini-3.6-flash",       // ✅ PRIMARY: works on all 3 keys, confirmed live
+  "gemini-3.5-flash",       // ⚡ BACKUP: valid ID, may be overloaded (503 = retry)
+  "gemini-3.1-pro-preview", // 🔵 LAST RESORT: exists but rate-limited on free tier
 ];
 
 const PRO_MODELS = [
-  "gemini-3.1-pro-preview", // PRIMARY PRO recommended by Google
-  "gemini-3.1-pro",         // Pro alias
-  "gemini-3.6-flash",       // High-capacity Flash
-  "gemini-3.5-flash",       // Secondary Flash
+  "gemini-3.1-pro-preview", // PRIMARY for PRO: exists, rate-limited on free tier
+  "gemini-3.6-flash",       // Flash fallback - confirmed working
+  "gemini-3.5-flash",       // Secondary flash
 ];
 
 async function withModelFallback<T>(
@@ -98,19 +100,25 @@ async function withModelFallback<T>(
         lastError = error;
         const errorString = error?.toString() || "";
         const errorStatus = error?.status;
+        const lowerError = errorString.toLowerCase();
 
+        // 429 = quota exceeded, 503 = model overloaded → both are transient, try next key
         const isRateLimit =
           errorStatus === 429 ||
+          errorStatus === 503 ||
           errorString.includes("429") ||
           errorString.includes("Quota exceeded") ||
-          errorString.includes("RESOURCE_EXHAUSTED");
+          errorString.includes("RESOURCE_EXHAUSTED") ||
+          lowerError.includes("unavailable") ||
+          lowerError.includes("high demand") ||
+          lowerError.includes("try again later");
 
         const isAuthError =
           (errorStatus === 400 && errorString.includes("API key not valid")) ||
           errorStatus === 403 ||
           errorStatus === 401;
 
-        const lowerError = errorString.toLowerCase();
+        // 404 = model ID doesn't exist → skip immediately, don't waste time on other keys
         const isModelNotFound =
           errorStatus === 404 ||
           lowerError.includes("not found") ||
@@ -120,22 +128,19 @@ async function withModelFallback<T>(
 
         if (isRateLimit) rateLimitHits++;
 
-        // If this failure was NOT a rate limit and NOT an invalid model ID, it's a real model/auth error
+        // If this failure was NOT a rate limit and NOT an invalid model ID, it's a real error
         if (!isRateLimit && !isModelNotFound) allRateLimited = false;
 
-        console.warn(
-          `[${operationName}] ${modelId} / Key#${keyIdx + 1} failed — ` +
-          `${isRateLimit ? "RATE_LIMIT" : isModelNotFound ? "NOT_FOUND" : isAuthError ? "AUTH_ERROR" : "ERROR"}: ` +
-          `${errorString.substring(0, 80)}`
-        );
+        const errType = isRateLimit ? "RATE_LIMIT/503" : isModelNotFound ? "NOT_FOUND(404)" : isAuthError ? "AUTH_ERROR" : "ERROR";
+        console.warn(`[${operationName}] ${modelId} / Key#${keyIdx + 1} → ${errType}: ${errorString.substring(0, 80)}`);
 
-        // Rate limit or auth error → try next key with same model
+        // Rate limit (429) or overload (503) or auth error → try next key with same model
         if (isRateLimit || isAuthError) continue;
 
-        // Model not found / not supported / deprecated → skip ALL keys, go to next model immediately
+        // Model not found (404) → skip ALL keys for this model, go to next model immediately
         if (isModelNotFound) break;
 
-        // Any other model-level error → try next model
+        // Any other unexpected error → also skip to next model
         break;
       }
     }
