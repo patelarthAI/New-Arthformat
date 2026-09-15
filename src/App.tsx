@@ -41,6 +41,7 @@ const App: React.FC = () => {
   const [fileName, setFileName] = useState<string>('');
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [retryCountdown, setRetryCountdown] = useState<number>(0); // 0 = not retrying
   const [dragActive, setDragActive] = useState<boolean>(false);
   const [selectedFormat, setSelectedFormat] = useState<ResumeFormat>(ResumeFormat.CLASSIC_PROFESSIONAL);
   const [retainedFields, setRetainedFields] = useState({
@@ -205,20 +206,33 @@ const App: React.FC = () => {
     
     console.log("Processing approved resume content:", contentToProcess);
     setAppState(AppState.PROCESSING);
+    setRetryCountdown(0);
     try {
-      const formattedData = await extractResumeData({
-        text: contentToProcess.text,
-        base64: contentToProcess.base64,
-        mimeType: contentToProcess.mimeType,
-        format: selectedFormat
-      }, usePro);
+      const formattedData = await extractResumeData(
+        {
+          text: contentToProcess.text,
+          base64: contentToProcess.base64,
+          mimeType: contentToProcess.mimeType,
+          format: selectedFormat
+        },
+        usePro,
+        (secondsLeft) => {
+          setRetryCountdown(secondsLeft);
+          if (secondsLeft > 0) {
+            // Keep PROCESSING state while counting down — show countdown in loading UI
+            setAppState(AppState.PROCESSING);
+          }
+        }
+      );
       
+      setRetryCountdown(0);
       console.log("Extracted resume data successfully:", formattedData);
       setResumeData(formattedData);
       setAppState(AppState.REVIEW);
-      setPendingResumeId(null); // Clear the pending ID once we start reviewing
+      setPendingResumeId(null);
     } catch (err: any) {
       console.error("Error during resume data extraction:", err);
+      setRetryCountdown(0);
       setErrorMsg(err.message);
       setAppState(AppState.ERROR);
       setPendingResumeId(null);
@@ -1132,16 +1146,35 @@ const App: React.FC = () => {
                         className="glassmorphic-card rounded-[24px] p-[36px] lg:p-[44px] flex flex-col items-center justify-center text-center min-h-[220px] lg:min-h-[260px] w-full"
                       >
                         <div className="w-full max-w-[600px] mx-auto flex flex-col items-center justify-center flex-1 py-2">
-                          <div className="relative mb-6">
-                             <div className="w-20 h-20 border-4 border-indigo-500/20 border-t-indigo-500 border-r-pink-500 rounded-full animate-spin"></div>
-                             <div className="absolute inset-0 flex items-center justify-center">
-                               <FileText className="w-7 h-7 text-indigo-400" />
-                             </div>
-                          </div>
-                          <h2 className="text-xl font-bold text-white mb-2 font-display">Reformatting Document</h2>
-                          <p className="text-slate-400/90 max-w-xs font-light text-xs animate-pulse leading-relaxed mx-auto mt-2">
-                            Analyzing structure, adjusting typography, and optimizing spacing for modern elite layout. Just a moment...
-                          </p>
+                          {retryCountdown > 0 ? (
+                            // Rate-limited: show countdown to auto-retry
+                            <>
+                              <div className="relative mb-6">
+                                <div className="w-20 h-20 rounded-full border-4 border-amber-500/20 flex items-center justify-center">
+                                  <span className="text-2xl font-bold text-amber-400">{retryCountdown}</span>
+                                </div>
+                              </div>
+                              <h2 className="text-xl font-bold text-white mb-2 font-display">AI Busy — Auto-Retrying</h2>
+                              <p className="text-amber-400/90 max-w-xs font-light text-xs leading-relaxed mx-auto mt-2">
+                                All AI engines are at capacity. Automatically retrying in {retryCountdown} second{retryCountdown !== 1 ? 's' : ''}...
+                              </p>
+                              <p className="text-slate-500 text-[10px] mt-3">No action needed — this is automatic.</p>
+                            </>
+                          ) : (
+                            // Normal processing
+                            <>
+                              <div className="relative mb-6">
+                                 <div className="w-20 h-20 border-4 border-indigo-500/20 border-t-indigo-500 border-r-pink-500 rounded-full animate-spin"></div>
+                                 <div className="absolute inset-0 flex items-center justify-center">
+                                   <FileText className="w-7 h-7 text-indigo-400" />
+                                 </div>
+                              </div>
+                              <h2 className="text-xl font-bold text-white mb-2 font-display">Reformatting Document</h2>
+                              <p className="text-slate-400/90 max-w-xs font-light text-xs animate-pulse leading-relaxed mx-auto mt-2">
+                                Analyzing structure, adjusting typography, and optimizing spacing for modern elite layout. Just a moment...
+                              </p>
+                            </>
+                          )}
                         </div>
                       </motion.div>
                     )}
