@@ -59,22 +59,24 @@ const getNextApiKey = () => {
 //   gemini-3.7-flash      → 3/20 RPD  🟢 (mostly fresh)
 //
 // Lite models (500 RPD) are the backbone for volume — perfect for 30-40 resumes/day.
-// Run /api/health?test=true to verify IDs before modifying.
+// ─── MODEL PRIORITY: FULL-FIDELITY FIRST TO PREVENT DATA LOSS ────────────────
+// Full Flash models (3.8-flash, 3.7-flash, 3.6-flash) have maximum reasoning capacity
+// and strictly preserve all work experiences and bullet points without cutting.
+// Lite models (flash-lite) are kept as emergency fallbacks only.
 const FALLBACK_MODELS = [
-  "gemini-3.5-flash-lite",  // 🟢 PRIMARY: 500 RPD, 15 RPM — highest daily quota
-  "gemini-3.1-flash-lite",  // 🟢 BACKUP:  500 RPD, 15 RPM — same high quota
-  "gemini-3.8-flash",       // 🟢 FRESH:   20 RPD, 5 RPM  — zero usage today
-  "gemini-3.7-flash",       // 🟢 EXTRA:   20 RPD, 5 RPM  — mostly unused
-  "gemini-3.6-flash",       // ⚠️  FALLBACK: quota exhausted today, resets at midnight
-  "gemini-3.5-flash",       // ⚠️  FALLBACK: quota exhausted today, resets at midnight
+  "gemini-3.8-flash",       // 🟢 PRIMARY: Full-power Flash, 100% fresh quota (0/20 used), zero cutting
+  "gemini-3.7-flash",       // 🟢 BACKUP:  Full-power Flash, fresh quota (2/20 used), zero cutting
+  "gemini-3.6-flash",       // 🟢 BACKUP:  Full-power Flash (resets daily)
+  "gemini-3.5-flash",       // 🟢 BACKUP:  Full-power Flash
+  "gemini-3.5-flash-lite",  // ⚡ EMERGENCY ONLY: High quota fallback if all full models are busy
+  "gemini-3.1-flash-lite",  // ⚡ EMERGENCY ONLY: High quota fallback
 ];
 
 const PRO_MODELS = [
-  "gemini-3.5-flash-lite",  // High quota, still capable
-  "gemini-3.1-flash-lite",  // High quota backup
-  "gemini-3.8-flash",       // Fresh flash
-  "gemini-3.7-flash",       // Fresh flash backup
-  "gemini-3.6-flash",       // Exhausted today but try anyway
+  "gemini-3.8-flash",       // Full-power Flash
+  "gemini-3.7-flash",       // Full-power Flash backup
+  "gemini-3.6-flash",       // Full-power Flash backup
+  "gemini-3.5-flash-lite",  // Emergency fallback
 ];
 
 async function withModelFallback<T>(
@@ -404,7 +406,9 @@ export const extractResumeDataBackend = async (
       MANDATORY MULTI-PAGE COMPLETION RULES:
       - NEVER CONDENSE TO 1 PAGE. If the input document contains 2, 3, 4, or 5 pages of history, YOU MUST EXTRACT EVERY SINGLE PAGE THROUGH TO THE VERY LAST PAGE.
       - Extract EVERY single historical role, job title, company name, employment dates, bullet point, project, skill, and certification from ALL pages.
-      - Map standard sections (Summary, Professional Experience, Internships, Education) to their respective fields.
+      - ZERO BULLET LOSS: If a job has 5, 10, or 15 bullet points, YOU MUST EXTRACT EVERY SINGLE ONE. Never cut off, shorten, or omit any bullet points under any job.
+      - ZERO EXPERIENCE DROPPED: Keep every job, role, and position (including early career, past positions, and internships) in 'experience' in their original chronological order. Only populate 'internships' if the resume has an explicit separate header specifically titled 'INTERNSHIPS'.
+      - Map standard sections (Summary, Professional Experience, Education) to their respective fields.
       - ANY OTHER section header or title (e.g. 'PUBLICATIONS', 'PATENTS', 'AWARDS & HONORS', 'VOLUNTEER WORK', 'KEY PROJECTS', 'PROJECTS', 'LANGUAGES', 'AFFILIATIONS', 'REFERENCES', 'CERTIFICATIONS', 'COMPETENCIES', 'OTHER EXPERIENCE', or ANY custom header title) MUST be extracted into 'customSections' with its EXACT section title as written in the original resume.
       - Do NOT stop after the first section or page. Read through to the very end of the text and extract every job, title, company, bullet point, skill, certification, and education item.
       - If a work experience section contains bullet points without an explicit company name or job title header in the text, set company and title to empty strings "". DO NOT insert fake, duplicate, or redundant placeholder strings like 'Professional Experience' or 'Key Responsibilities'. Put all bullet points cleanly into 'description'.
@@ -415,7 +419,7 @@ export const extractResumeDataBackend = async (
       
       ABSOLUTE STRICTEST RULE - ZERO ALTERATION & ZERO LOSS:
       1. ZERO REWRITING / ZERO REPHRASING: You are strictly FORBIDDEN from altering, polishing, rephrasing, rewriting, summarizing, or changing any wording. Every single word must be copied 100% verbatim.
-      2. ZERO DATA LOSS: Extract EVERY SINGLE WORD, bullet point, job role, skill, and line from ALL pages of the input text. Loss of any data or section is unacceptable.`,
+      2. ZERO DATA LOSS: Extract EVERY SINGLE WORD, bullet point, job role, skill, and line from ALL pages of the input text. Loss of any data or section is completely unacceptable.`,
     });
 
     const response = await ai.models.generateContent({
@@ -429,9 +433,10 @@ export const extractResumeDataBackend = async (
         systemInstruction: `
 STRICT DATA EXTRACTOR DIRECTIVE:
 1. ZERO ALTERATION: You are strictly FORBIDDEN from changing, rephrasing, rewriting, polishing, summarizing, or modifying ANY words, bullet points, or sentences. Preserve 100% exact verbatim original text.
-2. ZERO OMISSION - ALL PAGES MANDATORY: The input resume is a multi-page document. You MUST extract EVERY experience entry, job title, company name, education entry, custom section, bullet point, and line from Page 1, Page 2, Page 3, and all following pages. Never drop or skip any historical job or detail to fit a 1-page layout. Page limits DO NOT APPLY.
-3. VERBATIM SECTION MAPPING: Profile/Summary -> summary, Job History/Roles -> experience, Internships -> internships, Education -> education, Skills/Certifications/Projects -> customSections.
-4. Clean up artificial spacing/ligature splitting from PDF text extraction (e.g. convert 'fi eld' to 'field', 'sta ff' to 'staff'), but NEVER alter any words or content.
+2. ZERO OMISSION - ALL PAGES & ALL EXPERIENCES MANDATORY: The input resume is a multi-page document. You MUST extract EVERY experience entry, job title, company name, education entry, custom section, bullet point, and line from Page 1, Page 2, Page 3, and all following pages. Never drop or skip any historical job, early role, or detail. Page limits DO NOT APPLY.
+3. ZERO BULLET LOSS: Extract ALL bullet points for each company in full verbatim text. Do NOT truncate, shorten, or pick only the top 2-3 bullets.
+4. VERBATIM SECTION MAPPING: Profile/Summary -> summary, Job History/Employment/Roles -> experience (keep ALL jobs in experience), Education -> education, Skills/Certifications/Projects -> customSections. Only use 'internships' if the resume has an explicit separate section titled 'INTERNSHIPS'.
+5. Clean up artificial spacing/ligature splitting from PDF text extraction (e.g. convert 'fi eld' to 'field', 'sta ff' to 'staff'), but NEVER alter any words or content.
 `,
         tools: [{ functionDeclarations: [saveResumeTool] }],
         toolConfig: { 
