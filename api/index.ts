@@ -34,28 +34,15 @@ console.log("Express JSON middleware loaded with 50mb limit");
 // Health check and model connectivity diagnostic
 app.get("/api/health", async (req, res) => {
   const pool = getKeyPool();
-  const testModels = [
-    // HIGH QUOTA — Lite models (500 RPD each, confirmed in dashboard)
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
-    // FRESH FLASH — zero/low usage today
-    "gemini-3.8-flash",
-    "gemini-3.7-flash",
-    "gemini-3-flash",          // "Gemini 3 Flash" in dashboard
-    // STANDARD FLASH — may be quota-exhausted today
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
-    // OLDER — likely 404
-    "gemini-3.0-flash",
-    "gemini-3.1-pro",
-  ];
+  const reqModel = req.query.model as string;
+  const testModels = reqModel ? [reqModel] : ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash"];
   const modelResults: Record<string, any> = {};
 
   if (req.query.test === "true" && pool.length > 0) {
-    for (let k = 0; k < pool.length; k++) {
+    await Promise.all(pool.map(async (apiKey, k) => {
       const keyLabel = `Key_${k + 1}`;
       modelResults[keyLabel] = {};
-      const ai = new GoogleGenAI({ apiKey: pool[k] });
+      const ai = new GoogleGenAI({ apiKey });
       for (const m of testModels) {
         try {
           const resp = await ai.models.generateContent({
@@ -65,10 +52,17 @@ app.get("/api/health", async (req, res) => {
           });
           modelResults[keyLabel][m] = "OK: " + (resp.text || "").trim().slice(0, 30);
         } catch (err: any) {
-          modelResults[keyLabel][m] = err.message || err.toString();
+          const errMsg = err.message || err.toString();
+          if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+            modelResults[keyLabel][m] = "RATE_LIMITED_TODAY";
+          } else if (errMsg.includes("API key not valid")) {
+            modelResults[keyLabel][m] = "INVALID_API_KEY";
+          } else {
+            modelResults[keyLabel][m] = errMsg.slice(0, 100);
+          }
         }
       }
-    }
+    }));
   }
 
   res.json({ 
