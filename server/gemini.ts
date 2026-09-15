@@ -425,6 +425,7 @@ export const extractResumeDataBackend = async (
       },
       config: {
         maxOutputTokens: 8192,
+        temperature: 0.15,
         systemInstruction: `
 STRICT DATA EXTRACTOR DIRECTIVE:
 1. ZERO ALTERATION: You are strictly FORBIDDEN from changing, rephrasing, rewriting, polishing, summarizing, or modifying ANY words, bullet points, or sentences. Preserve 100% exact verbatim original text.
@@ -588,6 +589,8 @@ export const analyzeGrammarBackend = async (data: ResumeData, format: ResumeForm
         ],
       },
       config: {
+        maxOutputTokens: 8192,
+        temperature: 0.15,
         systemInstruction: `
 ACT AS A SMART RESUME COACH. You are allowed to fix objective spelling and grammar errors, and provide high-impact stylistic improvements. You MUST strictly enforce the rule against using first-person pronouns (I, me, my, we, etc.) in resumes. You are forbidden from hallucinating facts, changing metrics, or altering dates.
 `,
@@ -647,6 +650,7 @@ export const checkSpellingBackend = async (data: ResumeData, format: ResumeForma
       },
       config: {
         maxOutputTokens: 8192,
+        temperature: 0.15,
         systemInstruction: `
 ACT AS A STRICT PROOFREADER. You are only allowed to fix clear, objective spelling and grammar errors. 
 - You are strictly forbidden from summarizing, rephrasing, shortening, or deleting any experiences, bullet points, or sections. 
@@ -744,6 +748,7 @@ export const updateResumeBackend = async (
       },
       config: {
         maxOutputTokens: 8192,
+        temperature: 0.15,
         systemInstruction: `
 ACT AS AN EXPERT RESUME EDITOR. Modify the JSON resume data strictly following the user's instructions. 
 - You are forbidden from summarizing, shortening, deleting, or omitting any experiences, custom sections, or bullet points unless the user explicitly instructs you to do so.
@@ -812,6 +817,8 @@ export const rewritePhraseBackend = async (
         ],
       },
       config: {
+        maxOutputTokens: 8192,
+        temperature: 0.3,
         systemInstruction: `
 ACT AS AN EXECUTIVE RESUME COACH. Provide 3 high-impact direct replacement options matching the style instruction. Use the 'save_rewrite_suggestions' tool.
 `,
@@ -867,6 +874,10 @@ export const performOcrBackend = async (
             text: "Perform high-fidelity OCR on this resume or document image. Extract all text content verbatim, preserving the order, layout, headings, and bullet points. Do not omit, summarize, or alter any details. Do not add any introductory or concluding remarks, just return the extracted text.",
           }
         ]
+      },
+      config: {
+        maxOutputTokens: 8192,
+        temperature: 0.1,
       }
     });
 
