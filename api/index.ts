@@ -35,19 +35,19 @@ console.log("Express JSON middleware loaded with 50mb limit");
 app.get("/api/health", async (req, res) => {
   const pool = getKeyPool();
   const testModels = [
+    // HIGH QUOTA — Lite models (500 RPD each, confirmed in dashboard)
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    // FRESH FLASH — zero/low usage today
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3-flash",          // "Gemini 3 Flash" in dashboard
+    // STANDARD FLASH — may be quota-exhausted today
     "gemini-3.6-flash",
     "gemini-3.5-flash",
+    // OLDER — likely 404
     "gemini-3.0-flash",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-latest",
-    "gemini-2.5-pro",
-    "gemini-2.5-pro-latest",
-    "gemini-2.5-pro-preview-06-05",
-    "gemini-2.5-pro-preview-05-06",
-    "gemini-3.1-pro-preview",
     "gemini-3.1-pro",
-    "gemini-exp-1206",
-    "learnlm-2.0-flash-experimental",
   ];
   const modelResults: Record<string, any> = {};
 

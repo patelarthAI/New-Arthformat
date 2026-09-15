@@ -46,23 +46,35 @@ const getNextApiKey = () => {
 };
 
 // ─── LIVE-SCAN VERIFIED MODEL IDs ────────────────────────────────────────────
-// Last verified: September 2026 via /api/health?test=true against all 3 keys.
-// gemini-3.6-flash  → ✅ OK on all 3 keys (ONLY fully working model)
-// gemini-3.5-flash  → 503 (overloaded but valid, retryable)
-// gemini-3.0-flash  → 404 DEAD (removed)
-// gemini-3.1-pro    → 404 DEAD (removed)
-// gemini-3.1-pro-preview → 429 rate-limited on all keys (quota=0 on free tier)
-// DO NOT add any model IDs without verifying via /api/health?test=true first.
+// Dashboard analysis Sep 15, 2026 — RPD = Requests Per Day (daily quota)
+//
+// EXHAUSTED TODAY (25/20 RPD used — don't use until quota resets at midnight):
+//   gemini-3.6-flash     → 25/20 RPD exceeded ❌
+//   gemini-3.5-flash     → 25/20 RPD exceeded ❌
+//
+// FRESH WITH QUOTA REMAINING:
+//   gemini-3.5-flash-lite → 0/500 RPD 🟢 (25x more quota than flash!)
+//   gemini-3.1-flash-lite → 0/500 RPD 🟢 (25x more quota than flash!)
+//   gemini-3.8-flash      → 0/20 RPD  🟢 (zero usage, fresh)
+//   gemini-3.7-flash      → 3/20 RPD  🟢 (mostly fresh)
+//
+// Lite models (500 RPD) are the backbone for volume — perfect for 30-40 resumes/day.
+// Run /api/health?test=true to verify IDs before modifying.
 const FALLBACK_MODELS = [
-  "gemini-3.6-flash",       // ✅ PRIMARY: works on all 3 keys, confirmed live
-  "gemini-3.5-flash",       // ⚡ BACKUP: valid ID, may be overloaded (503 = retry)
-  "gemini-3.1-pro-preview", // 🔵 LAST RESORT: exists but rate-limited on free tier
+  "gemini-3.5-flash-lite",  // 🟢 PRIMARY: 500 RPD, 15 RPM — highest daily quota
+  "gemini-3.1-flash-lite",  // 🟢 BACKUP:  500 RPD, 15 RPM — same high quota
+  "gemini-3.8-flash",       // 🟢 FRESH:   20 RPD, 5 RPM  — zero usage today
+  "gemini-3.7-flash",       // 🟢 EXTRA:   20 RPD, 5 RPM  — mostly unused
+  "gemini-3.6-flash",       // ⚠️  FALLBACK: quota exhausted today, resets at midnight
+  "gemini-3.5-flash",       // ⚠️  FALLBACK: quota exhausted today, resets at midnight
 ];
 
 const PRO_MODELS = [
-  "gemini-3.1-pro-preview", // PRIMARY for PRO: exists, rate-limited on free tier
-  "gemini-3.6-flash",       // Flash fallback - confirmed working
-  "gemini-3.5-flash",       // Secondary flash
+  "gemini-3.5-flash-lite",  // High quota, still capable
+  "gemini-3.1-flash-lite",  // High quota backup
+  "gemini-3.8-flash",       // Fresh flash
+  "gemini-3.7-flash",       // Fresh flash backup
+  "gemini-3.6-flash",       // Exhausted today but try anyway
 ];
 
 async function withModelFallback<T>(
