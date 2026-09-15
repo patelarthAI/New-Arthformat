@@ -74,6 +74,14 @@ app.get("/api/health", async (req, res) => {
   });
 });
 
+// Helper for consistent Gemini error responses
+const handleGeminiError = (res: express.Response, endpoint: string, err: any, defaultMsg: string) => {
+  console.error(`Error in ${endpoint}:`, err);
+  const errMsg = err?.message || String(err) || defaultMsg;
+  const isRateLimit = errMsg.startsWith("RATE_LIMITED:") || err?.status === 429 || errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED");
+  res.status(isRateLimit ? 429 : 500).json({ error: errMsg });
+};
+
 // Gemini API proxies
 app.post("/api/gemini/extract", async (req, res) => {
   try {
@@ -81,8 +89,7 @@ app.post("/api/gemini/extract", async (req, res) => {
     const data = await extractResumeDataBackend(payload, usePro);
     res.json(data);
   } catch (err: any) {
-    console.error("Error in /api/gemini/extract:", err);
-    res.status(500).json({ error: err.message || "Failed to extract resume data" });
+    handleGeminiError(res, "/api/gemini/extract", err, "Failed to extract resume data");
   }
 });
 
@@ -92,8 +99,7 @@ app.post("/api/gemini/analyze-grammar", async (req, res) => {
     const issues = await analyzeGrammarBackend(data, format, usePro);
     res.json(issues);
   } catch (err: any) {
-    console.error("Error in /api/gemini/analyze-grammar:", err);
-    res.status(500).json({ error: err.message || "Failed to analyze grammar" });
+    handleGeminiError(res, "/api/gemini/analyze-grammar", err, "Failed to analyze grammar");
   }
 });
 
@@ -103,8 +109,7 @@ app.post("/api/gemini/check-spelling", async (req, res) => {
     const corrected = await checkSpellingBackend(data, format, usePro);
     res.json(corrected);
   } catch (err: any) {
-    console.error("Error in /api/gemini/check-spelling:", err);
-    res.status(500).json({ error: err.message || "Failed to check spelling" });
+    handleGeminiError(res, "/api/gemini/check-spelling", err, "Failed to check spelling");
   }
 });
 
@@ -114,8 +119,7 @@ app.post("/api/gemini/update-resume", async (req, res) => {
     const updated = await updateResumeBackend(data, instruction, targetJobDescription, format, usePro);
     res.json(updated);
   } catch (err: any) {
-    console.error("Error in /api/gemini/update-resume:", err);
-    res.status(500).json({ error: err.message || "Failed to update resume data" });
+    handleGeminiError(res, "/api/gemini/update-resume", err, "Failed to update resume data");
   }
 });
 
@@ -125,8 +129,7 @@ app.post("/api/gemini/rewrite-phrase", async (req, res) => {
     const suggestions = await rewritePhraseBackend(text, instruction, usePro);
     res.json(suggestions);
   } catch (err: any) {
-    console.error("Error in /api/gemini/rewrite-phrase:", err);
-    res.status(500).json({ error: err.message || "Failed to rewrite phrase" });
+    handleGeminiError(res, "/api/gemini/rewrite-phrase", err, "Failed to rewrite phrase");
   }
 });
 

@@ -135,23 +135,28 @@ async function withModelFallback<T>(
           lowerError.includes("no longer available") ||
           errorString.includes("NOT_FOUND");
 
+        const isNetworkError =
+          lowerError.includes("fetch failed") ||
+          lowerError.includes("econnreset") ||
+          lowerError.includes("etimedout") ||
+          lowerError.includes("socket") ||
+          lowerError.includes("network") ||
+          lowerError.includes("deadline exceeded");
+
         if (isRateLimit) {
           rateLimitHits++;
           lastWasRateLimit = true;
         }
         if (!isRateLimit && !isModelNotFound) allRateLimited = false;
 
-        const errType = isRateLimit ? "RATE_LIMIT/503" : isModelNotFound ? "NOT_FOUND(404)" : isAuthError ? "AUTH_ERROR" : "ERROR";
+        const errType = isRateLimit ? "RATE_LIMIT/503" : isModelNotFound ? "NOT_FOUND(404)" : isAuthError ? "AUTH_ERROR" : isNetworkError ? "NETWORK_ERROR" : "ERROR";
         console.warn(`[${operationName}] ${modelId}/Key#${keyIdx + 1} → ${errType}: ${errorString.substring(0, 80)}`);
 
-        // Rate limit or overload → try next key for same model
-        if (isRateLimit || isAuthError) continue;
-
-        // Dead model (404) → skip all keys for this model
+        // Dead model (404) → skip all keys for this model immediately
         if (isModelNotFound) break;
 
-        // Other error → try next model
-        break;
+        // Rate limit, overload, auth error, network blip, or any key issue → try next key
+        continue;
       }
     }
   }

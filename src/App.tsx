@@ -201,6 +201,8 @@ const App: React.FC = () => {
   const processApprovedResume = async (contentToProcess: any = stagedContent) => {
     if (!contentToProcess) {
       console.warn("No content to process in processApprovedResume");
+      setErrorMsg("No document content found to process. Please select or upload your resume again.");
+      setAppState(AppState.ERROR);
       return;
     }
     
