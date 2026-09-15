@@ -5,6 +5,20 @@ export const cleanBullet = (text: any) => {
   return text.replace(/^\s*([\u2022\u25E6\u2023\u25B8\u25AA\u25AB\-\*\u2013\u2014\u2043\u2219\u25C6\u27A2\uF0D8\u00B7]\s*)+/, '').trim();
 };
 
+export const getSafeResumeFilename = (
+  fullName?: string,
+  suffix: string = "Formatted",
+  ext: string = "docx"
+): string => {
+  const cleanName = (fullName || "Candidate")
+    .trim()
+    .replace(/[/\\?%*:|"<>]/g, "")
+    .replace(/\s+/g, ".")
+    .replace(/^\.+|\.+$/g, "") || "Candidate";
+  const cleanExt = ext.replace(/^\./, "");
+  return `${cleanName}.${suffix}.${cleanExt}`;
+};
+
 export const processDescription = (items: any[]): string[] => {
   if (!items) return [];
   const processed: string[] = [];

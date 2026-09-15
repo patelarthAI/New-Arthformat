@@ -8,6 +8,7 @@ import AdminDashboard from '@/components/AdminDashboard';
 import { saveAs } from 'file-saver';
 import { safeStorage } from '@/utils/safeStorage';
 import { InteractiveLogo } from '@/components/InteractiveLogo';
+import { EngineHealthBadge } from '@/components/EngineHealthBadge';
 import { 
   LayoutTemplate, 
   Database, 
@@ -670,6 +671,7 @@ const App: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-3">
+              <EngineHealthBadge />
             </div>
           </div>
         )}

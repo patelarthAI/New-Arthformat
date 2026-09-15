@@ -14,8 +14,9 @@ import GrammarHighlighter from "./GrammarHighlighter";
 import get from "lodash/get";
 import set from "lodash/set";
 import { motion, AnimatePresence } from "framer-motion";
-import { cleanBullet, groupBulletPoints, processDescription, processDescriptionWithIndices, formatResumeDate as formatModernDate, stripTrailingDate } from "@/utils/formatters";
+import { cleanBullet, groupBulletPoints, processDescription, processDescriptionWithIndices, formatResumeDate as formatModernDate, stripTrailingDate, getSafeResumeFilename } from "@/utils/formatters";
 import { InteractiveLogo } from "./InteractiveLogo";
+import { EngineHealthBadge } from "./EngineHealthBadge";
 
 interface ResumePreviewProps {
   data: ResumeData;
@@ -611,7 +612,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
   const executeDownloadDOCX = async () => {
     try {
       const blob = await generateResumeDoc(data, selectedFormat, retainedFields, selectedFont, selectedFontSize);
-      const fileName = `${data.fullName.trim().replace(/\s+/g, '.')}.Formatted.docx`;
+      const fileName = getSafeResumeFilename(data.fullName, "Formatted", "docx");
       saveAs(blob, fileName);
     } catch (err) {
       console.error("DOCX generation failed", err);
@@ -661,7 +662,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
     } else if (pendingDownloadType === 'docx') {
       try {
         const blob = await generateResumeDoc(originalData, selectedFormat, retainedFields, selectedFont, selectedFontSize);
-        const fileName = `${originalData.fullName.trim().replace(/\s+/g, '.')}.Original.docx`;
+        const fileName = getSafeResumeFilename(originalData.fullName, "Original", "docx");
         saveAs(blob, fileName);
       } catch (err) {
         console.error("DOCX generation failed", err);
@@ -1044,6 +1045,11 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                 <span className="text-slate-500 font-medium font-sans">Saved to cloud</span>
               </>
             )}
+          </div>
+
+          <div className="h-4 w-[1px] bg-white/10 hidden sm:block" />
+          <div className="hidden sm:block">
+            <EngineHealthBadge />
           </div>
         </div>
 

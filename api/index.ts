@@ -680,11 +680,15 @@ app.get("/api/admin/stats", checkAdmin, async (req, res) => {
 
     const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
     if (useDatabase) {
-      try {
-        // Calculate status counts efficiently using Firestore count queries (only counts documents on server, which counts as 1 read per query or per 1,000 docs)
-        pendingCount = await db.collection('resumes').where('status', '==', 'pending').count();
-        approvedCount = await db.collection('resumes').where('status', '==', 'approved').count();
-        rejectedCount = await db.collection('resumes').where('status', '==', 'rejected').count();
+        // Calculate status counts efficiently using Firestore aggregate count queries
+        const [pendingSnap, approvedSnap, rejectedSnap] = await Promise.all([
+          db.collection('resumes').where('status', '==', 'pending').count().get(),
+          db.collection('resumes').where('status', '==', 'approved').count().get(),
+          db.collection('resumes').where('status', '==', 'rejected').count().get(),
+        ]);
+        pendingCount = (pendingSnap.data && pendingSnap.data().count) || 0;
+        approvedCount = (approvedSnap.data && approvedSnap.data().count) || 0;
+        rejectedCount = (rejectedSnap.data && rejectedSnap.data().count) || 0;
 
         // Retrieve recent approved documents to calculate time-series metrics.
         // This is a single-field range query on approved_at, which uses standard indexing without composite index.

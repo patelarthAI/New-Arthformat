@@ -369,6 +369,13 @@ export const extractResumeDataBackend = async (
   payload: { base64?: string; text?: string; mimeType: string; format: ResumeFormat },
   usePro: boolean = false
 ): Promise<ResumeData> => {
+  // Pre-flight Data Integrity Check: Ensure document has viable content before invoking AI
+  const hasText = payload.text && payload.text.trim().length >= 10;
+  const hasBase64 = payload.base64 && payload.base64.trim().length >= 50;
+  if (!hasText && !hasBase64) {
+    throw new Error("The uploaded file contains no readable text or content. Please upload a valid document.");
+  }
+
   return withModelFallback(async (modelId, apiKey) => {
     const ai = new GoogleGenAI({ 
       apiKey,
@@ -538,6 +545,23 @@ STRICT DATA EXTRACTOR DIRECTIVE:
                return sec.items && sec.items.length > 0;
            });
        }
+
+        // SDET Quality Assertion: Validate Candidate Name
+        if (!data.fullName || data.fullName.trim() === "") {
+          if (payload.text) {
+            const firstLine = payload.text.trim().split('\n').map(l => l.trim()).find(l => l.length > 2 && l.length < 50 && !l.toLowerCase().includes('page'));
+            if (firstLine) {
+              data.fullName = toTitleCaseIfAllCaps(firstLine.replace(/[^a-zA-Z\s.-]/g, '').trim());
+            }
+          }
+        }
+
+        // SDET Quality Assertion: If input clearly had experience sections but extracted experience is empty, reject and failover
+        const rawHasExperience = payload.text && /experience|employment|work history|career/i.test(payload.text);
+        if (rawHasExperience && (!data.experience || data.experience.length === 0) && (!data.internships || data.internships.length === 0)) {
+          console.warn("[Quality Assertion] Raw text contained experience sections but extracted experience was empty. Failing over to next key/model.");
+          throw new Error("INCOMPLETE_EXTRACTION: Experience details were missed. Retrying with next model...");
+        }
 
        return data;
     }

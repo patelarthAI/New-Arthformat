@@ -1,5 +1,5 @@
 import { ResumeData, ResumeFormat } from "@/types";
-import { cleanBullet, groupBulletPoints, processDescription, formatResumeDate as formatModernDate, stripTrailingDate } from "@/utils/formatters";
+import { cleanBullet, groupBulletPoints, processDescription, formatResumeDate as formatModernDate, stripTrailingDate, getSafeResumeFilename } from "@/utils/formatters";
 
 // Helper to format title with colon
 const formatTitle = (title: string) => {
@@ -514,6 +514,6 @@ export const generateResumePDF = async (
     }
   };
 
-  const fileName = `${data.fullName.trim().replace(/\s+/g, '.')}.Formatted.pdf`;
+  const fileName = getSafeResumeFilename(data.fullName, "Formatted", "pdf");
   pm.createPdf(docDefinition).download(fileName);
 };
