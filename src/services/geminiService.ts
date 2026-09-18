@@ -13,7 +13,7 @@ export const getUsageStats = (usePro: boolean = false) => {
     totalKeys: 3,
     totalRequests: 0,
     rateLimitHits: 0,
-    activeModel: 'gemini-3.8-flash'
+    activeModel: 'gemini-3.5-flash'
   };
 };
 

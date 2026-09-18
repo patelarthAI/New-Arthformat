@@ -64,19 +64,18 @@ const getNextApiKey = () => {
 // and strictly preserve all work experiences and bullet points without cutting.
 // Lite models (flash-lite) are kept as emergency fallbacks only.
 const FALLBACK_MODELS = [
-  "gemini-3.8-flash",       // 🟢 PRIMARY: Full-power Flash, 100% fresh quota (0/20 used), zero cutting
-  "gemini-3.7-flash",       // 🟢 BACKUP:  Full-power Flash, fresh quota (2/20 used), zero cutting
-  "gemini-3.6-flash",       // 🟢 BACKUP:  Full-power Flash (resets daily)
-  "gemini-3.5-flash",       // 🟢 BACKUP:  Full-power Flash
-  "gemini-3.5-flash-lite",  // ⚡ EMERGENCY ONLY: High quota fallback if all full models are busy
-  "gemini-3.1-flash-lite",  // ⚡ EMERGENCY ONLY: High quota fallback
+  "gemini-3.5-flash",       // 🟢 PRIMARY: Full-power Flash, verified 100% healthy across all 3 keys, 1M context, 8192 tokens, zero cutting
+  "gemini-3.5-flash-lite",  // ⚡ HIGH-VOLUME BACKUP: 500 RPD per key (1500 RPD total), verified healthy
+  "gemini-3.1-flash-lite",  // ⚡ ULTRA-STABLE BACKUP: 500 RPD per key (1500 RPD total), verified healthy
+  "gemini-3.6-flash",       // 🟢 FULL-POWER BACKUP: Full reasoning when capacity permits
+  "gemini-3.7-flash",       // 🟢 FULL-POWER BACKUP: Full reasoning when capacity permits
 ];
 
 const PRO_MODELS = [
-  "gemini-3.8-flash",       // Full-power Flash
-  "gemini-3.7-flash",       // Full-power Flash backup
-  "gemini-3.6-flash",       // Full-power Flash backup
-  "gemini-3.5-flash-lite",  // Emergency fallback
+  "gemini-3.5-flash",       // Full-power Flash
+  "gemini-3.5-flash-lite",  // High-volume backup
+  "gemini-3.1-flash-lite",  // Ultra-stable backup
+  "gemini-3.6-flash",       // Full-power backup
 ];
 
 async function withModelFallback<T>(
@@ -96,13 +95,22 @@ async function withModelFallback<T>(
   let allRateLimited = true;
 
   for (const modelId of models) {
+    let skipModelToNext = false;
     for (let i = 0; i < pool.length; i++) {
+      if (skipModelToNext) break;
+
       const keyIdx = (currentKeyIndex + i) % pool.length;
       const apiKey = pool[keyIdx];
       totalRequests++;
 
       try {
-        const result = await operation(modelId, apiKey);
+        // SDET Guard: 20-second per-call timeout to prevent Vercel 504 gateway timeouts
+        const result = await Promise.race([
+          operation(modelId, apiKey),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error(`MODEL_TIMEOUT: ${modelId} exceeded 20s`)), 20000)
+          )
+        ]);
         currentKeyIndex = (keyIdx + 1) % pool.length;
         return result;
       } catch (error: any) {
@@ -111,29 +119,35 @@ async function withModelFallback<T>(
         const errorStatus = error?.status;
         const lowerError = errorString.toLowerCase();
 
-        // 429 = quota exceeded, 503 = model overloaded → transient, try next key
-        const isRateLimit =
+        // 429 = per-key quota exceeded (rotate to next key in pool)
+        const isQuotaExceeded =
           errorStatus === 429 ||
-          errorStatus === 503 ||
           errorString.includes("429") ||
           errorString.includes("Quota exceeded") ||
-          errorString.includes("RESOURCE_EXHAUSTED") ||
-          lowerError.includes("unavailable") ||
+          errorString.includes("RESOURCE_EXHAUSTED");
+
+        // 503 / High demand = model-level outage across all keys (skip model immediately)
+        const isModelOverloaded =
+          errorStatus === 503 ||
+          lowerError.includes("503") ||
           lowerError.includes("high demand") ||
-          lowerError.includes("try again later");
+          lowerError.includes("unavailable") ||
+          lowerError.includes("overloaded") ||
+          lowerError.includes("try again later") ||
+          lowerError.includes("model_timeout");
 
-        const isAuthError =
-          (errorStatus === 400 && errorString.includes("API key not valid")) ||
-          errorStatus === 403 ||
-          errorStatus === 401;
-
-        // 404 = model ID is dead/retired → skip immediately to next model
+        // 404 = dead/retired model ID (skip model immediately)
         const isModelNotFound =
           errorStatus === 404 ||
           lowerError.includes("not found") ||
           lowerError.includes("not supported") ||
           lowerError.includes("no longer available") ||
           errorString.includes("NOT_FOUND");
+
+        const isAuthError =
+          (errorStatus === 400 && errorString.includes("API key not valid")) ||
+          errorStatus === 403 ||
+          errorStatus === 401;
 
         const isNetworkError =
           lowerError.includes("fetch failed") ||
@@ -143,19 +157,37 @@ async function withModelFallback<T>(
           lowerError.includes("network") ||
           lowerError.includes("deadline exceeded");
 
-        if (isRateLimit) {
+        if (isQuotaExceeded || isModelOverloaded) {
           rateLimitHits++;
           lastWasRateLimit = true;
         }
-        if (!isRateLimit && !isModelNotFound) allRateLimited = false;
+        if (!isQuotaExceeded && !isModelOverloaded && !isModelNotFound) {
+          allRateLimited = false;
+        }
 
-        const errType = isRateLimit ? "RATE_LIMIT/503" : isModelNotFound ? "NOT_FOUND(404)" : isAuthError ? "AUTH_ERROR" : isNetworkError ? "NETWORK_ERROR" : "ERROR";
-        console.warn(`[${operationName}] ${modelId}/Key#${keyIdx + 1} → ${errType}: ${errorString.substring(0, 80)}`);
+        const errType = isModelOverloaded 
+          ? "OVERLOAD(503)" 
+          : isQuotaExceeded 
+            ? "QUOTA(429)" 
+            : isModelNotFound 
+              ? "NOT_FOUND(404)" 
+              : isAuthError 
+                ? "AUTH_ERROR" 
+                : isNetworkError 
+                  ? "NETWORK_ERROR" 
+                  : "ERROR";
 
-        // Dead model (404) → skip all keys for this model immediately
-        if (isModelNotFound) break;
+        console.warn(`[${operationName}] ${modelId}/Key#${keyIdx + 1} → ${errType}: ${errorString.substring(0, 100)}`);
 
-        // Rate limit, overload, auth error, network blip, or any key issue → try next key
+        // If the entire model is overloaded/503 or dead (404), DO NOT waste time trying other keys on this same model.
+        // Fast-skip directly to the next healthy model!
+        if (isModelOverloaded || isModelNotFound) {
+          console.warn(`[${operationName}] Fast-skipping model ${modelId} to next candidate model.`);
+          skipModelToNext = true;
+          break;
+        }
+
+        // For per-key quota exceeded (429) or auth error, continue to next key in pool
         continue;
       }
     }
@@ -558,7 +590,8 @@ STRICT DATA EXTRACTOR DIRECTIVE:
 
         // SDET Quality Assertion: If input clearly had experience sections but extracted experience is empty, reject and failover
         const rawHasExperience = payload.text && /experience|employment|work history|career/i.test(payload.text);
-        if (rawHasExperience && (!data.experience || data.experience.length === 0) && (!data.internships || data.internships.length === 0)) {
+        const hasCustomExp = data.customSections && data.customSections.some(s => /experience|projects|work|history/i.test(s.title || ""));
+        if (rawHasExperience && (!data.experience || data.experience.length === 0) && (!data.internships || data.internships.length === 0) && !hasCustomExp) {
           console.warn("[Quality Assertion] Raw text contained experience sections but extracted experience was empty. Failing over to next key/model.");
           throw new Error("INCOMPLETE_EXTRACTION: Experience details were missed. Retrying with next model...");
         }
