@@ -169,9 +169,11 @@ async function withModelFallback<T>(
 
         console.warn(`[${operationName}] Model ${modelId} (Attempt ${totalAttempts}/${maxAttempts}) → ${errType}: ${errorString.substring(0, 100)}`);
 
-        // If the model is completely retired or dead (404), skip remaining keys for this model immediately
-        if (isModelNotFound) {
-          console.warn(`[${operationName}] Model ${modelId} dead/not found (404). Fast-skipping to next model.`);
+        // If the model is retired (404) or experiencing high demand / 503 across Google's infrastructure,
+        // trying more keys on the same overloaded model will also fail and cause unnecessary lag.
+        // Skip remaining keys for this model and jump directly to the next healthy model.
+        if (isModelNotFound || (isServerError && (lowerError.includes("high demand") || errorStatus === 503))) {
+          console.warn(`[${operationName}] Model ${modelId} unavailable/overloaded (503/404). Fast-skipping to next model.`);
           skipModelToNext = true;
           break;
         }
