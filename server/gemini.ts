@@ -18,9 +18,9 @@ export const getUsageStatsBackend = (usePro: boolean = false) => {
 };
 
 export const getKeyPool = (): string[] => {
-  const rawKeys = [
+  const rawSources = [
+    process.env.GEMINI_API_KEYS,
     process.env.GEMINI_API_KEY,
-    process.env.VITE_GEMINI_API_KEY,
     process.env.GEMINI_KEY_1,
     process.env.GEMINI_KEY_2,
     process.env.GEMINI_KEY_3,
@@ -31,112 +31,120 @@ export const getKeyPool = (): string[] => {
     process.env.VITE_GEMINI_KEY_3,
     process.env.VITE_GEMINI_KEY_4,
     process.env.VITE_GEMINI_KEY_5,
+    process.env.VITE_GEMINI_API_KEY,
   ].filter(Boolean) as string[];
   
-  // Deduplicate and trim whitespace to ensure key validity
-  const uniqueKeys = Array.from(new Set(rawKeys.map(k => k.trim()))).filter(k => k.length > 5);
-  return uniqueKeys;
+  const pool: string[] = [];
+  for (const src of rawSources) {
+    // Support comma or newline separated keys
+    const parts = src.split(/[,\n]+/).map(k => k.trim()).filter(Boolean);
+    for (const p of parts) {
+      if (!pool.includes(p) && p.length > 5) pool.push(p);
+    }
+  }
+  return pool;
 };
 
 const getNextApiKey = () => {
   const pool = getKeyPool();
   if (pool.length === 0) return "";
   const key = pool[currentKeyIndex % pool.length];
+  // Rotate round-robin across requests to balance traffic evenly across free keys
+  currentKeyIndex = (currentKeyIndex + 1) % pool.length;
   return key;
 };
 
-// ─── LIVE-SCAN VERIFIED MODEL IDs ────────────────────────────────────────────
-// Dashboard analysis Sep 15, 2026 — RPD = Requests Per Day (daily quota)
-//
-// EXHAUSTED TODAY (25/20 RPD used — don't use until quota resets at midnight):
-//   gemini-3.6-flash     → 25/20 RPD exceeded ❌
-//   gemini-3.5-flash     → 25/20 RPD exceeded ❌
-//
-// FRESH WITH QUOTA REMAINING:
-//   gemini-3.5-flash-lite → 0/500 RPD 🟢 (25x more quota than flash!)
-//   gemini-3.1-flash-lite → 0/500 RPD 🟢 (25x more quota than flash!)
-//   gemini-3.8-flash      → 0/20 RPD  🟢 (zero usage, fresh)
-//   gemini-3.7-flash      → 3/20 RPD  🟢 (mostly fresh)
-//
-// Lite models (500 RPD) are the backbone for volume — perfect for 30-40 resumes/day.
-// ─── MODEL PRIORITY: FULL-FIDELITY FIRST TO PREVENT DATA LOSS ────────────────
-// Full Flash models (3.8-flash, 3.7-flash, 3.6-flash) have maximum reasoning capacity
-// and strictly preserve all work experiences and bullet points without cutting.
-// Lite models (flash-lite) are kept as emergency fallbacks only.
+// Priority models optimized for 100% Free Tier reliability, verbatim retention & speed
 const FALLBACK_MODELS = [
-  "gemini-3.5-flash",       // 🟢 PRIMARY: Full-power Flash, verified 100% healthy across all 3 keys, 1M context, 8192 tokens, zero cutting
-  "gemini-3.5-flash-lite",  // ⚡ HIGH-VOLUME BACKUP: 500 RPD per key (1500 RPD total), verified healthy
-  "gemini-3.1-flash-lite",  // ⚡ ULTRA-STABLE BACKUP: 500 RPD per key (1500 RPD total), verified healthy
-  "gemini-3.6-flash",       // 🟢 FULL-POWER BACKUP: Full reasoning when capacity permits
-  "gemini-3.7-flash",       // 🟢 FULL-POWER BACKUP: Full reasoning when capacity permits
+  "gemini-3.5-flash",       // 🟢 PRIMARY: Full-power Flash, 100% verified healthy, 1M context, 8192 tokens, zero cutting
+  "gemini-3.1-flash-lite",  // ⚡ ULTRA-FAST: Extremely low latency, 500 RPD, rare 503 drops
+  "gemini-3.5-flash-lite",  // ⚡ HIGH-VOLUME: 500 RPD backup
+  "gemini-3.6-flash",       // 🟢 FULL-POWER BACKUP
+  "gemini-3.8-flash",       // 🟢 BACKUP: Full Flash when capacity permits
+  "gemini-flash-latest"     // 🟢 BACKUP: Latest alias
 ];
 
 const PRO_MODELS = [
-  "gemini-3.5-flash",       // Full-power Flash
-  "gemini-3.5-flash-lite",  // High-volume backup
-  "gemini-3.1-flash-lite",  // Ultra-stable backup
-  "gemini-3.6-flash",       // Full-power backup
+  "gemini-3.5-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-3.5-flash-lite",
+  "gemini-3.6-flash",
+  "gemini-3.8-flash",
+  "gemini-3.1-pro-preview"
 ];
+
+// In-memory extraction cache to preserve free quota across repeated user clicks
+const extractionCache = new Map<string, { data: ResumeData; timestamp: number }>();
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 async function withModelFallback<T>(
   operation: (modelId: string, apiKey: string) => Promise<T>,
   operationName: string,
   usePro: boolean = false
 ): Promise<T> {
+  let lastError: any;
   const pool = getKeyPool();
-
+  
   if (pool.length === 0) {
     throw new Error("No API Keys found on the server. Please configure GEMINI_API_KEY in server secrets.");
   }
 
   const models = usePro ? PRO_MODELS : FALLBACK_MODELS;
-  let lastError: any;
-  let lastWasRateLimit = false;
+
+  // We try up to 12 times total across keys and models
+  let totalAttempts = 0;
+  const maxAttempts = 12;
   let allRateLimited = true;
 
   for (const modelId of models) {
     let skipModelToNext = false;
     for (let i = 0; i < pool.length; i++) {
-      if (skipModelToNext) break;
+      if (skipModelToNext || totalAttempts >= maxAttempts) break;
 
-      const keyIdx = (currentKeyIndex + i) % pool.length;
-      const apiKey = pool[keyIdx];
+      const apiKey = getNextApiKey();
       totalRequests++;
+      totalAttempts++;
 
       try {
         // SDET Guard: 20-second per-call timeout to prevent Vercel 504 gateway timeouts
-        const result = await Promise.race([
+        return await Promise.race([
           operation(modelId, apiKey),
           new Promise<never>((_, reject) => 
             setTimeout(() => reject(new Error(`MODEL_TIMEOUT: ${modelId} exceeded 20s`)), 20000)
           )
         ]);
-        currentKeyIndex = (keyIdx + 1) % pool.length;
-        return result;
       } catch (error: any) {
         lastError = error;
         const errorString = error?.toString() || "";
         const errorStatus = error?.status;
         const lowerError = errorString.toLowerCase();
 
-        // 429 = per-key quota exceeded (rotate to next key in pool)
-        const isQuotaExceeded =
+        const isRateLimit =
           errorStatus === 429 ||
+          error?.status === "RESOURCE_EXHAUSTED" ||
           errorString.includes("429") ||
           errorString.includes("Quota exceeded") ||
           errorString.includes("RESOURCE_EXHAUSTED");
 
-        // 503 / High demand = model-level outage across all keys (skip model immediately)
-        const isModelOverloaded =
+        const isInvalidKey =
+          errorStatus === 400 ||
+          errorStatus === 403 ||
+          errorStatus === 401 ||
+          errorString.includes("API key not valid") ||
+          errorString.includes("API_KEY_INVALID") ||
+          lowerError.includes("unauthorized");
+
+        const isServerError =
+          errorStatus === 500 ||
           errorStatus === 503 ||
-          lowerError.includes("503") ||
-          lowerError.includes("high demand") ||
-          lowerError.includes("unavailable") ||
-          lowerError.includes("overloaded") ||
-          lowerError.includes("try again later") ||
+          errorString.includes("500") ||
+          errorString.includes("503") ||
+          errorString.includes("Internal Server Error") ||
+          errorString.includes("Service Unavailable") ||
+          errorString.includes("UNAVAILABLE") ||
+          errorString.includes("experiencing high demand") ||
           lowerError.includes("model_timeout");
 
-        // 404 = dead/retired model ID (skip model immediately)
         const isModelNotFound =
           errorStatus === 404 ||
           lowerError.includes("not found") ||
@@ -144,85 +152,70 @@ async function withModelFallback<T>(
           lowerError.includes("no longer available") ||
           errorString.includes("NOT_FOUND");
 
-        const isAuthError =
-          (errorStatus === 400 && errorString.includes("API key not valid")) ||
-          errorStatus === 403 ||
-          errorStatus === 401;
-
-        const isNetworkError =
-          lowerError.includes("fetch failed") ||
-          lowerError.includes("econnreset") ||
-          lowerError.includes("etimedout") ||
-          lowerError.includes("socket") ||
-          lowerError.includes("network") ||
-          lowerError.includes("deadline exceeded");
-
-        if (isQuotaExceeded || isModelOverloaded) {
-          rateLimitHits++;
-          lastWasRateLimit = true;
-        }
-        if (!isQuotaExceeded && !isModelOverloaded && !isModelNotFound) {
+        if (isRateLimit) rateLimitHits++;
+        if (!isRateLimit && !isServerError && !isModelNotFound) {
           allRateLimited = false;
         }
 
-        const errType = isModelOverloaded 
-          ? "OVERLOAD(503)" 
-          : isQuotaExceeded 
-            ? "QUOTA(429)" 
+        const errType = isServerError 
+          ? "SERVER_OVERLOAD(503)" 
+          : isRateLimit 
+            ? "RATE_LIMIT(429)" 
             : isModelNotFound 
               ? "NOT_FOUND(404)" 
-              : isAuthError 
-                ? "AUTH_ERROR" 
-                : isNetworkError 
-                  ? "NETWORK_ERROR" 
-                  : "ERROR";
+              : isInvalidKey 
+                ? "INVALID_KEY" 
+                : "ERROR";
 
-        console.warn(`[${operationName}] ${modelId}/Key#${keyIdx + 1} → ${errType}: ${errorString.substring(0, 100)}`);
+        console.warn(`[${operationName}] Model ${modelId} (Attempt ${totalAttempts}/${maxAttempts}) → ${errType}: ${errorString.substring(0, 100)}`);
 
-        // If the model is completely retired or dead (404), skip remaining keys for this model
+        // If the model is completely retired or dead (404), skip remaining keys for this model immediately
         if (isModelNotFound) {
-          console.warn(`[${operationName}] Model ${modelId} not found (404). Fast-skipping to next candidate model.`);
+          console.warn(`[${operationName}] Model ${modelId} dead/not found (404). Fast-skipping to next model.`);
           skipModelToNext = true;
           break;
         }
 
-        // For 503 (high demand), 429 (quota), timeouts, or auth errors on this key:
-        // Try the NEXT KEY in the pool (e.g. Key 1 or Key 3 might be completely free even if Key 2 is busy)
+        // If invalid key, rotate to next key in pool
+        if (isInvalidKey) {
+          continue;
+        }
+
+        // For rate limit (429) or transient 503, try next key in pool
         continue;
       }
     }
+    if (totalAttempts >= maxAttempts) break;
   }
 
   console.error(`[${operationName}] All attempts exhausted. allRateLimited=${allRateLimited}`, lastError);
 
-  const lastErrStr = lastError?.toString() || "";
-  const lastErrStatus = lastError?.status;
+  const errorString = lastError?.toString() || "";
+  const errorStatus = lastError?.status;
   const isActualRateLimit = 
-    lastErrStatus === 429 || 
-    lastErrStatus === 503 || 
-    lastErrStr.includes("429") || 
-    lastErrStr.includes("503") ||
-    lastErrStr.includes("RESOURCE_EXHAUSTED") ||
-    lastErrStr.includes("Quota exceeded") ||
-    lastErrStr.includes("high demand");
+    errorStatus === 429 || 
+    errorStatus === 503 || 
+    errorString.includes("429") || 
+    errorString.includes("503") ||
+    errorString.includes("RESOURCE_EXHAUSTED") ||
+    errorString.includes("Quota exceeded") ||
+    errorString.includes("experiencing high demand");
 
   if (isActualRateLimit && allRateLimited) {
-    // Use a special prefix so client can detect and auto-retry
     throw new Error(
-      "RATE_LIMITED: AI engines are at capacity. Retrying automatically in 8 seconds..."
+      "RATE_LIMITED: Our AI engines are currently at capacity. Retrying automatically in 8 seconds..."
     );
   }
 
-  if (lastErrStr.includes("safety") || lastErrStr.includes("blocked")) {
-    throw new Error("Content Blocked: The AI model flagged this document. Please ensure it is a professional resume and try again.");
+  if (errorString.includes("safety") || errorString.includes("blocked")) {
+    throw new Error("Content Blocked: The AI model flagged this document for safety reasons. Please ensure the content is professional and try again.");
   }
 
-  if (lastErrStr.includes("API key not valid") || lastErrStr.includes("API_KEY_INVALID")) {
+  if (errorString.includes("API key not valid") || errorString.includes("API_KEY_INVALID")) {
     throw new Error("API Key Error: One or more Gemini API keys are invalid. Please check your Vercel environment variables.");
   }
 
-  const detail = lastError?.message || lastErrStr.substring(0, 200) || "Unknown API error";
-  throw new Error(`Processing failed after trying all models. Details: ${detail}`);
+  throw new Error("Processing Interrupted: We encountered an unexpected issue while analyzing your resume. This usually resolves with a quick retry.");
 }
 
 
@@ -418,7 +411,18 @@ export const extractResumeDataBackend = async (
     throw new Error("The uploaded file contains no readable text or content. Please upload a valid document.");
   }
 
-  return withModelFallback(async (modelId, apiKey) => {
+  // Check in-memory extraction cache to preserve quota across repeated user requests
+  const contentSnippet = payload.text 
+    ? payload.text.slice(0, 100) + payload.text.length
+    : (payload.base64 ? payload.base64.slice(0, 100) + payload.base64.length : "");
+  const cacheKey = `${payload.format}_${payload.mimeType}_${contentSnippet}`;
+  const cached = extractionCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    console.log(`[extractResumeData] Returning cached extraction for key: ${cacheKey.substring(0, 40)}...`);
+    return JSON.parse(JSON.stringify(cached.data));
+  }
+
+  const result = await withModelFallback(async (modelId, apiKey) => {
     const ai = new GoogleGenAI({ 
       apiKey,
       httpOptions: {
@@ -610,6 +614,9 @@ STRICT DATA EXTRACTOR DIRECTIVE:
     
     throw new Error("The AI model did not trigger the extraction tool correctly.");
   }, "extractResumeData", usePro);
+
+  extractionCache.set(cacheKey, { timestamp: Date.now(), data: result });
+  return result;
 };
 
 export const analyzeGrammarBackend = async (data: ResumeData, format: ResumeFormat, usePro: boolean = false): Promise<GrammarIssue[]> => {
