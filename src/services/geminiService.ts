@@ -19,16 +19,21 @@ export const getUsageStats = (usePro: boolean = false) => {
 
 const RATE_LIMIT_PREFIX = "RATE_LIMITED:";
 
-// Client-side retry with countdown — runs in browser, no timeout issues
+// Client-side retry with countdown — runs in browser, no timeout issues, supports user abort
 async function fetchWithRetry(
   url: string,
   init: RequestInit,
   onCountdown?: (secondsLeft: number) => void,
-  maxRetries = 3,
-  retryDelaySec = 30
+  maxRetries = 2,
+  retryDelaySec = 8,
+  signal?: AbortSignal
 ): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const response = await fetch(url, init);
+    if (signal?.aborted) {
+      throw new DOMException("Extraction cancelled by user", "AbortError");
+    }
+
+    const response = await fetch(url, { ...init, signal });
 
     if (response.ok) return response;
 
@@ -46,6 +51,9 @@ async function fetchWithRetry(
     // Rate limited — count down then retry
     console.log(`[geminiService] Rate limited (${url}). Waiting ${retryDelaySec}s before retry ${attempt + 1}/${maxRetries}...`);
     for (let s = retryDelaySec; s > 0; s--) {
+      if (signal?.aborted) {
+        throw new DOMException("Extraction cancelled by user", "AbortError");
+      }
       onCountdown?.(s);
       await new Promise(r => setTimeout(r, 1000));
     }
@@ -53,7 +61,7 @@ async function fetchWithRetry(
     console.log(`[geminiService] Retrying now (attempt ${attempt + 1}/${maxRetries})...`);
   }
   // Fallback — should never reach here
-  return fetch(url, init);
+  return fetch(url, { ...init, signal });
 }
 
 const parseJsonResponse = async (response: Response, defaultError: string) => {
@@ -68,7 +76,8 @@ const parseJsonResponse = async (response: Response, defaultError: string) => {
 export const extractResumeData = async (
   payload: ExtractionPayload,
   usePro: boolean = false,
-  onCountdown?: (secondsLeft: number) => void
+  onCountdown?: (secondsLeft: number) => void,
+  signal?: AbortSignal
 ): Promise<ResumeData> => {
   const body = JSON.stringify({ payload, usePro });
   const init: RequestInit = {
@@ -77,7 +86,7 @@ export const extractResumeData = async (
     body
   };
 
-  const response = await fetchWithRetry("/api/gemini/extract", init, onCountdown);
+  const response = await fetchWithRetry("/api/gemini/extract", init, onCountdown, 2, 8, signal);
   return parseJsonResponse(response, "Failed to extract resume data from server");
 };
 

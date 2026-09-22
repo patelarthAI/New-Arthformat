@@ -27,7 +27,8 @@ import {
   Phone,
   Mail,
   Unlock,
-  Scan
+  Scan,
+  XCircle
 } from 'lucide-react';
 
 interface StagedContent {
@@ -60,6 +61,7 @@ const App: React.FC = () => {
   });
   const [backendStatus, setBackendStatus] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (pendingResumeId) {
@@ -199,6 +201,18 @@ const App: React.FC = () => {
     };
   }, [appState, pendingResumeId]);
 
+  const handleCancelProcessing = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setRetryCountdown(0);
+    setAppState(AppState.IDLE);
+    setStagedContent(null);
+    setPendingResumeId(null);
+    setErrorMsg('');
+  }, []);
+
   const processApprovedResume = async (contentToProcess: any = stagedContent) => {
     if (!contentToProcess) {
       console.warn("No content to process in processApprovedResume");
@@ -210,6 +224,10 @@ const App: React.FC = () => {
     console.log("Processing approved resume content:", contentToProcess);
     setAppState(AppState.PROCESSING);
     setRetryCountdown(0);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const formattedData = await extractResumeData(
         {
@@ -225,15 +243,26 @@ const App: React.FC = () => {
             // Keep PROCESSING state while counting down — show countdown in loading UI
             setAppState(AppState.PROCESSING);
           }
-        }
+        },
+        controller.signal
       );
       
       setRetryCountdown(0);
+      abortControllerRef.current = null;
       console.log("Extracted resume data successfully:", formattedData);
       setResumeData(formattedData);
       setAppState(AppState.REVIEW);
       setPendingResumeId(null);
     } catch (err: any) {
+      abortControllerRef.current = null;
+      if (err.name === 'AbortError' || err.message?.includes('cancelled')) {
+        console.log("Resume extraction cancelled by user.");
+        setRetryCountdown(0);
+        setAppState(AppState.IDLE);
+        setStagedContent(null);
+        setPendingResumeId(null);
+        return;
+      }
       console.error("Error during resume data extraction:", err);
       setRetryCountdown(0);
       setErrorMsg(err.message);
@@ -1163,6 +1192,13 @@ const App: React.FC = () => {
                                 All AI engines are at capacity. Automatically retrying in {retryCountdown} second{retryCountdown !== 1 ? 's' : ''}...
                               </p>
                               <p className="text-slate-500 text-[10px] mt-3">No action needed — this is automatic.</p>
+                              <button
+                                onClick={handleCancelProcessing}
+                                className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 text-red-300 hover:text-red-200 text-xs font-semibold tracking-wide transition-all shadow-md cursor-pointer"
+                              >
+                                <XCircle className="w-4 h-4 text-red-400" />
+                                <span>Cancel & Try Another File</span>
+                              </button>
                             </>
                           ) : (
                             // Normal processing
@@ -1177,6 +1213,13 @@ const App: React.FC = () => {
                               <p className="text-slate-400/90 max-w-xs font-light text-xs animate-pulse leading-relaxed mx-auto mt-2">
                                 Analyzing structure, adjusting typography, and optimizing spacing for modern elite layout. Just a moment...
                               </p>
+                              <button
+                                onClick={handleCancelProcessing}
+                                className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-400 hover:text-white text-xs font-medium tracking-wide transition-all shadow-sm cursor-pointer"
+                              >
+                                <XCircle className="w-3.5 h-3.5 text-slate-400" />
+                                <span>Cancel Processing</span>
+                              </button>
                             </>
                           )}
                         </div>

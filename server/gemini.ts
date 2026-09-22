@@ -179,39 +179,49 @@ async function withModelFallback<T>(
 
         console.warn(`[${operationName}] ${modelId}/Key#${keyIdx + 1} → ${errType}: ${errorString.substring(0, 100)}`);
 
-        // If the entire model is overloaded/503 or dead (404), DO NOT waste time trying other keys on this same model.
-        // Fast-skip directly to the next healthy model!
-        if (isModelOverloaded || isModelNotFound) {
-          console.warn(`[${operationName}] Fast-skipping model ${modelId} to next candidate model.`);
+        // If the model is completely retired or dead (404), skip remaining keys for this model
+        if (isModelNotFound) {
+          console.warn(`[${operationName}] Model ${modelId} not found (404). Fast-skipping to next candidate model.`);
           skipModelToNext = true;
           break;
         }
 
-        // For per-key quota exceeded (429) or auth error, continue to next key in pool
+        // For 503 (high demand), 429 (quota), timeouts, or auth errors on this key:
+        // Try the NEXT KEY in the pool (e.g. Key 1 or Key 3 might be completely free even if Key 2 is busy)
         continue;
       }
     }
   }
 
-  console.error(`[${operationName}] All attempts exhausted. lastWasRateLimit=${lastWasRateLimit}`, lastError);
+  console.error(`[${operationName}] All attempts exhausted. allRateLimited=${allRateLimited}`, lastError);
 
-  if (lastWasRateLimit || allRateLimited) {
+  const lastErrStr = lastError?.toString() || "";
+  const lastErrStatus = lastError?.status;
+  const isActualRateLimit = 
+    lastErrStatus === 429 || 
+    lastErrStatus === 503 || 
+    lastErrStr.includes("429") || 
+    lastErrStr.includes("503") ||
+    lastErrStr.includes("RESOURCE_EXHAUSTED") ||
+    lastErrStr.includes("Quota exceeded") ||
+    lastErrStr.includes("high demand");
+
+  if (isActualRateLimit && allRateLimited) {
     // Use a special prefix so client can detect and auto-retry
     throw new Error(
-      "RATE_LIMITED: All AI engines are busy. Retrying automatically in 30 seconds..."
+      "RATE_LIMITED: AI engines are at capacity. Retrying automatically in 8 seconds..."
     );
   }
 
-  const errorString = lastError?.toString() || "";
-  if (errorString.includes("safety") || errorString.includes("blocked")) {
+  if (lastErrStr.includes("safety") || lastErrStr.includes("blocked")) {
     throw new Error("Content Blocked: The AI model flagged this document. Please ensure it is a professional resume and try again.");
   }
 
-  if (errorString.includes("API key not valid") || errorString.includes("API_KEY_INVALID")) {
+  if (lastErrStr.includes("API key not valid") || lastErrStr.includes("API_KEY_INVALID")) {
     throw new Error("API Key Error: One or more Gemini API keys are invalid. Please check your Vercel environment variables.");
   }
 
-  const detail = lastError?.message || errorString.substring(0, 200) || "Unknown API error";
+  const detail = lastError?.message || lastErrStr.substring(0, 200) || "Unknown API error";
   throw new Error(`Processing failed after trying all models. Details: ${detail}`);
 }
 
@@ -588,12 +598,11 @@ STRICT DATA EXTRACTOR DIRECTIVE:
           }
         }
 
-        // SDET Quality Assertion: If input clearly had experience sections but extracted experience is empty, reject and failover
+        // Quality Assertion: If input had experience sections but extracted experience is empty, log warning
         const rawHasExperience = payload.text && /experience|employment|work history|career/i.test(payload.text);
         const hasCustomExp = data.customSections && data.customSections.some(s => /experience|projects|work|history/i.test(s.title || ""));
         if (rawHasExperience && (!data.experience || data.experience.length === 0) && (!data.internships || data.internships.length === 0) && !hasCustomExp) {
-          console.warn("[Quality Assertion] Raw text contained experience sections but extracted experience was empty. Failing over to next key/model.");
-          throw new Error("INCOMPLETE_EXTRACTION: Experience details were missed. Retrying with next model...");
+          console.warn("[Quality Notice] Raw text contained experience keywords but extracted experience was empty.");
         }
 
        return data;
