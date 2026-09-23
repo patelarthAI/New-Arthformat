@@ -54,21 +54,24 @@ const getNextApiKey = () => {
   return key;
 };
 
-// Priority models optimized for 100% Free Tier reliability, verbatim retention & speed
+// ⚠️  MODEL LIST IS LIVE-TESTED — Updated 2026-09-23
+// gemini-3.5-flash      → ✅ OK (all 4 keys)
+// gemini-3.1-flash-lite → ❌ 503 high demand (all keys) — REMOVED
+// gemini-3.5-flash-lite → ❌ TIMEOUT (hangs silently 20s per attempt) — REMOVED
+// gemini-3.6-flash      → ❌ TIMEOUT (hangs silently 20s per attempt) — REMOVED
+// gemini-3.8-flash      → ❌ Unknown / not tested today
+// gemini-flash-latest   → ❌ Unknown / alias resolves to broken models
+// gemini-2.x / 1.5     → ❌ 404 Retired from API
+
+// PRIMARY model: gemini-3.5-flash is the only confirmed-healthy model right now.
+// We try it across all available keys (round-robin) to maximize throughput.
 const FALLBACK_MODELS = [
-  "gemini-3.5-flash",       // 🟢 PRIMARY: Full-power Flash, 100% verified healthy, 1M context, 8192 tokens, zero cutting
-  "gemini-3.1-flash-lite",  // ⚡ ULTRA-FAST: Extremely low latency, 500 RPD, rare 503 drops
-  "gemini-3.5-flash-lite",  // ⚡ HIGH-VOLUME: 500 RPD backup
-  "gemini-3.6-flash",       // 🟢 FULL-POWER BACKUP
-  "gemini-3.8-flash",       // 🟢 BACKUP: Full Flash when capacity permits
-  "gemini-flash-latest"     // 🟢 BACKUP: Latest alias
+  "gemini-3.5-flash",      // 🟢 VERIFIED OK — all 4 keys healthy as of 2026-09-23 09:08 CST
+  "gemini-3.8-flash",      // 🟡 STANDBY: Try when primary is also rate-limited
 ];
 
 const PRO_MODELS = [
   "gemini-3.5-flash",
-  "gemini-3.1-flash-lite",
-  "gemini-3.5-flash-lite",
-  "gemini-3.6-flash",
   "gemini-3.8-flash",
   "gemini-3.1-pro-preview"
 ];
@@ -106,11 +109,11 @@ async function withModelFallback<T>(
       totalAttempts++;
 
       try {
-        // SDET Guard: 20-second per-call timeout to prevent Vercel 504 gateway timeouts
+        // SDET Guard: 12-second per-call timeout (reduced from 20s to cut silent-hang lag on broken models)
         return await Promise.race([
           operation(modelId, apiKey),
           new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error(`MODEL_TIMEOUT: ${modelId} exceeded 20s`)), 20000)
+            setTimeout(() => reject(new Error(`MODEL_TIMEOUT: ${modelId} exceeded 12s`)), 12000)
           )
         ]);
       } catch (error: any) {
