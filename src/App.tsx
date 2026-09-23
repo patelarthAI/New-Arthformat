@@ -950,10 +950,19 @@ const App: React.FC = () => {
                                 <p className="text-[11px] text-red-100/80 leading-relaxed">{errorMsg}</p>
                               </div>
                             </div>
-                            <div className="flex justify-end">
+                            <div className="flex justify-end gap-2">
+                              {stagedContent && (
+                                <button 
+                                  onClick={() => processApprovedResume(stagedContent)}
+                                  className="px-3 py-1 bg-indigo-500/30 hover:bg-indigo-500/50 text-indigo-100 text-[9px] font-bold uppercase tracking-widest rounded-md transition-colors border border-indigo-500/40 flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Sparkles className="w-3 h-3 text-indigo-300" />
+                                  Retry Processing
+                                </button>
+                              )}
                               <button 
                                 onClick={handleReset}
-                                className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 text-[9px] font-bold uppercase tracking-widest rounded-md transition-colors border border-red-500/30"
+                                className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 text-[9px] font-bold uppercase tracking-widest rounded-md transition-colors border border-red-500/30 cursor-pointer"
                               >
                                 Try Another File
                               </button>

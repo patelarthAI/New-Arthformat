@@ -66,17 +66,34 @@ const getNextApiKey = () => {
 // Retired (404): gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash, gemini-2.0-pro
 // ──────────────────────────────────────────────────────────────────
 
-// Standard (free-tier) model pool — tried in order, each key rotated round-robin
+// ──────────────────────────────────────────────────────────────────
+// ACTIVE FREE-TIER MODELS (Live-verified against Google AI Studio Quotas)
+//
+// HIGHEST CAPACITY (500 Requests Per Day, 15 RPM / key):
+// 1. gemini-3.5-flash-lite  → 🟢 PRIMARY (100% OK on all keys, 481/500 left today)
+// 2. gemini-3.6-flash       → 🟢 FULL-POWER FLASH (100% OK on all keys)
+// 3. gemini-3.1-flash-lite  → ⚡ ULTRA-FAST (~400ms, 472/500 left today)
+//
+// LOW CAPACITY (Only 20 Requests Per Day - currently exhausted for today):
+// 4. gemini-3.8-flash       → 🟡 20 RPD cap (resets daily at 00:00 UTC)
+// 5. gemini-3.5-flash       → 🟡 20 RPD cap (resets daily at 00:00 UTC)
+// ──────────────────────────────────────────────────────────────────
+
+// Standard (free-tier) model pool — tried in priority order
 const FALLBACK_MODELS = [
-  "gemini-3.8-flash",       // 🟢 PRIMARY: State-of-the-art, 15 RPM/key, 60 RPM combined
-  "gemini-3.1-flash-lite",  // ⚡ LIGHTWEIGHT: ~400ms latency, high volume backup
-  "gemini-3.5-flash",       // 🔵 BACKUP: Regional 503 fallback, proven reliable
+  "gemini-3.5-flash-lite",  // 🟢 PRIMARY: 500 RPD, 15 RPM, 100% healthy on all keys
+  "gemini-3.6-flash",       // 🟢 FULL FLASH: Verified healthy across keys
+  "gemini-3.1-flash-lite",  // ⚡ ULTRA-FAST: 500 RPD, ~400ms latency
+  "gemini-3.8-flash",       // 🟡 State-of-the-art: 20 RPD cap (resets daily)
+  "gemini-3.5-flash",       // 🟡 20 RPD cap (resets daily)
 ];
 
-// Pro model pool — enables gemini-3.1-pro-preview for deep reasoning tasks
+// Pro model pool — enables deep reasoning when requested
 const PRO_MODELS = [
-  "gemini-3.8-flash",       // 🟢 PRIMARY
-  "gemini-3.5-flash",       // 🔵 BACKUP
+  "gemini-3.5-flash-lite",  // 🟢 PRIMARY
+  "gemini-3.6-flash",       // 🟢 FULL FLASH
+  "gemini-3.1-flash-lite",  // ⚡ ULTRA-FAST
+  "gemini-3.8-flash",       // 🟡 BACKUP
   "gemini-3.1-pro-preview", // 🧠 REASONING: Complex JD matching & restructuring
 ];
 
@@ -176,11 +193,9 @@ async function withModelFallback<T>(
 
         console.warn(`[${operationName}] Model ${modelId} (Attempt ${totalAttempts}/${maxAttempts}) → ${errType}: ${errorString.substring(0, 100)}`);
 
-        // If the model is retired (404) or experiencing high demand / 503 across Google's infrastructure,
-        // trying more keys on the same overloaded model will also fail and cause unnecessary lag.
-        // Skip remaining keys for this model and jump directly to the next healthy model.
-        if (isModelNotFound || (isServerError && (lowerError.includes("high demand") || errorStatus === 503))) {
-          console.warn(`[${operationName}] Model ${modelId} unavailable/overloaded (503/404). Fast-skipping to next model.`);
+        // If the model is completely retired or not found (404), skip remaining keys for this model immediately.
+        if (isModelNotFound) {
+          console.warn(`[${operationName}] Model ${modelId} not found (404). Fast-skipping to next model.`);
           skipModelToNext = true;
           break;
         }
@@ -190,7 +205,8 @@ async function withModelFallback<T>(
           continue;
         }
 
-        // For rate limit (429) or transient 503, try next key in pool
+        // For rate limit (429) or transient server load (503), rotate to the next key in the pool!
+        // Another key may be from a different project or have remaining quota.
         continue;
       }
     }

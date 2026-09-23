@@ -13,11 +13,19 @@ export const getUsageStats = (usePro: boolean = false) => {
     totalKeys: 3,
     totalRequests: 0,
     rateLimitHits: 0,
-    activeModel: 'gemini-3.5-flash'
+    activeModel: 'gemini-3.5-flash-lite'
   };
 };
 
 const RATE_LIMIT_PREFIX = "RATE_LIMITED:";
+
+// Messages that indicate a Google-wide infra outage — retrying immediately is pointless
+const GOOGLE_OUTAGE_PHRASES = [
+  "high demand across all regions",
+  "google infrastructure",
+  "not responding right now",
+  "google's ai servers",
+];
 
 // Client-side retry with countdown — runs in browser, no timeout issues, supports user abort
 async function fetchWithRetry(
@@ -39,11 +47,20 @@ async function fetchWithRetry(
 
     const errorData = await response.clone().json().catch(() => ({}));
     const errorMsg: string = errorData.error || "";
+    const lowerMsg = errorMsg.toLowerCase();
 
     const isRateLimit =
       errorMsg.startsWith(RATE_LIMIT_PREFIX) ||
       response.status === 429 ||
       response.status === 503;
+
+    // FAST-FAIL: If this is a Google-wide outage, stop retrying immediately.
+    // Waiting 8s × 2 = 16s just to get the same "all regions down" error is pointless.
+    const isGoogleOutage = GOOGLE_OUTAGE_PHRASES.some(phrase => lowerMsg.includes(phrase));
+    if (isGoogleOutage) {
+      console.warn("[geminiService] Google-wide outage detected — skipping retries:", errorMsg);
+      return response; // Return immediately so caller shows the error
+    }
 
     // If not a rate limit error, or we've exhausted retries, give up
     if (!isRateLimit || attempt >= maxRetries) return response;
