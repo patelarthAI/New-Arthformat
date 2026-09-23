@@ -278,13 +278,13 @@ const getDeviceInfoFromUA = (ua: string): string => {
   return `${os} / ${browser}`;
 };
 
-// API Route for submitting a resume (stores lightweight metadata only)
+// API Route for submitting a resume (STRICT ZERO-RESUME-STORAGE: stores lightweight candidate metadata only, NEVER resume body)
 app.post("/api/submit", async (req, res) => {
   try {
-    const { content, userId } = req.body;
+    const { content, userId, candidateName: inputName, fileName: inputFileName } = req.body;
     
-    if (!content) {
-      return res.status(400).json({ error: "Resume content is required" });
+    if (!content && !inputName && !inputFileName) {
+      return res.status(400).json({ error: "Submission metadata is required" });
     }
 
     const uid = typeof userId === 'string' && userId.trim().length > 0 ? userId.trim() : null;
@@ -297,7 +297,7 @@ app.post("/api/submit", async (req, res) => {
       req.socket.remoteAddress || 
       req.ip || 
       '';
-    const ip = typeof rawIp === 'string' && rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp;
+    const ip = typeof rawIp === 'string' && rawIp.includes(',') ? rawIp.split(',')[0].trim() : (rawIp || 'Unknown IP');
 
     const userAgent = req.headers['user-agent'] || '';
     const deviceInfo = getDeviceInfoFromUA(userAgent);
@@ -305,18 +305,23 @@ app.post("/api/submit", async (req, res) => {
     // Run auto-cleanup asynchronously to purge old records
     performAutoCleanup().catch(err => console.error("[Auto-Cleanup] Trigger failed:", err));
 
-    // Store lightweight summary metadata (no heavy bullet text or full resume payload) to save 99% RAM & storage
-    // content.fileName is the original file name sent from the client (e.g. "John_Smith_Resume.pdf")
-    const candidateName = typeof content === 'object' && (content?.fileName || content?.name)
-      ? String(content.fileName || content.name).replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').slice(0, 50)
-      : "Candidate Submission";
-      
-    const lightweightContent = {
-      name: candidateName,
-      hasSummary: !!content?.summary,
-      experienceCount: Array.isArray(content?.experience) ? content.experience.length : 0,
-      educationCount: Array.isArray(content?.education) ? content.education.length : 0
-    };
+    // STRICT ZERO-STORAGE PRIVACY: Extract ONLY the candidate display name.
+    // NEVER save resume text, bullets, experience, skills or document payloads.
+    let candidateName = typeof inputName === 'string' && inputName.trim().length > 0 ? inputName.trim() : '';
+    if (!candidateName && inputFileName) {
+      candidateName = String(inputFileName).replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').trim();
+    }
+    if (!candidateName && content) {
+      if (typeof content === 'object') {
+        candidateName = String(content.candidateName || content.fileName || content.name || '').replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').trim();
+      } else if (typeof content === 'string') {
+        candidateName = "Candidate Submission";
+      }
+    }
+    if (!candidateName) {
+      candidateName = "Candidate Submission";
+    }
+    candidateName = candidateName.slice(0, 80);
 
     const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
     if (useDatabase) {
@@ -324,22 +329,24 @@ app.post("/api/submit", async (req, res) => {
         const resumeRef = db.collection('resumes').doc();
         const insertData: any = {
           id: resumeRef.id,
-          content: lightweightContent,
+          candidate_name: candidateName,
           status: 'pending',
           ip_address: ip,
           device_info: deviceInfo,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          approved_at: null,
+          rejected_at: null
         };
         if (uid) insertData.user_id = uid;
 
         await resumeRef.set(insertData);
 
-        // 2. Log the action
+        // Log the action
         const logRef = db.collection('activity_logs').doc();
         const logData: any = {
           id: logRef.id,
           action: 'resume_submitted',
-          details: { resume_id: resumeRef.id },
+          details: { resume_id: resumeRef.id, candidate_name: candidateName },
           ip_address: ip,
           device_info: deviceInfo,
           created_at: new Date().toISOString()
@@ -348,12 +355,12 @@ app.post("/api/submit", async (req, res) => {
 
         await logRef.set(logData);
 
-        res.status(200).json({ message: "Resume submitted successfully", resume: insertData });
+        return res.status(200).json({ message: "Resume submitted successfully", resume: insertData });
       } catch (dbError: any) {
         console.warn("Database error (falling back to in-memory):", dbError.message);
         if (process.env.VERCEL && process.env.BYPASS_DB_ON_ERROR !== 'true') {
           return res.status(503).json({ 
-            error: `Database connection failed: ${dbError.message}. If deploying on Vercel, please ensure ENABLE_FIREBASE=true and your Firebase config is set. To temporarily bypass this and run in-memory, set BYPASS_DB_ON_ERROR=true in your environment variables.` 
+            error: `Database connection failed: ${dbError.message}.` 
           });
         }
         
@@ -361,16 +368,18 @@ app.post("/api/submit", async (req, res) => {
         const newResume = { 
           id: resumeId, 
           user_id: uid, 
-          content: lightweightContent, 
+          candidate_name: candidateName,
           status: 'pending', 
           ip_address: ip, 
           device_info: deviceInfo, 
-          created_at: new Date().toISOString() 
+          created_at: new Date().toISOString(),
+          approved_at: null,
+          rejected_at: null
         };
         inMemoryResumes.push(newResume);
         saveInMemoryResumes();
         
-        res.status(200).json({ 
+        return res.status(200).json({ 
           message: "Resume submitted successfully (local database)", 
           resume: newResume,
           bypassApproval: process.env.VERCEL === 'true'
@@ -381,16 +390,18 @@ app.post("/api/submit", async (req, res) => {
       const newResume = { 
         id: resumeId, 
         user_id: uid, 
-        content: lightweightContent, 
+        candidate_name: candidateName,
         status: 'pending', 
         ip_address: ip, 
         device_info: deviceInfo, 
-        created_at: new Date().toISOString() 
+        created_at: new Date().toISOString(),
+        approved_at: null,
+        rejected_at: null
       };
       inMemoryResumes.push(newResume);
       saveInMemoryResumes();
       
-      res.status(200).json({ 
+      return res.status(200).json({ 
         message: "Resume submitted successfully (local database)", 
         resume: newResume,
         bypassApproval: process.env.VERCEL === 'true'
@@ -423,72 +434,82 @@ app.post("/api/admin/verify", (req, res) => {
   }
 });
 
-// API Route for fetching resumes (Admin Dashboard)
+// API Route for fetching resumes (Admin Dashboard - supports status & period filtering)
 app.get("/api/resumes", checkAdmin, async (req, res) => {
   try {
-    const { status } = req.query;
+    const { status, period } = req.query;
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const weekStart = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+    const monthStart = now.getTime() - 30 * 24 * 60 * 60 * 1000;
     
     const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
+    let rawList: any[] = [];
+    let usingDatabase = false;
+    let dbErrorMsg: string | undefined = undefined;
+
     if (useDatabase) {
       try {
-        let q: any = db.collection('resumes');
-        
-        if (status === 'pending' || status === 'rejected') {
-          q = q.where('status', '==', 'pending');
-        } else if (status === 'approved') {
-          q = q.where('status', '==', 'approved');
-        }
-          
-        const snapshot = await q.get();
-        
-        // Map the status for the frontend
-        let resumes = snapshot.docs.map(doc => {
-          const r = doc.data();
-          let currentStatus = (r.rejected || r.content?.rejected) ? 'rejected' : r.status;
-          return {
-            id: doc.id,
-            status: currentStatus,
-            created_at: r.created_at,
-            content: r.content,
-            ip_address: r.ip_address || '',
-            device_info: r.device_info || ''
-          };
-        });
-
-        // Re-filter in memory to account for lazy rejections and the removed pending filter
-        if (status && typeof status === 'string') {
-          resumes = resumes.filter(r => r.status === status);
-        }
-
-        // Sort in memory directly by created_at desc to avoid requiring any custom compound/composite index
-        resumes.sort((a: any, b: any) => {
-          const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
-          const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
-          return tB - tA;
-        });
-
-        res.status(200).json({ resumes, usingDatabase: true, projectId: firebaseConfig.projectId });
+        const snapshot = await db.collection('resumes').get();
+        rawList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        usingDatabase = true;
       } catch (dbError: any) {
         console.warn("Database error (falling back to in-memory):", dbError.message);
-        if (process.env.VERCEL && process.env.BYPASS_DB_ON_ERROR !== 'true') {
-          return res.status(503).json({ 
-            error: `Database connection failed: ${dbError.message}. If deploying on Vercel, please ensure ENABLE_FIREBASE=true. To temporarily bypass this and run in-memory, set BYPASS_DB_ON_ERROR=true in your environment variables.` 
-          });
-        }
-        
-        let filtered = inMemoryResumes;
-        if (status && typeof status === 'string') {
-          filtered = filtered.filter(r => r.status === status);
-        }
-        res.status(200).json({ resumes: filtered, usingDatabase: false, dbError: dbError.message, projectId: firebaseConfig.projectId });
+        rawList = inMemoryResumes;
+        dbErrorMsg = dbError.message;
       }
     } else {
-      let filtered = inMemoryResumes;
-      if (status && typeof status === 'string') {
-        filtered = filtered.filter(r => r.status === status);
-      }
-      res.status(200).json({ resumes: filtered, usingDatabase: false, projectId: firebaseConfig.projectId });
+      rawList = inMemoryResumes;
     }
+
+    // Map to clean metadata records (ZERO resume body or text payload)
+    let records = rawList.map(r => {
+      let curStatus = (r.rejected || r.content?.rejected || r.status === 'rejected') ? 'rejected' : (r.status || 'pending');
+      const candidateName = r.candidate_name || r.content?.name || r.name || 'Candidate Submission';
+      return {
+        id: r.id,
+        candidate_name: candidateName,
+        status: curStatus,
+        ip_address: r.ip_address || 'Unknown IP',
+        device_info: r.device_info || '',
+        created_at: r.created_at || new Date().toISOString(),
+        approved_at: r.approved_at || null,
+        rejected_at: r.rejected_at || null
+      };
+    });
+
+    // 1. Status Filter
+    if (status && status !== 'all' && typeof status === 'string') {
+      records = records.filter(r => r.status === status);
+    }
+
+    // 2. Period Filter
+    if (period && period !== 'all' && typeof period === 'string') {
+      records = records.filter(r => {
+        let tsStr = r.created_at;
+        if (r.status === 'approved' && r.approved_at) tsStr = r.approved_at;
+        else if (r.status === 'rejected' && r.rejected_at) tsStr = r.rejected_at;
+        const time = tsStr ? new Date(tsStr).getTime() : 0;
+        if (period === 'day') return time >= todayStart;
+        if (period === 'week') return time >= weekStart;
+        if (period === 'month') return time >= monthStart;
+        return true;
+      });
+    }
+
+    // 3. Sort by most recent timestamp descending
+    records.sort((a, b) => {
+      const tA = new Date(a.approved_at || a.rejected_at || a.created_at).getTime();
+      const tB = new Date(b.approved_at || b.rejected_at || b.created_at).getTime();
+      return tB - tA;
+    });
+
+    res.status(200).json({ 
+      resumes: records, 
+      usingDatabase, 
+      dbError: dbErrorMsg, 
+      projectId: firebaseConfig.projectId 
+    });
   } catch (error: any) {
     console.error("Error fetching resumes:", error);
     res.status(500).json({ error: error.message || "Failed to fetch resumes" });
@@ -508,41 +529,25 @@ app.get("/api/resumes/:id/status", async (req, res) => {
           throw new Error("Resume not found");
         }
         const resume = docVal.data() || {};
-        
-        let currentStatus = resume.content?.rejected ? 'rejected' : resume.status;
-
-        res.status(200).json({ 
+        let currentStatus = (resume.rejected || resume.content?.rejected || resume.status === 'rejected') ? 'rejected' : resume.status;
+        return res.status(200).json({ 
           status: currentStatus,
-          content: resume.content // Send content back so frontend can recover after refresh
+          candidate_name: resume.candidate_name
         });
       } catch (dbError: any) {
         console.warn("Database error (falling back to in-memory):", dbError.message);
-        if (process.env.VERCEL && process.env.BYPASS_DB_ON_ERROR !== 'true') {
-          return res.status(503).json({ 
-            error: `Database connection failed: ${dbError.message}. To temporarily bypass this and run in-memory, set BYPASS_DB_ON_ERROR=true in your environment variables.` 
-          });
-        }
-        const resume = inMemoryResumes.find(r => r.id === id);
-        if (!resume) {
-          return res.status(404).json({ error: "Resume not found" });
-        }
-        
-        res.status(200).json({ 
-          status: resume.status,
-          content: resume.content 
-        });
       }
-    } else {
-      const resume = inMemoryResumes.find(r => r.id === id);
-      if (!resume) {
-        return res.status(404).json({ error: "Resume not found" });
-      }
-      
-      res.status(200).json({ 
-        status: resume.status,
-        content: resume.content 
-      });
     }
+    
+    const resume = inMemoryResumes.find(r => r.id === id);
+    if (!resume) {
+      return res.status(404).json({ error: "Resume not found" });
+    }
+    
+    res.status(200).json({ 
+      status: resume.status,
+      candidate_name: resume.candidate_name
+    });
   } catch (error: any) {
     console.error("Error checking resume status:", error);
     res.status(500).json({ error: error.message || "Failed to check resume status" });
@@ -611,11 +616,11 @@ app.post("/api/approve", checkAdmin, async (req, res) => {
       return res.status(400).json({ error: "Resume ID is required" });
     }
 
+    const nowStr = new Date().toISOString();
     const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
     if (useDatabase) {
       try {
         const resumeRef = db.collection('resumes').doc(resumeId);
-        const nowStr = new Date().toISOString();
         await resumeRef.update({ 
           status: 'approved',
           approved_at: nowStr
@@ -624,7 +629,7 @@ app.post("/api/approve", checkAdmin, async (req, res) => {
         const docVal = await resumeRef.get();
         const resume = { id: docVal.id, ...docVal.data() };
 
-        // 2. Log the approval
+        // Log the approval
         const logRef = db.collection('activity_logs').doc();
         await logRef.set({
           id: logRef.id,
@@ -633,168 +638,105 @@ app.post("/api/approve", checkAdmin, async (req, res) => {
           created_at: nowStr
         });
 
-        res.status(200).json({ message: "Resume approved successfully", resume });
+        return res.status(200).json({ message: "Resume approved successfully", resume });
       } catch (dbError: any) {
         console.warn("Database error (falling back to in-memory):", dbError.message);
-        if (process.env.VERCEL && process.env.BYPASS_DB_ON_ERROR !== 'true') {
-          return res.status(503).json({ 
-            error: `Database connection failed: ${dbError.message}. To temporarily bypass this and run in-memory, set BYPASS_DB_ON_ERROR=true in your environment variables.` 
-          });
-        }
-        
-        const resumeIndex = inMemoryResumes.findIndex(r => r.id === resumeId);
-        if (resumeIndex === -1) {
-          return res.status(404).json({ error: "Resume not found in memory" });
-        }
-        
-        inMemoryResumes[resumeIndex].status = 'approved';
-        inMemoryResumes[resumeIndex].approved_at = new Date().toISOString();
-        saveInMemoryResumes();
-        res.status(200).json({ message: "Resume approved successfully (local database)", resume: inMemoryResumes[resumeIndex] });
       }
-    } else {
-      const resumeIndex = inMemoryResumes.findIndex(r => r.id === resumeId);
-      if (resumeIndex === -1) {
-        return res.status(404).json({ error: "Resume not found in memory" });
-      }
-      
-      inMemoryResumes[resumeIndex].status = 'approved';
-      inMemoryResumes[resumeIndex].approved_at = new Date().toISOString();
-      saveInMemoryResumes();
-      res.status(200).json({ message: "Resume approved successfully (local database)", resume: inMemoryResumes[resumeIndex] });
     }
+
+    const resumeIndex = inMemoryResumes.findIndex(r => r.id === resumeId);
+    if (resumeIndex !== -1) {
+      inMemoryResumes[resumeIndex].status = 'approved';
+      inMemoryResumes[resumeIndex].approved_at = nowStr;
+      saveInMemoryResumes();
+      return res.status(200).json({ message: "Resume approved successfully (local database)", resume: inMemoryResumes[resumeIndex] });
+    }
+    res.status(200).json({ message: "Resume approved successfully" });
   } catch (error: any) {
     console.error("Error approving resume:", error);
     res.status(500).json({ error: error.message || "Failed to approve resume" });
   }
 });
 
-// API Route for fetching admin dashboard statistics
+// API Route for fetching admin dashboard statistics (Approved vs Declined by Day, Week, Month, and All-Time)
 app.get("/api/admin/stats", checkAdmin, async (req, res) => {
   try {
-    let pendingCount = 0;
-    let approvedCount = 0;
-    let rejectedCount = 0;
-    let weeklyApprovedCount = 0;
-    let monthlyApprovedCount = 0;
-
     const now = new Date();
-    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const weekStart = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+    const monthStart = now.getTime() - 30 * 24 * 60 * 60 * 1000;
+
+    let pendingCount = 0;
+    let approvedToday = 0;
+    let approvedWeek = 0;
+    let approvedMonth = 0;
+    let approvedAllTime = 0;
+
+    let declinedToday = 0;
+    let declinedWeek = 0;
+    let declinedMonth = 0;
+    let declinedAllTime = 0;
 
     const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
+    let rawList: any[] = [];
+    let usingDatabase = false;
+    let dbErrorMsg: string | undefined = undefined;
+
     if (useDatabase) {
-        // Calculate status counts efficiently using Firestore aggregate count queries
-        const [pendingSnap, approvedSnap, rejectedSnap] = await Promise.all([
-          db.collection('resumes').where('status', '==', 'pending').count().get(),
-          db.collection('resumes').where('status', '==', 'approved').count().get(),
-          db.collection('resumes').where('status', '==', 'rejected').count().get(),
-        ]);
-        pendingCount = (pendingSnap.data && pendingSnap.data().count) || 0;
-        approvedCount = (approvedSnap.data && approvedSnap.data().count) || 0;
-        rejectedCount = (rejectedSnap.data && rejectedSnap.data().count) || 0;
-
-        // Retrieve recent approved documents to calculate time-series metrics.
-        // This is a single-field range query on approved_at, which uses standard indexing without composite index.
-        const recentSnapshot = await db.collection('resumes')
-          .where('approved_at', '>=', oneMonthAgo.toISOString())
-          .get();
-
-        recentSnapshot.docs.forEach((doc: any) => {
-          const r = doc.data();
-          if (r.status === 'approved') {
-            const approvedAt = r.approved_at ? new Date(r.approved_at) : null;
-            if (approvedAt) {
-              if (approvedAt >= oneWeekAgo) {
-                weeklyApprovedCount++;
-              }
-              if (approvedAt >= oneMonthAgo) {
-                monthlyApprovedCount++;
-              }
-            }
-          }
-        });
-        
-        res.json({
-          pendingCount,
-          approvedCount,
-          rejectedCount,
-          weeklyApprovedCount,
-          monthlyApprovedCount,
-          usingDatabase: true
-        });
+      try {
+        const snapshot = await db.collection('resumes').get();
+        rawList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        usingDatabase = true;
       } catch (dbError: any) {
         console.warn("Database error (falling back to in-memory stats):", dbError.message);
-        if (process.env.VERCEL && process.env.BYPASS_DB_ON_ERROR !== 'true') {
-          return res.status(503).json({ 
-            error: `Database connection failed: ${dbError.message}. To temporarily bypass this and run in-memory, set BYPASS_DB_ON_ERROR=true in your environment variables.` 
-          });
-        }
-        
-        inMemoryResumes.forEach((r: any) => {
-          const status = r.status;
-          if (status === 'pending') {
-            pendingCount++;
-          } else if (status === 'rejected') {
-            rejectedCount++;
-          } else if (status === 'approved') {
-            approvedCount++;
-            
-            const approvedAtStr = r.approved_at || r.created_at;
-            if (approvedAtStr) {
-              const approvedAt = new Date(approvedAtStr);
-              if (approvedAt >= oneWeekAgo) {
-                weeklyApprovedCount++;
-              }
-              if (approvedAt >= oneMonthAgo) {
-                monthlyApprovedCount++;
-              }
-            }
-          }
-        });
-        
-        res.json({
-          pendingCount,
-          approvedCount,
-          rejectedCount,
-          weeklyApprovedCount,
-          monthlyApprovedCount,
-          usingDatabase: false,
-          dbError: dbError.message
-        });
+        rawList = inMemoryResumes;
+        dbErrorMsg = dbError.message;
       }
     } else {
-      inMemoryResumes.forEach((r: any) => {
-        const status = r.status;
-        if (status === 'pending') {
-          pendingCount++;
-        } else if (status === 'rejected') {
-          rejectedCount++;
-        } else if (status === 'approved') {
-          approvedCount++;
-          
-          const approvedAtStr = r.approved_at || r.created_at;
-          if (approvedAtStr) {
-            const approvedAt = new Date(approvedAtStr);
-            if (approvedAt >= oneWeekAgo) {
-              weeklyApprovedCount++;
-            }
-            if (approvedAt >= oneMonthAgo) {
-              monthlyApprovedCount++;
-            }
-          }
-        }
-      });
-      
-      res.json({
-        pendingCount,
-        approvedCount,
-        rejectedCount,
-        weeklyApprovedCount,
-        monthlyApprovedCount,
-        usingDatabase: false
-      });
+      rawList = inMemoryResumes;
     }
+
+    rawList.forEach((r: any) => {
+      const curStatus = (r.rejected || r.content?.rejected || r.status === 'rejected') ? 'rejected' : (r.status || 'pending');
+      if (curStatus === 'pending') {
+        pendingCount++;
+      } else if (curStatus === 'approved') {
+        approvedAllTime++;
+        const ts = r.approved_at ? new Date(r.approved_at).getTime() : (r.created_at ? new Date(r.created_at).getTime() : 0);
+        if (ts >= todayStart) approvedToday++;
+        if (ts >= weekStart) approvedWeek++;
+        if (ts >= monthStart) approvedMonth++;
+      } else if (curStatus === 'rejected') {
+        declinedAllTime++;
+        const ts = r.rejected_at ? new Date(r.rejected_at).getTime() : (r.created_at ? new Date(r.created_at).getTime() : 0);
+        if (ts >= todayStart) declinedToday++;
+        if (ts >= weekStart) declinedWeek++;
+        if (ts >= monthStart) declinedMonth++;
+      }
+    });
+
+    res.json({
+      pendingCount,
+      approved: {
+        today: approvedToday,
+        week: approvedWeek,
+        month: approvedMonth,
+        allTime: approvedAllTime
+      },
+      declined: {
+        today: declinedToday,
+        week: declinedWeek,
+        month: declinedMonth,
+        allTime: declinedAllTime
+      },
+      // Backward compatibility aliases
+      approvedCount: approvedAllTime,
+      rejectedCount: declinedAllTime,
+      weeklyApprovedCount: approvedWeek,
+      monthlyApprovedCount: approvedMonth,
+      usingDatabase,
+      dbError: dbErrorMsg
+    });
   } catch (error: any) {
     console.error("Error calculating stats:", error);
     res.status(500).json({ error: error.message || "Failed to calculate statistics" });
@@ -810,63 +752,42 @@ app.post("/api/reject", checkAdmin, async (req, res) => {
       return res.status(400).json({ error: "Resume ID is required" });
     }
 
+    const nowStr = new Date().toISOString();
     const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
     if (useDatabase) {
       try {
         const resumeRef = db.collection('resumes').doc(resumeId);
-        const docVal = await resumeRef.get();
-        if (!docVal.exists) {
-          throw new Error("Resume not found");
-        }
-        const currentResume = docVal.data() || {};
-
-        // 2. Update status by setting status directly and a flag in the content Map
-        const updatedContent = { ...(currentResume.content || {}), rejected: true };
         await resumeRef.update({ 
           status: 'rejected',
-          content: updatedContent 
+          rejected_at: nowStr
         });
         
-        const newDocVal = await resumeRef.get();
-        const resume = { id: newDocVal.id, ...newDocVal.data() };
+        const docVal = await resumeRef.get();
+        const resume = { id: docVal.id, ...docVal.data() };
 
-        // 3. Log the rejection
+        // Log the rejection
         const logRef = db.collection('activity_logs').doc();
         await logRef.set({
           id: logRef.id,
           action: 'resume_rejected',
           details: { resume_id: resumeId, rejected_by: 'admin' },
-          created_at: new Date().toISOString()
+          created_at: nowStr
         });
 
-        res.status(200).json({ message: "Resume rejected successfully", resume });
+        return res.status(200).json({ message: "Resume rejected successfully", resume });
       } catch (dbError: any) {
         console.warn("Database error (falling back to in-memory):", dbError.message);
-        if (process.env.VERCEL && process.env.BYPASS_DB_ON_ERROR !== 'true') {
-          return res.status(503).json({ 
-            error: `Database connection failed: ${dbError.message}. To temporarily bypass this and run in-memory, set BYPASS_DB_ON_ERROR=true in your environment variables.` 
-          });
-        }
-        
-        const resumeIndex = inMemoryResumes.findIndex(r => r.id === resumeId);
-        if (resumeIndex === -1) {
-          return res.status(404).json({ error: "Resume not found in memory" });
-        }
-        
-        inMemoryResumes[resumeIndex].status = 'rejected';
-        saveInMemoryResumes();
-        res.status(200).json({ message: "Resume rejected successfully (local database)", resume: inMemoryResumes[resumeIndex] });
       }
-    } else {
-      const resumeIndex = inMemoryResumes.findIndex(r => r.id === resumeId);
-      if (resumeIndex === -1) {
-        return res.status(404).json({ error: "Resume not found in memory" });
-      }
-      
-      inMemoryResumes[resumeIndex].status = 'rejected';
-      saveInMemoryResumes();
-      res.status(200).json({ message: "Resume rejected successfully (local database)", resume: inMemoryResumes[resumeIndex] });
     }
+
+    const resumeIndex = inMemoryResumes.findIndex(r => r.id === resumeId);
+    if (resumeIndex !== -1) {
+      inMemoryResumes[resumeIndex].status = 'rejected';
+      inMemoryResumes[resumeIndex].rejected_at = nowStr;
+      saveInMemoryResumes();
+      return res.status(200).json({ message: "Resume rejected successfully (local database)", resume: inMemoryResumes[resumeIndex] });
+    }
+    res.status(200).json({ message: "Resume rejected successfully" });
   } catch (error: any) {
     console.error("Error rejecting resume:", error);
     res.status(500).json({ error: error.message || "Failed to reject resume" });

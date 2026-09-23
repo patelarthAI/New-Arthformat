@@ -16,7 +16,6 @@ import set from "lodash/set";
 import { motion, AnimatePresence } from "framer-motion";
 import { cleanBullet, groupBulletPoints, processDescription, processDescriptionWithIndices, formatResumeDate as formatModernDate, stripTrailingDate, getSafeResumeFilename } from "@/utils/formatters";
 import { InteractiveLogo } from "./InteractiveLogo";
-import { EngineHealthBadge } from "./EngineHealthBadge";
 
 interface ResumePreviewProps {
   data: ResumeData;
@@ -1045,11 +1044,6 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({
                 <span className="text-slate-500 font-medium font-sans">Saved to cloud</span>
               </>
             )}
-          </div>
-
-          <div className="h-4 w-[1px] bg-white/10 hidden sm:block" />
-          <div className="hidden sm:block">
-            <EngineHealthBadge />
           </div>
         </div>
 

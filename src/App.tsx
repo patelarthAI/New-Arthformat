@@ -8,7 +8,6 @@ import AdminDashboard from '@/components/AdminDashboard';
 import { saveAs } from 'file-saver';
 import { safeStorage } from '@/utils/safeStorage';
 import { InteractiveLogo } from '@/components/InteractiveLogo';
-import { EngineHealthBadge } from '@/components/EngineHealthBadge';
 import { 
   LayoutTemplate, 
   Database, 
@@ -161,13 +160,7 @@ const App: React.FC = () => {
             console.log("Approval status response:", data);
             if (data.status === 'approved') {
               clearInterval(intervalId);
-              const resumeToClean = pendingResumeId;
               setPendingResumeId(null);
-              // Trigger asynchronous delete from the database immediately to respect user privacy
-              fetch(`/api/resumes/${resumeToClean}`, { method: 'DELETE' })
-                .then(() => console.log("Successfully auto-deleted resume after approval"))
-                .catch(err => console.error("Error auto-deleting resume after approval:", err));
-
               // Restore content from backend if we lost it due to refresh
               if (!stagedContent && data.content) {
                 setStagedContent(data.content);
@@ -175,13 +168,7 @@ const App: React.FC = () => {
               processApprovedResume(stagedContent || data.content);
             } else if (data.status === 'rejected') {
               clearInterval(intervalId);
-              const resumeToClean = pendingResumeId;
               setPendingResumeId(null);
-              // Trigger asynchronous delete from the database immediately to respect user privacy
-              fetch(`/api/resumes/${resumeToClean}`, { method: 'DELETE' })
-                .then(() => console.log("Successfully auto-deleted resume after rejection"))
-                .catch(err => console.error("Error auto-deleting resume after rejection:", err));
-
               if (data.content?.auto_rejected) {
                 setErrorMsg("Your resume submission timed out (2 minutes) and was automatically rejected.");
               } else {
@@ -569,18 +556,28 @@ const App: React.FC = () => {
     
     setAppState(AppState.PROCESSING);
     try {
-      // Strip the large base64 property from stagedContent before submitting to Firestore to avoid the 1MB document size limit
-      const contentToSubmit = { ...stagedContent };
-      delete contentToSubmit.base64;
+      // Determine candidate name without sending any resume content to the server
+      let candidateName = "Candidate Submission";
+      if (stagedContent.fileName) {
+        candidateName = stagedContent.fileName.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').trim();
+      }
+      if (stagedContent.text) {
+        const lines = stagedContent.text.split('\n').map(l => l.trim()).filter(l => l.length > 2 && l.length < 50);
+        const nameLine = lines.find(l => !/resume|cv|curriculum|page|\d{4}|summary|experience|education/i.test(l));
+        if (nameLine) {
+          candidateName = nameLine.replace(/[^a-zA-Z\s.-]/g, '').trim().slice(0, 50);
+        }
+      }
 
+      // STRICT ZERO RESUME STORAGE: Send ONLY candidateName & fileName metadata — never resume text or body
       const response = await fetch('/api/submit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          content: contentToSubmit,
-          userId: null
+          candidateName,
+          fileName: stagedContent.fileName
         }),
       });
 
@@ -697,10 +694,6 @@ const App: React.FC = () => {
               title="Double-click or tap to toggle view mode securely"
             >
               <InteractiveLogo size="sm" />
-            </div>
-
-            <div className="flex items-center gap-3">
-              <EngineHealthBadge />
             </div>
           </div>
         )}
