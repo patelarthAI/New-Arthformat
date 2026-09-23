@@ -1,6 +1,58 @@
 import { GoogleGenAI, Type, ThinkingLevel, FunctionDeclaration } from "@google/genai";
 import { ResumeData, ResumeFormat, GrammarIssue } from "../src/types";
 
+interface KeyHealth {
+  consecutiveFailures: number;
+  cooldownUntil: number; // epoch timestamp in ms
+  isDailyExhausted: boolean;
+  isInvalid: boolean;
+  lastSuccess: number;
+  totalHits: number;
+  lastErrorSnippet?: string;
+}
+
+const keyHealthMap = new Map<string, KeyHealth>();
+const disabledModels = new Set<string>();
+
+const getKeyId = (key: string): string => {
+  if (!key) return "empty";
+  if (key.length <= 8) return key;
+  return `...${key.slice(-6)}`;
+};
+
+const getMidnightUTCTimestamp = (): number => {
+  const now = new Date();
+  const nextMidnight = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + 1,
+    0, 2, 0 // 00:02 UTC
+  ));
+  return nextMidnight.getTime();
+};
+
+const getKeyHealth = (key: string): KeyHealth => {
+  let health = keyHealthMap.get(key);
+  if (!health) {
+    health = {
+      consecutiveFailures: 0,
+      cooldownUntil: 0,
+      isDailyExhausted: false,
+      isInvalid: false,
+      lastSuccess: 0,
+      totalHits: 0
+    };
+    keyHealthMap.set(key, health);
+  }
+  // Check if daily cooldown expired (resets automatically at midnight UTC)
+  if (health.isDailyExhausted && Date.now() >= health.cooldownUntil) {
+    health.isDailyExhausted = false;
+    health.consecutiveFailures = 0;
+    health.cooldownUntil = 0;
+  }
+  return health;
+};
+
 let currentKeyIndex = 0;
 let totalRequests = 0;
 let rateLimitHits = 0;
@@ -8,12 +60,32 @@ let rateLimitHits = 0;
 export const getUsageStatsBackend = (usePro: boolean = false) => {
   const pool = getKeyPool();
   const models = usePro ? PRO_MODELS : FALLBACK_MODELS;
+  const now = Date.now();
+  let healthyKeys = 0;
+  let dailyExhaustedKeys = 0;
+  let coolingKeys = 0;
+  let invalidKeys = 0;
+
+  for (const k of pool) {
+    const h = getKeyHealth(k);
+    if (h.isInvalid) invalidKeys++;
+    else if (h.isDailyExhausted && now < h.cooldownUntil) dailyExhaustedKeys++;
+    else if (now < h.cooldownUntil) coolingKeys++;
+    else healthyKeys++;
+  }
+
   return {
     activeKeyIndex: currentKeyIndex % (pool.length || 1),
     totalKeys: pool.length,
+    healthyKeys,
+    dailyExhaustedKeys,
+    coolingKeys,
+    invalidKeys,
     totalRequests,
     rateLimitHits,
-    activeModel: models[0]
+    activeModel: models.find(m => !disabledModels.has(m)) || models[0],
+    hasGroq: !!getGroqApiKey(),
+    hasHuggingFace: !!getHuggingFaceApiKey()
   };
 };
 
@@ -45,36 +117,15 @@ export const getKeyPool = (): string[] => {
   return pool;
 };
 
-const getNextApiKey = () => {
-  const pool = getKeyPool();
-  if (pool.length === 0) return "";
-  const key = pool[currentKeyIndex % pool.length];
-  // Rotate round-robin across requests to balance traffic evenly across free keys
-  currentKeyIndex = (currentKeyIndex + 1) % pool.length;
-  return key;
-};
-
-// ──────────────────────────────────────────────────────────────────
-// ACTIVE FREE-TIER MODELS (as of 2026-09-23)
-// Per Google AI Studio → all on 15 RPM / key, combined 60 RPM with 4 keys
-//
-// gemini-3.8-flash       → PRIMARY (state-of-the-art, full parsing, 8192 tokens)
-// gemini-3.1-flash-lite  → LIGHTWEIGHT (near-instant ~400ms, grammar/bullets)
-// gemini-3.5-flash       → BACKUP (reliable fallback for regional 503 spikes)
-// gemini-3.1-pro-preview → REASONING (complex career restructuring + JD matching)
-//
-// Retired (404): gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash, gemini-2.0-pro
-// ──────────────────────────────────────────────────────────────────
-
 // ──────────────────────────────────────────────────────────────────
 // ACTIVE FREE-TIER MODELS (Live-verified against Google AI Studio Quotas)
 //
 // HIGHEST CAPACITY (500 Requests Per Day, 15 RPM / key):
-// 1. gemini-3.5-flash-lite  → 🟢 PRIMARY (100% OK on all keys, 481/500 left today)
-// 2. gemini-3.6-flash       → 🟢 FULL-POWER FLASH (100% OK on all keys)
-// 3. gemini-3.1-flash-lite  → ⚡ ULTRA-FAST (~400ms, 472/500 left today)
+// 1. gemini-3.5-flash-lite  → 🟢 PRIMARY (100% OK on all keys, 480+ left today)
+// 2. gemini-3.6-flash       → 🟢 FULL-POWER FLASH (Verified healthy across keys)
+// 3. gemini-3.1-flash-lite  → ⚡ ULTRA-FAST (~400ms, 470+ left today)
 //
-// LOW CAPACITY (Only 20 Requests Per Day - currently exhausted for today):
+// LOW CAPACITY (Only 20 Requests Per Day - resets daily at 00:00 UTC):
 // 4. gemini-3.8-flash       → 🟡 20 RPD cap (resets daily at 00:00 UTC)
 // 5. gemini-3.5-flash       → 🟡 20 RPD cap (resets daily at 00:00 UTC)
 // ──────────────────────────────────────────────────────────────────
@@ -106,37 +157,75 @@ async function withModelFallback<T>(
   operationName: string,
   usePro: boolean = false
 ): Promise<T> {
-  let lastError: any;
   const pool = getKeyPool();
   
   if (pool.length === 0) {
     throw new Error("No API Keys found on the server. Please configure GEMINI_API_KEY in server secrets.");
   }
 
-  const models = usePro ? PRO_MODELS : FALLBACK_MODELS;
+  const now = Date.now();
+  // Fast check: Are all Gemini keys daily exhausted?
+  const allDailyExhausted = pool.length > 0 && pool.every(k => {
+    const h = getKeyHealth(k);
+    return h.isDailyExhausted && now < h.cooldownUntil;
+  });
 
-  // We try up to 12 times total across keys and models
+  if (allDailyExhausted) {
+    console.warn(`[${operationName}] Circuit Breaker: All Gemini keys are DAILY_EXHAUSTED. Fast-failing to external failover...`);
+    throw new Error("GEMINI_DAILY_EXHAUSTED: All Gemini API keys have reached their daily request limit.");
+  }
+
+  const models = usePro ? PRO_MODELS : FALLBACK_MODELS;
+  let lastError: any;
   let totalAttempts = 0;
-  const maxAttempts = 12;
+  const maxAttempts = 10;
   let allRateLimited = true;
 
   for (const modelId of models) {
+    if (disabledModels.has(modelId)) continue;
     let skipModelToNext = false;
-    for (let i = 0; i < pool.length; i++) {
+
+    // Filter keys into available candidates
+    const availableKeys = pool.filter(k => {
+      const h = getKeyHealth(k);
+      return !h.isInvalid && (!h.isDailyExhausted || Date.now() >= h.cooldownUntil);
+    });
+
+    if (availableKeys.length === 0) continue;
+
+    for (let i = 0; i < availableKeys.length; i++) {
       if (skipModelToNext || totalAttempts >= maxAttempts) break;
 
-      const apiKey = getNextApiKey();
+      const keyIndex = (currentKeyIndex + i) % availableKeys.length;
+      const apiKey = availableKeys[keyIndex];
+      const health = getKeyHealth(apiKey);
+
+      // If key is temporarily in cooldown (e.g. RPM 60s or 503), check if another key is ready
+      if (Date.now() < health.cooldownUntil) {
+        const hasReadyKey = availableKeys.some(k => Date.now() >= getKeyHealth(k).cooldownUntil);
+        if (hasReadyKey) {
+          continue; // Pick a ready key first
+        }
+      }
+
       totalRequests++;
       totalAttempts++;
 
       try {
-        // SDET Guard: 12-second per-call timeout (reduced from 20s to cut silent-hang lag on broken models)
-        return await Promise.race([
+        const result = await Promise.race([
           operation(modelId, apiKey),
           new Promise<never>((_, reject) => 
             setTimeout(() => reject(new Error(`MODEL_TIMEOUT: ${modelId} exceeded 12s`)), 12000)
           )
         ]);
+
+        // SUCCESS: Reset circuit breaker for this key
+        health.consecutiveFailures = 0;
+        health.cooldownUntil = 0;
+        health.lastSuccess = Date.now();
+        health.totalHits++;
+        currentKeyIndex = (keyIndex + 1) % availableKeys.length;
+        return result;
       } catch (error: any) {
         lastError = error;
         const errorString = error?.toString() || "";
@@ -176,44 +265,55 @@ async function withModelFallback<T>(
           lowerError.includes("no longer available") ||
           errorString.includes("NOT_FOUND");
 
-        if (isRateLimit) rateLimitHits++;
-        if (!isRateLimit && !isServerError && !isModelNotFound) {
-          allRateLimited = false;
-        }
+        health.consecutiveFailures++;
+        health.lastErrorSnippet = errorString.slice(0, 100);
 
-        const errType = isServerError 
-          ? "SERVER_OVERLOAD(503)" 
-          : isRateLimit 
-            ? "RATE_LIMIT(429)" 
-            : isModelNotFound 
-              ? "NOT_FOUND(404)" 
-              : isInvalidKey 
-                ? "INVALID_KEY" 
-                : "ERROR";
-
-        console.warn(`[${operationName}] Model ${modelId} (Attempt ${totalAttempts}/${maxAttempts}) → ${errType}: ${errorString.substring(0, 100)}`);
-
-        // If the model is completely retired or not found (404), skip remaining keys for this model immediately.
         if (isModelNotFound) {
-          console.warn(`[${operationName}] Model ${modelId} not found (404). Fast-skipping to next model.`);
+          disabledModels.add(modelId);
+          console.warn(`[${operationName}] Model ${modelId} not found (404). Disabled globally.`);
           skipModelToNext = true;
           break;
         }
 
-        // If invalid key, rotate to next key in pool
         if (isInvalidKey) {
+          health.isInvalid = true;
+          health.cooldownUntil = Date.now() + 24 * 3600 * 1000;
+          console.warn(`[${operationName}] Key ${getKeyId(apiKey)} is invalid. Cooldown 24h.`);
           continue;
         }
 
-        // For rate limit (429) or transient server load (503), rotate to the next key in the pool!
-        // Another key may be from a different project or have remaining quota.
+        if (isRateLimit) {
+          rateLimitHits++;
+          const isDaily =
+            lowerError.includes("per day") ||
+            lowerError.includes("daily") ||
+            health.consecutiveFailures >= 3;
+
+          if (isDaily) {
+            health.isDailyExhausted = true;
+            health.cooldownUntil = getMidnightUTCTimestamp();
+            console.warn(`[${operationName}] Key ${getKeyId(apiKey)} hit DAILY cap. Cooldown until UTC midnight.`);
+          } else {
+            health.cooldownUntil = Date.now() + 65_000;
+            console.warn(`[${operationName}] Key ${getKeyId(apiKey)} rate-limited (RPM). Cooldown 65s.`);
+          }
+          continue;
+        }
+
+        if (isServerError) {
+          health.cooldownUntil = Date.now() + 35_000 + Math.floor(Math.random() * 15_000);
+          console.warn(`[${operationName}] Key ${getKeyId(apiKey)} hit 503/timeout. Cooldown 35-50s.`);
+          continue;
+        }
+
+        allRateLimited = false;
         continue;
       }
     }
     if (totalAttempts >= maxAttempts) break;
   }
 
-  console.error(`[${operationName}] All attempts exhausted. allRateLimited=${allRateLimited}`, lastError);
+  console.error(`[${operationName}] All Gemini keys/models exhausted. allRateLimited=${allRateLimited}`, lastError);
 
   const errorString = lastError?.toString() || "";
   const errorStatus = lastError?.status;
@@ -221,16 +321,16 @@ async function withModelFallback<T>(
     errorStatus === 429 || 
     errorStatus === 503 || 
     errorString.includes("429") || 
-    errorString.includes("503") ||
+    errorString.includes("503") || 
     errorString.includes("RESOURCE_EXHAUSTED") ||
     errorString.includes("Quota exceeded") ||
+    errorString.includes("GEMINI_DAILY_EXHAUSTED") ||
     errorString.includes("experiencing high demand");
 
   const lowerLastError = errorString.toLowerCase();
   const isTimeout = errorString.includes("MODEL_TIMEOUT") || lowerLastError.includes("timeout");
 
   if (isActualRateLimit && allRateLimited) {
-    // Distinguish: is this a Google-wide outage (503 on all models) or just our key quota?
     const isGoogleOutage = errorString.includes("503") || errorString.includes("experiencing high demand");
     if (isGoogleOutage) {
       throw new Error(
@@ -238,13 +338,13 @@ async function withModelFallback<T>(
       );
     }
     throw new Error(
-      "RATE_LIMITED: Our AI engines are currently at capacity (daily quota reached). Retrying automatically in 8 seconds..."
+      "RATE_LIMITED: Our primary AI cluster is currently at capacity. Retrying automatically or failing over..."
     );
   }
 
   if (isTimeout && allRateLimited) {
     throw new Error(
-      "RATE_LIMITED: AI models are not responding right now (Google infrastructure load). Please retry in 30-60 seconds — this always self-resolves."
+      "RATE_LIMITED: AI models are not responding right now (Google infrastructure load). Please retry in 30-60 seconds."
     );
   }
 
@@ -256,7 +356,7 @@ async function withModelFallback<T>(
     throw new Error("API Key Error: One or more Gemini API keys are invalid. Please check your Vercel environment variables.");
   }
 
-  throw new Error("Processing Interrupted: We encountered an unexpected issue while analyzing your resume. This usually resolves with a quick retry.");
+  throw new Error("Processing Interrupted: We encountered an unexpected issue while analyzing your resume. Retrying or failing over...");
 }
 
 
@@ -441,6 +541,108 @@ const normalizeDates = (dateStr: string): string => {
     .trim();
 };
 
+export interface FidelityAuditResult {
+  passed: boolean;
+  reason?: string;
+  metrics?: {
+    rawLength: number;
+    extractedLength: number;
+    rawBullets: number;
+    extractedBullets: number;
+    hasExperience: boolean;
+  };
+}
+
+export const auditExtractedContentFidelity = (
+  rawText: string | undefined,
+  data: ResumeData
+): FidelityAuditResult => {
+  if (!rawText || rawText.trim().length < 80) {
+    return { passed: true };
+  }
+
+  const cleanRaw = rawText.trim();
+  const rawLength = cleanRaw.replace(/\s+/g, "").length;
+
+  // 1. Candidate Full Name Guard
+  if (!data.fullName || data.fullName.trim().length < 2) {
+    return { passed: false, reason: "Candidate full name missing or empty in extracted output." };
+  }
+
+  // 2. Experience Presence Guard
+  const rawMentionsExperience = /(?:experience|employment|work history|career history|professional background|positions held)/i.test(cleanRaw);
+  const expCount = (data.experience?.length || 0) + (data.internships?.length || 0);
+  const customHasExp = data.customSections?.some(s => /(?:experience|projects|work|history|employment)/i.test(s.title || ""));
+  
+  if (rawMentionsExperience && rawLength > 400 && expCount === 0 && !customHasExp) {
+    return {
+      passed: false,
+      reason: "Document contains employment history, but extracted experience and internships are empty.",
+      metrics: { rawLength, extractedLength: 0, rawBullets: 0, extractedBullets: 0, hasExperience: false }
+    };
+  }
+
+  // 3. Bullet Count Retention Guard
+  const bulletRegex = /^[\s]*[\u2022\u00b7\-\*\u25c6\u25a0\u25cf\u2713\u25aa\u25ba\u2192]\s+.+/gm;
+  const rawBullets = (cleanRaw.match(bulletRegex) || []).length;
+
+  let extractedBullets = 0;
+  if (Array.isArray(data.summary)) extractedBullets += data.summary.length;
+  data.experience?.forEach(exp => {
+    if (Array.isArray(exp.description)) extractedBullets += exp.description.length;
+  });
+  data.internships?.forEach(exp => {
+    if (Array.isArray(exp.description)) extractedBullets += exp.description.length;
+  });
+  data.education?.forEach(edu => {
+    if (Array.isArray(edu.details)) extractedBullets += edu.details.length;
+  });
+  data.customSections?.forEach(sec => {
+    if (Array.isArray(sec.items)) extractedBullets += sec.items.length;
+  });
+
+  if (rawBullets >= 8 && extractedBullets < Math.floor(rawBullets * 0.4)) {
+    return {
+      passed: false,
+      reason: `Severe bullet loss detected: raw text had ${rawBullets} bullets, but model only extracted ${extractedBullets} (${Math.round((extractedBullets / rawBullets) * 100)}%).`,
+      metrics: { rawLength, extractedLength: 0, rawBullets, extractedBullets, hasExperience: expCount > 0 }
+    };
+  }
+
+  // 4. Character Volume Retention Guard
+  let extractedLength = (data.fullName || "").length;
+  data.summary?.forEach(s => extractedLength += s.length);
+  data.experience?.forEach(exp => {
+    extractedLength += (exp.company || "").length + (exp.title || "").length + (exp.location || "").length;
+    exp.description?.forEach(d => extractedLength += d.length);
+  });
+  data.internships?.forEach(exp => {
+    extractedLength += (exp.company || "").length + (exp.title || "").length + (exp.location || "").length;
+    exp.description?.forEach(d => extractedLength += d.length);
+  });
+  data.education?.forEach(edu => {
+    extractedLength += (edu.institution || "").length + (edu.degree || "").length;
+    edu.details?.forEach(d => extractedLength += d.length);
+  });
+  data.customSections?.forEach(sec => {
+    extractedLength += (sec.title || "").length;
+    sec.items?.forEach(i => extractedLength += i.length);
+  });
+
+  if (rawLength > 1500 && extractedLength < rawLength * 0.20) {
+    return {
+      passed: false,
+      reason: `Severe content shrinkage detected: raw document had ${rawLength} characters, but extracted content has only ${extractedLength} characters (${Math.round((extractedLength / rawLength) * 100)}%).`,
+      metrics: { rawLength, extractedLength, rawBullets, extractedBullets, hasExperience: expCount > 0 }
+    };
+  }
+
+  return { 
+    passed: true, 
+    metrics: { rawLength, extractedLength, rawBullets, extractedBullets, hasExperience: expCount > 0 } 
+  };
+};
+
 export const getGroqApiKey = (): string | undefined => {
   return (
     process.env.GROQ_API_KEY ||
@@ -558,6 +760,212 @@ CRITICAL MANDATORY RULES:
 
     console.log(`[Groq Failover] Successfully extracted resume data for: ${parsed.fullName}`);
     return parsed;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+export const updateResumeWithGroq = async (
+  data: ResumeData,
+  instruction: string,
+  targetJobDescription: string | undefined,
+  format: ResumeFormat,
+  apiKey: string
+): Promise<ResumeData> => {
+  const jobContext = targetJobDescription 
+    ? `\n\nTARGET JOB DESCRIPTION:\n${targetJobDescription}`
+    : "";
+
+  const systemPrompt = `You are an elite executive resume writer. Modify this JSON resume data strictly following the user's instructions.
+CRITICAL RULES:
+1. Preserve the exact structure of the resume.
+2. Return ONLY valid JSON matching the exact schema. No markdown, no conversation.
+3. Do NOT omit or truncate any section unless explicitly requested.
+4. Keep all parts not affected by instructions 100% verbatim.`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey.trim()}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "qwen/qwen3.8-27b",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `USER INSTRUCTIONS:\n${instruction}${jobContext}\n\nORIGINAL DATA:\n${JSON.stringify(data)}` }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.15,
+        max_tokens: 8192
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`Groq API returned HTTP ${res.status}`);
+    const resData = await res.json();
+    const content = resData.choices?.[0]?.message?.content;
+    if (!content) throw new Error("Empty response from Groq");
+    const parsed: ResumeData = JSON.parse(content);
+    return parsed;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+export const checkSpellingWithGroq = async (
+  data: ResumeData,
+  format: ResumeFormat,
+  apiKey: string
+): Promise<ResumeData> => {
+  const systemPrompt = `You are a strict proofreader. Fix spelling and grammar mistakes ONLY in this JSON resume data.
+CRITICAL RULES:
+1. Do NOT change technical terms, version numbers, or proper nouns.
+2. Do NOT change dates, metrics, or factual information.
+3. Do NOT shorten or delete any experiences or bullets.
+4. Return ONLY valid JSON matching the exact input structure.`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey.trim()}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "qwen/qwen3.8-27b",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Correct spelling and grammar in this JSON resume data:\n\n${JSON.stringify(data)}` }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.1,
+        max_tokens: 8192
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`Groq API returned HTTP ${res.status}`);
+    const resData = await res.json();
+    const content = resData.choices?.[0]?.message?.content;
+    if (!content) throw new Error("Empty response from Groq");
+    return JSON.parse(content);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+export const analyzeGrammarWithGroq = async (
+  data: ResumeData,
+  format: ResumeFormat,
+  apiKey: string
+): Promise<GrammarIssue[]> => {
+  const systemPrompt = `You are a professional resume coach and proofreader.
+Review the provided JSON resume data for spelling, grammar, and high-impact style improvements.
+CRITICAL RULES:
+1. Resumes must NEVER use first-person pronouns (I, me, my, we). Flag them as STYLE.
+2. Flag weak verbs and suggest executive verbs (Spearheaded, Orchestrated, Engineered).
+3. Return ONLY valid JSON with this exact structure:
+{
+  "issues": [
+    {
+      "id": string,
+      "path": string,
+      "original": string,
+      "errorText": string,
+      "suggestions": [string, string, string],
+      "reason": string,
+      "type": "SPELLING" | "GRAMMAR" | "STYLE"
+    }
+  ]
+}
+No markdown backticks, no conversation.`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey.trim()}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "qwen/qwen3.8-27b",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Audit this resume data:\n\n${JSON.stringify(data)}` }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.15,
+        max_tokens: 4096
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`Groq API returned HTTP ${res.status}`);
+    const resData = await res.json();
+    const content = resData.choices?.[0]?.message?.content;
+    if (!content) return [];
+    const parsed = JSON.parse(content);
+    return parsed.issues || [];
+  } catch (err: any) {
+    console.warn("[Groq Grammar Failover] Warning:", err.message);
+    return [];
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+export const rewritePhraseWithGroq = async (
+  text: string,
+  instruction: string,
+  apiKey: string
+): Promise<string[]> => {
+  const systemPrompt = `You are an executive resume coach. Provide exactly 3 distinct, high-impact improvements/rewrites for the provided text.
+Return ONLY valid JSON with this format: { "suggestions": ["option 1", "option 2", "option 3"] }`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey.trim()}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "qwen/qwen3.8-27b",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Instruction: "${instruction}"\n\nOriginal Text: "${text}"` }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.3,
+        max_tokens: 1024
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`Groq API returned HTTP ${res.status}`);
+    const resData = await res.json();
+    const content = resData.choices?.[0]?.message?.content;
+    if (!content) throw new Error("Empty response from Groq");
+    const parsed = JSON.parse(content);
+    return parsed.suggestions || [text];
   } finally {
     clearTimeout(timeoutId);
   }
@@ -897,6 +1305,13 @@ STRICT DATA EXTRACTOR DIRECTIVE:
           throw new Error("MODEL_DEFECT: Model returned empty experience despite raw document containing employment history.");
         }
 
+        // Strict SDET Quality Assertion: Validate content fidelity to prevent shrinkage/truncation
+        const fidelityAudit = auditExtractedContentFidelity(payload.text, data);
+        if (!fidelityAudit.passed) {
+          console.warn(`[extractResumeData] Gemini output failed fidelity audit: ${fidelityAudit.reason}`);
+          throw new Error(`MODEL_FIDELITY_FAILURE: ${fidelityAudit.reason}`);
+        }
+
        return data;
     }
     
@@ -906,11 +1321,16 @@ STRICT DATA EXTRACTOR DIRECTIVE:
     // Failover Tier 2: Groq Cloud Engine
     const groqKey = getGroqApiKey();
     if (groqKey && payload.text && payload.text.trim().length >= 10) {
-      console.warn(`[extractResumeData] Gemini exhausted (${geminiError.message}). Initiating Tier 2 Groq failover...`);
+      console.warn(`[extractResumeData] Gemini unavailable or lossy (${geminiError.message}). Initiating Tier 2 Groq failover...`);
       try {
         result = await extractWithGroq(payload.text, payload.format, groqKey);
-        extractionCache.set(cacheKey, { timestamp: Date.now(), data: result });
-        return result;
+        const groqAudit = auditExtractedContentFidelity(payload.text, result);
+        if (groqAudit.passed) {
+          console.log(`[extractResumeData] Groq output passed fidelity audit. Successfully processed.`);
+          extractionCache.set(cacheKey, { timestamp: Date.now(), data: result });
+          return result;
+        }
+        console.warn(`[extractResumeData] Groq output failed fidelity audit: ${groqAudit.reason}`);
       } catch (groqErr: any) {
         console.error("[extractResumeData] Tier 2 Groq failover error:", groqErr.message);
       }
@@ -922,8 +1342,13 @@ STRICT DATA EXTRACTOR DIRECTIVE:
       console.warn(`[extractResumeData] Initiating Tier 3 Hugging Face failover...`);
       try {
         result = await extractWithHuggingFace(payload.text, payload.format, hfToken);
-        extractionCache.set(cacheKey, { timestamp: Date.now(), data: result });
-        return result;
+        const hfAudit = auditExtractedContentFidelity(payload.text, result);
+        if (hfAudit.passed) {
+          console.log(`[extractResumeData] Hugging Face output passed fidelity audit. Successfully processed.`);
+          extractionCache.set(cacheKey, { timestamp: Date.now(), data: result });
+          return result;
+        }
+        console.warn(`[extractResumeData] Hugging Face output failed fidelity audit: ${hfAudit.reason}`);
       } catch (hfErr: any) {
         console.error("[extractResumeData] Tier 3 Hugging Face failover error:", hfErr.message);
       }
@@ -937,154 +1362,180 @@ STRICT DATA EXTRACTOR DIRECTIVE:
 };
 
 export const analyzeGrammarBackend = async (data: ResumeData, format: ResumeFormat, usePro: boolean = false): Promise<GrammarIssue[]> => {
-  return withModelFallback(async (modelId, apiKey) => {
-    const ai = new GoogleGenAI({ 
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
+  try {
+    return await withModelFallback(async (modelId, apiKey) => {
+      const ai = new GoogleGenAI({ 
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+      
+      const response = await ai.models.generateContent({
+        model: modelId,
+        contents: {
+          parts: [
+            {
+              text: `Review the following resume data for spelling, grammar, and smart stylistic improvements. 
+              
+              CRITICAL INSTRUCTIONS:
+              1. **Spelling**: Identify and fix ANY spelling mistakes, typos, or extra spaces (e.g., "follow-the- sun" -> "follow-the-sun"). Categorize as 'SPELLING'.
+              2. **Grammar & Verb Tense**: Identify grammatical errors, incorrect verb tenses, or punctuation issues. Categorize as 'GRAMMAR'.
+              3. **First-Person Pronouns**: Resumes should NEVER use first-person pronouns (I, me, my, mine, we, us, our). Flag ANY instance of these words. Provide suggestions that rewrite the sentence to remove them (e.g., change "I led a team" to "Led a team"). Categorize as 'STYLE'.
+              4. **Smart Resume Coach (Style)**: 
+                 - **Weak Action Verbs**: Audit for lazy, overused action verbs like "helped with", "handled", "worked on", "responsible for", "made sure", "managed". Suggest strong dynamic verbs like "Orchestrated", "Spearheaded", "Architected", "Engineered", "Synthesized", "Pioneered".
+                 - **Passive Voice Restructuring**: Flag passive phrasing (e.g., "A new platform was developed by me") and suggest active phrasing ("Pioneered the development of a new platform").
+                 - **Buzzword & Cliché Auditing**: Flag weak clichés ("synergy", "think outside the box", "team player", "hard worker", "results-driven") and suggest concrete, professional, or metric-oriented replacements.
+                 - **Impact & Metrics Positioning**: Identify descriptions that describe duties without outcomes. Recommend restructures that highlight achievements and placeholders for metrics (e.g., restructured sentences ending with "...resulting in a [X]% increase in throughput").
+                 - **Exclusions**: DO NOT flag technical terms, version numbers, framework names, dates, or proper nouns.
+                 - Ensure suggestions make logical sense for the specific line, industry, and context.
+                 - DO NOT just swap single words if it makes the sentence read awkwardly. Instead, select the entire phrase or sentence as the 'errorText' and provide a fully rewritten, polished version as the 'suggestions'.
+                 - Categorize all of these as 'STYLE'.
+              5. **Precision & Safety**: DO NOT change dates, numbers, metrics, factual information, or proper nouns. DO NOT hallucinate new skills or experiences.
+              6. **Context**: For each issue, explain WHY the change is recommended (e.g., "Using 'Spearheaded' instead of 'Led' adds more executive impact, and restructuring the sentence highlights the 30% metric better.").
+              7. **Replacement Integrity**: 
+                 - 'errorText' MUST be the EXACT substring from the 'original' text. It must match character-for-character, including spaces and punctuation.
+                 - 'suggestions' MUST be drop-in replacements for 'errorText'. 
+                 - If 'errorText' is a whole sentence, 'suggestions' should be whole sentences.
+                 - NEVER return a suggestion that is a partial correction of the 'errorText' if 'errorText' is a whole sentence.
+              8. Return a list of issues using the 'save_grammar_issues' tool. You MUST find at least 2-3 stylistic improvements to make the resume read like it was polished by an executive coach.
+              9. For each issue, provide:
+                 - 'path': The exact JSON path (dot notation).
+                 - 'original': The FULL text content of that field.
+                 - 'errorText': The EXACT substring within 'original' that is incorrect or could be improved.
+                 - 'suggestions': Provide exactly 3 distinct options to fix or improve the text.
+                 - 'reason': A detailed explanation of the error or improvement opportunity.
+                 - 'type': One of 'SPELLING', 'GRAMMAR', or 'STYLE'.
+              
+              DATA:
+              ${JSON.stringify(data)}`
+            }
+          ],
+        },
+        config: {
+          maxOutputTokens: 8192,
+          temperature: 0.15,
+          systemInstruction: `
+  ACT AS A SMART RESUME COACH. You are allowed to fix objective spelling and grammar errors, and provide high-impact stylistic improvements. You MUST strictly enforce the rule against using first-person pronouns (I, me, my, we, etc.) in resumes. You are forbidden from hallucinating facts, changing metrics, or altering dates.
+  `,
+          tools: [{ functionDeclarations: [grammarAnalysisTool] }],
+          toolConfig: { 
+            functionCallingConfig: { 
+              mode: "ANY" as any, 
+              allowedFunctionNames: ["save_grammar_issues"]
+            } 
+          },
+        },
+      });
+
+      const functionCalls = response.functionCalls;
+      if (functionCalls && functionCalls.length > 0) {
+        const call = functionCalls[0];
+        if (call.name === "save_grammar_issues") {
+           const args = call.args as unknown as { issues: GrammarIssue[] };
+           return args.issues || [];
         }
       }
-    });
-    
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: {
-        parts: [
-          {
-            text: `Review the following resume data for spelling, grammar, and smart stylistic improvements. 
-            
-            CRITICAL INSTRUCTIONS:
-            1. **Spelling**: Identify and fix ANY spelling mistakes, typos, or extra spaces (e.g., "follow-the- sun" -> "follow-the-sun"). Categorize as 'SPELLING'.
-            2. **Grammar & Verb Tense**: Identify grammatical errors, incorrect verb tenses, or punctuation issues. Categorize as 'GRAMMAR'.
-            3. **First-Person Pronouns**: Resumes should NEVER use first-person pronouns (I, me, my, mine, we, us, our). Flag ANY instance of these words. Provide suggestions that rewrite the sentence to remove them (e.g., change "I led a team" to "Led a team"). Categorize as 'STYLE'.
-            4. **Smart Resume Coach (Style)**: 
-               - **Weak Action Verbs**: Audit for lazy, overused action verbs like "helped with", "handled", "worked on", "responsible for", "made sure", "managed". Suggest strong dynamic verbs like "Orchestrated", "Spearheaded", "Architected", "Engineered", "Synthesized", "Pioneered".
-               - **Passive Voice Restructuring**: Flag passive phrasing (e.g., "A new platform was developed by me") and suggest active phrasing ("Pioneered the development of a new platform").
-               - **Buzzword & Cliché Auditing**: Flag weak clichés ("synergy", "think outside the box", "team player", "hard worker", "results-driven") and suggest concrete, professional, or metric-oriented replacements.
-               - **Impact & Metrics Positioning**: Identify descriptions that describe duties without outcomes. Recommend restructures that highlight achievements and placeholders for metrics (e.g., restructured sentences ending with "...resulting in a [X]% increase in throughput").
-               - **Exclusions**: DO NOT flag technical terms, version numbers, framework names, dates, or proper nouns.
-               - Ensure suggestions make logical sense for the specific line, industry, and context.
-               - DO NOT just swap single words if it makes the sentence read awkwardly. Instead, select the entire phrase or sentence as the 'errorText' and provide a fully rewritten, polished version as the 'suggestions'.
-               - Categorize all of these as 'STYLE'.
-            5. **Precision & Safety**: DO NOT change dates, numbers, metrics, factual information, or proper nouns. DO NOT hallucinate new skills or experiences.
-            6. **Context**: For each issue, explain WHY the change is recommended (e.g., "Using 'Spearheaded' instead of 'Led' adds more executive impact, and restructuring the sentence highlights the 30% metric better.").
-            7. **Replacement Integrity**: 
-               - 'errorText' MUST be the EXACT substring from the 'original' text. It must match character-for-character, including spaces and punctuation.
-               - 'suggestions' MUST be drop-in replacements for 'errorText'. 
-               - If 'errorText' is a whole sentence, 'suggestions' should be whole sentences.
-               - NEVER return a suggestion that is a partial correction of the 'errorText' if 'errorText' is a whole sentence.
-            8. Return a list of issues using the 'save_grammar_issues' tool. You MUST find at least 2-3 stylistic improvements to make the resume read like it was polished by an executive coach.
-            9. For each issue, provide:
-               - 'path': The exact JSON path (dot notation).
-               - 'original': The FULL text content of that field.
-               - 'errorText': The EXACT substring within 'original' that is incorrect or could be improved.
-               - 'suggestions': Provide exactly 3 distinct options to fix or improve the text.
-               - 'reason': A detailed explanation of the error or improvement opportunity.
-               - 'type': One of 'SPELLING', 'GRAMMAR', or 'STYLE'.
-            
-            DATA:
-            ${JSON.stringify(data)}`
-          }
-        ],
-      },
-      config: {
-        maxOutputTokens: 8192,
-        temperature: 0.15,
-        systemInstruction: `
-ACT AS A SMART RESUME COACH. You are allowed to fix objective spelling and grammar errors, and provide high-impact stylistic improvements. You MUST strictly enforce the rule against using first-person pronouns (I, me, my, we, etc.) in resumes. You are forbidden from hallucinating facts, changing metrics, or altering dates.
-`,
-        tools: [{ functionDeclarations: [grammarAnalysisTool] }],
-        toolConfig: { 
-          functionCallingConfig: { 
-            mode: "ANY" as any, 
-            allowedFunctionNames: ["save_grammar_issues"]
-          } 
-        },
-      },
-    });
-
-    const functionCalls = response.functionCalls;
-    if (functionCalls && functionCalls.length > 0) {
-      const call = functionCalls[0];
-      if (call.name === "save_grammar_issues") {
-         const args = call.args as unknown as { issues: GrammarIssue[] };
-         return args.issues || [];
+      
+      return []; // No issues found or model didn't call tool
+    }, "analyzeGrammar", usePro);
+  } catch (geminiError: any) {
+    const groqKey = getGroqApiKey();
+    if (groqKey) {
+      console.warn(`[analyzeGrammar] Gemini unavailable (${geminiError.message}). Initiating Groq failover...`);
+      try {
+        return await analyzeGrammarWithGroq(data, format, groqKey);
+      } catch (groqErr: any) {
+        console.error("[analyzeGrammar] Groq failover error:", groqErr.message);
       }
     }
-    
-    return []; // No issues found or model didn't call tool
-  }, "analyzeGrammar", usePro);
+    throw geminiError;
+  }
 };
 
 export const checkSpellingBackend = async (data: ResumeData, format: ResumeFormat, usePro: boolean = false): Promise<ResumeData> => {
-  return withModelFallback(async (modelId, apiKey) => {
-    const ai = new GoogleGenAI({ 
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
+  try {
+    return await withModelFallback(async (modelId, apiKey) => {
+      const ai = new GoogleGenAI({ 
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+      
+      const response = await ai.models.generateContent({
+        model: modelId,
+        contents: {
+          parts: [
+            {
+              text: `Review the following resume data STRICTLY for spelling and grammar errors.
+              
+              CRITICAL INSTRUCTIONS:
+              1. Fix standard English spelling and grammar mistakes ONLY.
+              2. DO NOT change any technical terms, version numbers, framework names, or proper nouns (e.g., 'React', 'v14.2', 'K8s', 'Kubernetes', 'SQL', 'NoSQL').
+              3. DO NOT change dates, numbers, or factual information.
+              4. DO NOT make stylistic changes, change vocabulary, or alter the tone.
+              5. DO NOT change the structure of the data.
+              6. Return the corrected JSON using the 'save_resume_data' tool.
+              
+              DATA:
+              ${JSON.stringify(data)}`
+            }
+          ],
+        },
+        config: {
+          maxOutputTokens: 8192,
+          temperature: 0.15,
+          systemInstruction: `
+  ACT AS A STRICT PROOFREADER. You are only allowed to fix clear, objective spelling and grammar errors. 
+  - You are strictly forbidden from summarizing, rephrasing, shortening, or deleting any experiences, bullet points, or sections. 
+  - Do not make any stylistic changes, vocabulary alterations, or tone modifications. Keep every word identical to the input unless correcting a spelling mistake.
+  - You must preserve the schema structure and use the 'save_resume_data' tool to return the modified data.
+  `,
+          tools: [{ functionDeclarations: [saveResumeTool] }],
+          toolConfig: { 
+            functionCallingConfig: { 
+              mode: "ANY" as any, 
+              allowedFunctionNames: ["save_resume_data"]
+            } 
+          },
+        },
+      });
+
+      const functionCalls = response.functionCalls;
+      if (functionCalls && functionCalls.length > 0) {
+        const call = functionCalls[0];
+        if (call.name === "save_resume_data") {
+           const correctedData = call.args as unknown as ResumeData;
+           
+           if (correctedData.summary) {
+              if (typeof correctedData.summary === 'string') {
+                  correctedData.summary = [correctedData.summary];
+              }
+           }
+
+           return correctedData;
         }
       }
-    });
-    
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: {
-        parts: [
-          {
-            text: `Review the following resume data STRICTLY for spelling and grammar errors.
-            
-            CRITICAL INSTRUCTIONS:
-            1. Fix standard English spelling and grammar mistakes ONLY.
-            2. DO NOT change any technical terms, version numbers, framework names, or proper nouns (e.g., 'React', 'v14.2', 'K8s', 'Kubernetes', 'SQL', 'NoSQL').
-            3. DO NOT change dates, numbers, or factual information.
-            4. DO NOT make stylistic changes, change vocabulary, or alter the tone.
-            5. DO NOT change the structure of the data.
-            6. Return the corrected JSON using the 'save_resume_data' tool.
-            
-            DATA:
-            ${JSON.stringify(data)}`
-          }
-        ],
-      },
-      config: {
-        maxOutputTokens: 8192,
-        temperature: 0.15,
-        systemInstruction: `
-ACT AS A STRICT PROOFREADER. You are only allowed to fix clear, objective spelling and grammar errors. 
-- You are strictly forbidden from summarizing, rephrasing, shortening, or deleting any experiences, bullet points, or sections. 
-- Do not make any stylistic changes, vocabulary alterations, or tone modifications. Keep every word identical to the input unless correcting a spelling mistake.
-- You must preserve the schema structure and use the 'save_resume_data' tool to return the modified data.
-`,
-        tools: [{ functionDeclarations: [saveResumeTool] }],
-        toolConfig: { 
-          functionCallingConfig: { 
-            mode: "ANY" as any, 
-            allowedFunctionNames: ["save_resume_data"]
-          } 
-        },
-      },
-    });
-
-    const functionCalls = response.functionCalls;
-    if (functionCalls && functionCalls.length > 0) {
-      const call = functionCalls[0];
-      if (call.name === "save_resume_data") {
-         const correctedData = call.args as unknown as ResumeData;
-         
-         if (correctedData.summary) {
-            if (typeof correctedData.summary === 'string') {
-                correctedData.summary = [correctedData.summary];
-            }
-         }
-
-         return correctedData;
+      
+      throw new Error("The AI model did not return corrected data.");
+    }, "checkSpelling", usePro);
+  } catch (geminiError: any) {
+    const groqKey = getGroqApiKey();
+    if (groqKey) {
+      console.warn(`[checkSpelling] Gemini unavailable (${geminiError.message}). Initiating Groq failover...`);
+      try {
+        return await checkSpellingWithGroq(data, format, groqKey);
+      } catch (groqErr: any) {
+        console.error("[checkSpelling] Groq failover error:", groqErr.message);
       }
     }
-    
-    throw new Error("The AI model did not return corrected data.");
-  }, "checkSpelling", usePro);
+    throw geminiError;
+  }
 };
 
 const rewritePhraseTool: FunctionDeclaration = {
@@ -1110,78 +1561,91 @@ export const updateResumeBackend = async (
   format: ResumeFormat,
   usePro: boolean = false
 ): Promise<ResumeData> => {
-  return withModelFallback(async (modelId, apiKey) => {
-    const ai = new GoogleGenAI({ 
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
+  try {
+    return await withModelFallback(async (modelId, apiKey) => {
+      const ai = new GoogleGenAI({ 
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const jobContext = targetJobDescription 
+        ? `\n\nTARGET JOB DESCRIPTION:\n${targetJobDescription}`
+        : "";
+
+      const response = await ai.models.generateContent({
+        model: modelId,
+        contents: {
+          parts: [
+            {
+              text: `You are an elite executive resume writer. Your task is to update this resume according to the user's instructions.
+              
+              USER INSTRUCTIONS:
+              ${instruction}${jobContext}
+              
+              CRITICAL RULES:
+              1. Preserve the exact structure of the resume.
+              2. Do not omit or truncate any section unless explicitly requested.
+              3. Do not invent new details (jobs, degrees, certifications) that the user did not specify.
+              4. Make the formatting matches the ${format} style.
+              5. Return the fully updated resume data using the 'save_resume_data' tool.
+              
+              ORIGINAL DATA:
+              ${JSON.stringify(data)}`
+            }
+          ],
+        },
+        config: {
+          maxOutputTokens: 8192,
+          temperature: 0.15,
+          systemInstruction: `
+  ACT AS AN EXPERT RESUME EDITOR. Modify the JSON resume data strictly following the user's instructions. 
+  - You are forbidden from summarizing, shortening, deleting, or omitting any experiences, custom sections, or bullet points unless the user explicitly instructs you to do so.
+  - Keep all parts of the resume that are not affected by the user's instruction 100% identical to the original, verbatim.
+  - You must preserve the schema structure and use the 'save_resume_data' tool to return the modified data.
+  `,
+          tools: [{ functionDeclarations: [saveResumeTool] }],
+          toolConfig: { 
+            functionCallingConfig: { 
+              mode: "ANY" as any, 
+              allowedFunctionNames: ["save_resume_data"]
+            } 
+          },
+        },
+      });
+
+      const functionCalls = response.functionCalls;
+      if (functionCalls && functionCalls.length > 0) {
+        const call = functionCalls[0];
+        if (call.name === "save_resume_data") {
+           const updatedData = call.args as unknown as ResumeData;
+           
+           if (updatedData.summary) {
+              if (typeof updatedData.summary === 'string') {
+                  updatedData.summary = [updatedData.summary];
+              }
+           }
+           return updatedData;
         }
       }
-    });
-
-    const jobContext = targetJobDescription 
-      ? `\n\nTARGET JOB DESCRIPTION:\n${targetJobDescription}`
-      : "";
-
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: {
-        parts: [
-          {
-            text: `You are an elite executive resume writer. Your task is to update this resume according to the user's instructions.
-            
-            USER INSTRUCTIONS:
-            ${instruction}${jobContext}
-            
-            CRITICAL RULES:
-            1. Preserve the exact structure of the resume.
-            2. Do not omit or truncate any section unless explicitly requested.
-            3. Do not invent new details (jobs, degrees, certifications) that the user did not specify.
-            4. Make the formatting matches the ${format} style.
-            5. Return the fully updated resume data using the 'save_resume_data' tool.
-            
-            ORIGINAL DATA:
-            ${JSON.stringify(data)}`
-          }
-        ],
-      },
-      config: {
-        maxOutputTokens: 8192,
-        temperature: 0.15,
-        systemInstruction: `
-ACT AS AN EXPERT RESUME EDITOR. Modify the JSON resume data strictly following the user's instructions. 
-- You are forbidden from summarizing, shortening, deleting, or omitting any experiences, custom sections, or bullet points unless the user explicitly instructs you to do so.
-- Keep all parts of the resume that are not affected by the user's instruction 100% identical to the original, verbatim.
-- You must preserve the schema structure and use the 'save_resume_data' tool to return the modified data.
-`,
-        tools: [{ functionDeclarations: [saveResumeTool] }],
-        toolConfig: { 
-          functionCallingConfig: { 
-            mode: "ANY" as any, 
-            allowedFunctionNames: ["save_resume_data"]
-          } 
-        },
-      },
-    });
-
-    const functionCalls = response.functionCalls;
-    if (functionCalls && functionCalls.length > 0) {
-      const call = functionCalls[0];
-      if (call.name === "save_resume_data") {
-         const updatedData = call.args as unknown as ResumeData;
-         
-         if (updatedData.summary) {
-            if (typeof updatedData.summary === 'string') {
-                updatedData.summary = [updatedData.summary];
-            }
-         }
-         return updatedData;
+      
+      throw new Error("The AI model did not return updated resume data.");
+    }, "updateResume", usePro);
+  } catch (geminiError: any) {
+    const groqKey = getGroqApiKey();
+    if (groqKey) {
+      console.warn(`[updateResume] Gemini unavailable (${geminiError.message}). Initiating Groq failover...`);
+      try {
+        return await updateResumeWithGroq(data, instruction, targetJobDescription, format, groqKey);
+      } catch (groqErr: any) {
+        console.error("[updateResume] Groq failover error:", groqErr.message);
       }
     }
-    
-    throw new Error("The AI model did not return updated resume data.");
-  }, "updateResume", usePro);
+    throw geminiError;
+  }
 };
 
 export const rewritePhraseBackend = async (
@@ -1189,60 +1653,73 @@ export const rewritePhraseBackend = async (
   instruction: string,
   usePro: boolean = false
 ): Promise<string[]> => {
-  return withModelFallback(async (modelId, apiKey) => {
-    const ai = new GoogleGenAI({ 
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
+  try {
+    return await withModelFallback(async (modelId, apiKey) => {
+      const ai = new GoogleGenAI({ 
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const response = await ai.models.generateContent({
+        model: modelId,
+        contents: {
+          parts: [
+            {
+              text: `Provide exactly 3 distinct, high-impact improvements/rewrites for this text.
+              
+              TEXT:
+              "${text}"
+              
+              INSTRUCTION / TONE TO APPLY:
+              "${instruction}"
+              
+              Ensure suggestions make logical sense for a professional resume and are direct replacements for the text.`
+            }
+          ],
+        },
+        config: {
+          maxOutputTokens: 8192,
+          temperature: 0.3,
+          systemInstruction: `
+  ACT AS AN EXECUTIVE RESUME COACH. Provide 3 high-impact direct replacement options matching the style instruction. Use the 'save_rewrite_suggestions' tool.
+  `,
+          tools: [{ functionDeclarations: [rewritePhraseTool] }],
+          toolConfig: { 
+            functionCallingConfig: { 
+              mode: "ANY" as any, 
+              allowedFunctionNames: ["save_rewrite_suggestions"]
+            } 
+          },
+        },
+      });
+
+      const functionCalls = response.functionCalls;
+      if (functionCalls && functionCalls.length > 0) {
+        const call = functionCalls[0];
+        if (call.name === "save_rewrite_suggestions") {
+           const args = call.args as unknown as { suggestions: string[] };
+           return args.suggestions || [];
         }
       }
-    });
-
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: {
-        parts: [
-          {
-            text: `Provide exactly 3 distinct, high-impact improvements/rewrites for this text.
-            
-            TEXT:
-            "${text}"
-            
-            INSTRUCTION / TONE TO APPLY:
-            "${instruction}"
-            
-            Ensure suggestions make logical sense for a professional resume and are direct replacements for the text.`
-          }
-        ],
-      },
-      config: {
-        maxOutputTokens: 8192,
-        temperature: 0.3,
-        systemInstruction: `
-ACT AS AN EXECUTIVE RESUME COACH. Provide 3 high-impact direct replacement options matching the style instruction. Use the 'save_rewrite_suggestions' tool.
-`,
-        tools: [{ functionDeclarations: [rewritePhraseTool] }],
-        toolConfig: { 
-          functionCallingConfig: { 
-            mode: "ANY" as any, 
-            allowedFunctionNames: ["save_rewrite_suggestions"]
-          } 
-        },
-      },
-    });
-
-    const functionCalls = response.functionCalls;
-    if (functionCalls && functionCalls.length > 0) {
-      const call = functionCalls[0];
-      if (call.name === "save_rewrite_suggestions") {
-         const args = call.args as unknown as { suggestions: string[] };
-         return args.suggestions || [];
+      
+      return [text];
+    }, "rewritePhrase", usePro);
+  } catch (geminiError: any) {
+    const groqKey = getGroqApiKey();
+    if (groqKey) {
+      console.warn(`[rewritePhrase] Gemini unavailable (${geminiError.message}). Initiating Groq failover...`);
+      try {
+        return await rewritePhraseWithGroq(text, instruction, groqKey);
+      } catch (groqErr: any) {
+        console.error("[rewritePhrase] Groq failover error:", groqErr.message);
       }
     }
-    
-    return [text];
-  }, "rewritePhrase", usePro);
+    throw geminiError;
+  }
 };
 
 export const performOcrBackend = async (
