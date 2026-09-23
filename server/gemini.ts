@@ -362,7 +362,7 @@ const saveResumeTool: FunctionDeclaration = {
         }
       }
     },
-    required: ["fullName"],
+    required: ["fullName", "experience", "education", "customSections"],
   },
 };
 
@@ -767,11 +767,11 @@ STRICT DATA EXTRACTOR DIRECTIVE:
           }
         }
 
-        // Quality Assertion: If input had experience sections but extracted experience is empty, log warning
+        // Strict SDET Quality Assertion: Never accept an empty experience array if raw text has employment history
         const rawHasExperience = payload.text && /experience|employment|work history|career/i.test(payload.text);
         const hasCustomExp = data.customSections && data.customSections.some(s => /experience|projects|work|history/i.test(s.title || ""));
         if (rawHasExperience && (!data.experience || data.experience.length === 0) && (!data.internships || data.internships.length === 0) && !hasCustomExp) {
-          console.warn("[Quality Notice] Raw text contained experience keywords but extracted experience was empty.");
+          throw new Error("MODEL_DEFECT: Model returned empty experience despite raw document containing employment history.");
         }
 
        return data;
