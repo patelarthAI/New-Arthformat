@@ -19,7 +19,8 @@ import {
   rewritePhraseBackend,
   performOcrBackend,
   getKeyPool,
-  getGroqApiKey
+  getGroqApiKey,
+  getHuggingFaceApiKey
 } from "../server/gemini";
 import { GoogleGenAI } from "@google/genai";
 
@@ -72,6 +73,7 @@ app.get("/api/health", async (req, res) => {
     keyCount: pool.length,
     hasApiKey: pool.length > 0,
     hasGroqKey: !!getGroqApiKey(),
+    hasHfKey: !!getHuggingFaceApiKey(),
     ...(req.query.test === "true" ? { results: modelResults } : {})
   });
 });
