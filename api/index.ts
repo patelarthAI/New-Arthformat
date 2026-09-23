@@ -18,7 +18,8 @@ import {
   updateResumeBackend,
   rewritePhraseBackend,
   performOcrBackend,
-  getKeyPool
+  getKeyPool,
+  getGroqApiKey
 } from "../server/gemini";
 import { GoogleGenAI } from "@google/genai";
 
@@ -70,6 +71,7 @@ app.get("/api/health", async (req, res) => {
     env: process.env.NODE_ENV,
     keyCount: pool.length,
     hasApiKey: pool.length > 0,
+    hasGroqKey: !!getGroqApiKey(),
     ...(req.query.test === "true" ? { results: modelResults } : {})
   });
 });

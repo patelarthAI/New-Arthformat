@@ -441,6 +441,128 @@ const normalizeDates = (dateStr: string): string => {
     .trim();
 };
 
+export const getGroqApiKey = (): string | undefined => {
+  return (
+    process.env.GROQ_API_KEY ||
+    process.env.GROK_API_KEY ||
+    process.env.VITE_GROQ_API_KEY ||
+    undefined
+  );
+};
+
+export const extractWithGroq = async (
+  text: string,
+  format: ResumeFormat,
+  apiKey: string
+): Promise<ResumeData> => {
+  const systemPrompt = `You are a professional verbatim resume data extraction engine.
+CRITICAL MANDATORY RULES:
+1. Extract the resume text into valid JSON matching this exact structure:
+{
+  "fullName": string,
+  "contactInfo": {
+    "email": string,
+    "phone": string,
+    "location": string,
+    "linkedin": string,
+    "website": string
+  },
+  "summary": string[],
+  "experience": [
+    {
+      "company": string,
+      "title": string,
+      "dates": string,
+      "location": string,
+      "description": string[]
+    }
+  ],
+  "education": [
+    {
+      "institution": string,
+      "degree": string,
+      "dates": string,
+      "location": string,
+      "details": string[]
+    }
+  ],
+  "customSections": [
+    {
+      "title": string,
+      "items": string[]
+    }
+  ]
+}
+2. ABSOLUTE ZERO LOSS & ZERO ALTERATION:
+- Do NOT alter, summarize, or rephrase any text. Keep all words and bullet points 100% verbatim.
+- Extract EVERY SINGLE experience role, bullet point, skill, education entry, and certification.
+- If a section is not Summary, Experience, or Education (e.g. SKILLS, CERTIFICATIONS, PROJECTS, AWARDS), put it into customSections with its exact title.
+3. Return ONLY valid JSON. No markdown backticks, no explanatory text.`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey.trim()}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "qwen/qwen3.8-27b",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Extract this resume verbatim:\n\n${text}` }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.1,
+        max_tokens: 8192
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Groq API returned HTTP ${res.status}: ${errText.slice(0, 150)}`);
+    }
+
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error("Empty response from Groq engine.");
+    }
+
+    const parsed: ResumeData = JSON.parse(content);
+    if (!parsed.contactInfo) parsed.contactInfo = {};
+    if (!parsed.experience) parsed.experience = [];
+    if (!parsed.education) parsed.education = [];
+    if (!parsed.customSections) parsed.customSections = [];
+
+    if (parsed.summary && typeof parsed.summary === "string") {
+      parsed.summary = [(parsed as any).summary];
+    }
+
+    parsed.experience.forEach(exp => {
+      if (typeof exp.description === "string") {
+        exp.description = [(exp as any).description];
+      }
+      exp.dates = normalizeDates(exp.dates || "");
+    });
+
+    parsed.education.forEach(edu => {
+      edu.dates = normalizeDates(edu.dates || "");
+    });
+
+    console.log(`[Groq Failover] Successfully extracted resume data for: ${parsed.fullName}`);
+    return parsed;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 export const extractResumeDataBackend = async (
   payload: { base64?: string; text?: string; mimeType: string; format: ResumeFormat },
   usePro: boolean = false
@@ -463,8 +585,10 @@ export const extractResumeDataBackend = async (
     return JSON.parse(JSON.stringify(cached.data));
   }
 
-  const result = await withModelFallback(async (modelId, apiKey) => {
-    const ai = new GoogleGenAI({ 
+  let result: ResumeData;
+  try {
+    result = await withModelFallback(async (modelId, apiKey) => {
+      const ai = new GoogleGenAI({ 
       apiKey,
       httpOptions: {
         headers: {
@@ -655,6 +779,20 @@ STRICT DATA EXTRACTOR DIRECTIVE:
     
     throw new Error("The AI model did not trigger the extraction tool correctly.");
   }, "extractResumeData", usePro);
+  } catch (geminiError: any) {
+    const groqKey = getGroqApiKey();
+    if (groqKey && payload.text && payload.text.trim().length >= 10) {
+      console.warn(`[extractResumeData] Gemini failed (${geminiError.message}). Initiating instant Groq failover...`);
+      try {
+        result = await extractWithGroq(payload.text, payload.format, groqKey);
+        extractionCache.set(cacheKey, { timestamp: Date.now(), data: result });
+        return result;
+      } catch (groqErr: any) {
+        console.error("[extractResumeData] Groq failover also encountered an error:", groqErr.message);
+      }
+    }
+    throw geminiError;
+  }
 
   extractionCache.set(cacheKey, { timestamp: Date.now(), data: result });
   return result;
