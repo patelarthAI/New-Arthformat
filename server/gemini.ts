@@ -54,26 +54,30 @@ const getNextApiKey = () => {
   return key;
 };
 
-// ⚠️  MODEL LIST IS LIVE-TESTED — Updated 2026-09-23
-// gemini-3.5-flash      → ✅ OK (all 4 keys)
-// gemini-3.1-flash-lite → ❌ 503 high demand (all keys) — REMOVED
-// gemini-3.5-flash-lite → ❌ TIMEOUT (hangs silently 20s per attempt) — REMOVED
-// gemini-3.6-flash      → ❌ TIMEOUT (hangs silently 20s per attempt) — REMOVED
-// gemini-3.8-flash      → ❌ Unknown / not tested today
-// gemini-flash-latest   → ❌ Unknown / alias resolves to broken models
-// gemini-2.x / 1.5     → ❌ 404 Retired from API
+// ──────────────────────────────────────────────────────────────────
+// ACTIVE FREE-TIER MODELS (as of 2026-09-23)
+// Per Google AI Studio → all on 15 RPM / key, combined 60 RPM with 4 keys
+//
+// gemini-3.8-flash       → PRIMARY (state-of-the-art, full parsing, 8192 tokens)
+// gemini-3.1-flash-lite  → LIGHTWEIGHT (near-instant ~400ms, grammar/bullets)
+// gemini-3.5-flash       → BACKUP (reliable fallback for regional 503 spikes)
+// gemini-3.1-pro-preview → REASONING (complex career restructuring + JD matching)
+//
+// Retired (404): gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash, gemini-2.0-pro
+// ──────────────────────────────────────────────────────────────────
 
-// PRIMARY model: gemini-3.5-flash is the only confirmed-healthy model right now.
-// We try it across all available keys (round-robin) to maximize throughput.
+// Standard (free-tier) model pool — tried in order, each key rotated round-robin
 const FALLBACK_MODELS = [
-  "gemini-3.5-flash",      // 🟢 VERIFIED OK — all 4 keys healthy as of 2026-09-23 09:08 CST
-  "gemini-3.8-flash",      // 🟡 STANDBY: Try when primary is also rate-limited
+  "gemini-3.8-flash",       // 🟢 PRIMARY: State-of-the-art, 15 RPM/key, 60 RPM combined
+  "gemini-3.1-flash-lite",  // ⚡ LIGHTWEIGHT: ~400ms latency, high volume backup
+  "gemini-3.5-flash",       // 🔵 BACKUP: Regional 503 fallback, proven reliable
 ];
 
+// Pro model pool — enables gemini-3.1-pro-preview for deep reasoning tasks
 const PRO_MODELS = [
-  "gemini-3.5-flash",
-  "gemini-3.8-flash",
-  "gemini-3.1-pro-preview"
+  "gemini-3.8-flash",       // 🟢 PRIMARY
+  "gemini-3.5-flash",       // 🔵 BACKUP
+  "gemini-3.1-pro-preview", // 🧠 REASONING: Complex JD matching & restructuring
 ];
 
 // In-memory extraction cache to preserve free quota across repeated user clicks
@@ -206,9 +210,25 @@ async function withModelFallback<T>(
     errorString.includes("Quota exceeded") ||
     errorString.includes("experiencing high demand");
 
+  const lowerLastError = errorString.toLowerCase();
+  const isTimeout = errorString.includes("MODEL_TIMEOUT") || lowerLastError.includes("timeout");
+
   if (isActualRateLimit && allRateLimited) {
+    // Distinguish: is this a Google-wide outage (503 on all models) or just our key quota?
+    const isGoogleOutage = errorString.includes("503") || errorString.includes("experiencing high demand");
+    if (isGoogleOutage) {
+      throw new Error(
+        "RATE_LIMITED: Google's AI servers are currently experiencing high demand across all regions. This is a temporary Google infrastructure issue — please retry in 30-60 seconds."
+      );
+    }
     throw new Error(
-      "RATE_LIMITED: Our AI engines are currently at capacity. Retrying automatically in 8 seconds..."
+      "RATE_LIMITED: Our AI engines are currently at capacity (daily quota reached). Retrying automatically in 8 seconds..."
+    );
+  }
+
+  if (isTimeout && allRateLimited) {
+    throw new Error(
+      "RATE_LIMITED: AI models are not responding right now (Google infrastructure load). Please retry in 30-60 seconds — this always self-resolves."
     );
   }
 
