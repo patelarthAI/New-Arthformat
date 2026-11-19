@@ -473,8 +473,20 @@ app.get("/api/resumes", checkAdmin, async (req, res) => {
     }
 
     // Map to clean metadata records (ZERO resume body or text payload)
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
     let records = rawList.map(r => {
       let curStatus = (r.rejected || r.content?.rejected || r.status === 'rejected') ? 'rejected' : (r.status || 'pending');
+      const createdAtTs = r.created_at ? new Date(r.created_at).getTime() : 0;
+      let rejectedAt = r.rejected_at || null;
+
+      // Auto-decline if pending for more than 5 minutes so pending list stays clean
+      if (curStatus === 'pending' && createdAtTs > 0 && createdAtTs < fiveMinutesAgo) {
+        curStatus = 'rejected';
+        if (!rejectedAt) {
+          rejectedAt = new Date(createdAtTs + 5 * 60 * 1000).toISOString();
+        }
+      }
+
       const candidateName = r.candidate_name || r.content?.name || r.name || 'Candidate Submission';
       const recruiterName = r.recruiter_name || r.recruiterName || r.content?.recruiterName || 'Direct Recruiter';
       return {
@@ -486,7 +498,7 @@ app.get("/api/resumes", checkAdmin, async (req, res) => {
         device_info: r.device_info || '',
         created_at: r.created_at || new Date().toISOString(),
         approved_at: r.approved_at || null,
-        rejected_at: r.rejected_at || null
+        rejected_at: rejectedAt
       };
     });
 
@@ -553,10 +565,11 @@ app.get("/api/resumes", checkAdmin, async (req, res) => {
   }
 });
 
-// API Route for checking resume status
+// API Route for checking resume status (Auto-declines after 5 minutes to prevent loading server/DB)
 app.get("/api/resumes/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
     
     const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
     if (useDatabase) {
@@ -567,9 +580,26 @@ app.get("/api/resumes/:id/status", async (req, res) => {
         }
         const resume = docVal.data() || {};
         let currentStatus = (resume.rejected || resume.content?.rejected || resume.status === 'rejected') ? 'rejected' : resume.status;
+        const createdAtTs = resume.created_at ? new Date(resume.created_at).getTime() : 0;
+        let autoRejected = false;
+
+        // Auto-decline pending resumes older than 5 minutes
+        if (currentStatus === 'pending' && createdAtTs > 0 && createdAtTs < fiveMinutesAgo) {
+          currentStatus = 'rejected';
+          autoRejected = true;
+          // Async update Firestore once
+          db.collection('resumes').doc(id).update({
+            status: 'rejected',
+            rejected_at: new Date(createdAtTs + 5 * 60 * 1000).toISOString(),
+            auto_rejected: true,
+            rejection_reason: 'Expired (5-minute authorization window exceeded)'
+          }).catch(() => {});
+        }
+
         return res.status(200).json({ 
           status: currentStatus,
-          candidate_name: resume.candidate_name
+          candidate_name: resume.candidate_name,
+          auto_rejected: autoRejected
         });
       } catch (dbError: any) {
         console.warn("Database error (falling back to in-memory):", dbError.message);
@@ -580,10 +610,22 @@ app.get("/api/resumes/:id/status", async (req, res) => {
     if (!resume) {
       return res.status(404).json({ error: "Resume not found" });
     }
+
+    let currentStatus = (resume.rejected || resume.status === 'rejected') ? 'rejected' : resume.status;
+    const createdAtTs = resume.created_at ? new Date(resume.created_at).getTime() : 0;
+    let autoRejected = false;
+
+    if (currentStatus === 'pending' && createdAtTs > 0 && createdAtTs < fiveMinutesAgo) {
+      currentStatus = 'rejected';
+      resume.status = 'rejected';
+      resume.rejected_at = new Date(createdAtTs + 5 * 60 * 1000).toISOString();
+      autoRejected = true;
+    }
     
     res.status(200).json({ 
-      status: resume.status,
-      candidate_name: resume.candidate_name
+      status: currentStatus,
+      candidate_name: resume.candidate_name,
+      auto_rejected: autoRejected
     });
   } catch (error: any) {
     console.error("Error checking resume status:", error);
@@ -735,9 +777,17 @@ app.get("/api/admin/stats", checkAdmin, async (req, res) => {
     }
 
     const recruiterMap: Record<string, { name: string; total: number; approved: number; pending: number; rejected: number }> = {};
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
 
     rawList.forEach((r: any) => {
-      const curStatus = (r.rejected || r.content?.rejected || r.status === 'rejected') ? 'rejected' : (r.status || 'pending');
+      let curStatus = (r.rejected || r.content?.rejected || r.status === 'rejected') ? 'rejected' : (r.status || 'pending');
+      const createdAtTs = r.created_at ? new Date(r.created_at).getTime() : 0;
+      
+      // Auto-decline pending resumes older than 5 minutes
+      if (curStatus === 'pending' && createdAtTs > 0 && createdAtTs < fiveMinutesAgo) {
+        curStatus = 'rejected';
+      }
+
       const recName = (r.recruiter_name || r.recruiterName || r.content?.recruiterName || 'Direct Recruiter').trim();
       if (!recruiterMap[recName]) {
         recruiterMap[recName] = { name: recName, total: 0, approved: 0, pending: 0, rejected: 0 };

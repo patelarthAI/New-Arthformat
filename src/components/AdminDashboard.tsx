@@ -8,7 +8,6 @@ import {
   UserCheck,
   Search, 
   RefreshCw, 
-  Trash2, 
   Globe, 
   Calendar, 
   AlertTriangle,
@@ -18,7 +17,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Award,
-  BarChart3
+  BarChart3,
+  TrendingUp,
+  Shield,
+  Sparkles
 } from 'lucide-react';
 import Login from './Login';
 import { safeStorage } from '@/utils/safeStorage';
@@ -244,48 +246,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     }
   };
 
-  const handleDeleteCandidate = async (candidateId: string) => {
-    if (!adminPassword) return;
-    if (!window.confirm("Remove this candidate record from the audit log?")) return;
-    try {
-      const response = await fetch(`/api/resumes/${candidateId}`, {
-        method: 'DELETE',
-        headers: {
-          'x-admin-password': adminPassword
-        }
-      });
-      if (response.ok) {
-        setCandidates(prev => prev.filter(c => c.id !== candidateId));
-        fetchStats();
-      }
-    } catch (err) {
-      console.error("Failed to delete record:", err);
-    }
-  };
-
-  const handlePurgeAll = async () => {
-    if (!adminPassword) return;
-    if (!window.confirm("Are you sure you want to purge all candidate logs and reset counts? This cannot be undone.")) return;
-    try {
-      setLoading(true);
-      const response = await fetch('/api/admin/purge', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': adminPassword
-        }
-      });
-      if (response.ok) {
-        setCandidates([]);
-        fetchStats();
-      }
-    } catch (err) {
-      console.error("Failed to purge logs:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Filter candidates by client search term (candidate name, recruiter name, or IP address)
   const filteredCandidates = useMemo(() => {
     if (!searchQuery.trim()) return candidates;
@@ -370,38 +330,41 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   return (
     <div className="w-full max-w-7xl mx-auto p-4 md:p-6 text-slate-100 font-sans">
       
-      {/* Header Bar */}
+      {/* Header Bar - Clean Executive Style (No Delete/Purge Option) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-white/10">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5 font-display">
-            Admin Dashboard
-          </h1>
-          <p className="text-slate-400 text-xs mt-1">
-            Real-time candidate approval & recruiter formatting tracker
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.25)]">
+            <Shield className="w-5 h-5 text-indigo-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white font-display">
+                Admin Dashboard
+              </h1>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Audit Log
+              </span>
+            </div>
+            <p className="text-slate-400 text-xs mt-1">
+              Real-time candidate approval & recruiter formatting tracker &bull; <span className="text-slate-500">Auto-expires pending after 5 mins</span>
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => { fetchStats(); fetchCandidates(); }}
-            className="p-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl transition-all border border-white/10 cursor-pointer shadow-sm active:scale-95"
+            className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl transition-all border border-white/10 cursor-pointer shadow-sm active:scale-95 text-xs font-semibold"
             title="Refresh Data"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-
-          <button
-            onClick={handlePurgeAll}
-            className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 text-rose-300 hover:text-rose-200 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95"
-            title="Purge all submission history"
-          >
-            Purge History
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-indigo-400' : ''}`} />
+            <span>Refresh</span>
           </button>
 
           {onClose && (
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-[0_0_15px_rgba(99,102,241,0.25)] active:scale-95"
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-[0_0_20px_rgba(99,102,241,0.35)] active:scale-95"
               title="Exit Admin View"
             >
               Exit Admin
@@ -431,24 +394,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         {/* Pending Review Card (Primary focus when approving) */}
         <div className={`glassmorphic-card rounded-2xl p-5 border transition-all flex flex-col justify-between ${
           statusFilter === 'pending'
-            ? 'border-amber-500/50 bg-amber-500/[0.08] shadow-[0_0_20px_rgba(245,158,11,0.15)]'
+            ? 'border-amber-500/50 bg-amber-500/[0.08] shadow-[0_0_25px_rgba(245,158,11,0.18)]'
             : 'border-white/[0.06] bg-white/[0.015]'
         }`}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
               <Clock className="w-4 h-4 text-amber-400 animate-pulse" /> Pending Approvals
             </span>
-            <span className="text-[10px] text-amber-400/80 font-mono font-bold bg-amber-500/20 px-2 py-0.5 rounded-full">
-              Action Required
+            <span className="text-[10px] text-amber-400/90 font-mono font-bold bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
+              Active Focus
             </span>
           </div>
           <div className="mt-2">
             <div className="text-3xl font-black text-amber-300">{stats.pendingCount}</div>
-            <p className="text-[11px] text-slate-400 mt-1">Resumes awaiting review</p>
+            <p className="text-[11px] text-slate-400 mt-1">Pending approval (auto-declines in 5m)</p>
           </div>
           <button
             onClick={() => { setStatusFilter('pending'); setPeriodFilter('all'); setStartDate(''); setEndDate(''); }}
-            className="mt-3 w-full py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            className="mt-3 w-full py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
           >
             View Pending Only
           </button>
@@ -460,7 +423,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-indigo-400" /> Today
             </span>
-            <span className="text-[10px] text-slate-500 font-mono">24 Hours</span>
+            <span className="text-[10px] text-slate-500 font-mono">Last 24 Hours</span>
           </div>
           
           <div className="grid grid-cols-2 gap-2 mt-1">
@@ -540,7 +503,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
               <BarChart3 className="w-3.5 h-3.5 text-indigo-400" /> All-Time Records
             </span>
-            <span className="text-[10px] text-slate-500 font-mono">Total Formatted</span>
+            <span className="text-[10px] text-slate-500 font-mono">Total Volume</span>
           </div>
 
           <div className="grid grid-cols-2 gap-2 mt-1">
@@ -572,49 +535,58 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
       </div>
 
-      {/* Recruiter Leaderboard Bar (Tracks who submits the most resumes) */}
+      {/* Recruiter Leaderboard Bar (Showcases top recruiters by total submissions) */}
       {stats.topRecruiters && stats.topRecruiters.length > 0 && (
-        <div className="glassmorphic-card rounded-2xl p-4 border border-cyan-500/20 bg-cyan-950/20 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+        <div className="glassmorphic-card rounded-2xl p-4 md:p-5 border border-cyan-500/25 bg-gradient-to-r from-cyan-950/20 via-slate-900/40 to-indigo-950/20 mb-6 shadow-[0_4px_25px_rgba(6,182,212,0.1)]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5">
             <div className="flex items-center gap-2">
-              <Award className="w-4 h-4 text-cyan-400" />
-              <span className="text-xs font-bold text-cyan-300 uppercase tracking-wider">
-                Recruiter Formatting Leaderboard
-              </span>
-              <span className="text-[10px] text-slate-400">
-                (Click recruiter name to filter candidates)
-              </span>
+              <div className="w-7 h-7 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300">
+                <Award className="w-4 h-4 text-cyan-400" />
+              </div>
+              <div>
+                <span className="text-xs font-extrabold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
+                  Recruiter Formatting Leaderboard
+                </span>
+                <p className="text-[10px] text-slate-400">Click a recruiter to filter candidate records</p>
+              </div>
             </div>
             {recruiterFilter !== 'all' && (
               <button
                 onClick={() => setRecruiterFilter('all')}
-                className="text-[11px] text-cyan-400 hover:text-white underline cursor-pointer"
+                className="flex items-center gap-1 px-3 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/50 text-cyan-200 text-xs font-semibold cursor-pointer transition-all active:scale-95 shadow-sm"
               >
-                Clear Recruiter Filter (Filtering: {recruiterFilter})
+                <span>Filter Active: <strong className="text-white">{recruiterFilter}</strong></span>
+                <X className="w-3.5 h-3.5 ml-1" />
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+          <div className="flex items-center gap-2.5 overflow-x-auto pb-1 scrollbar-thin">
             {stats.topRecruiters.map((r, idx) => {
               const isSelected = recruiterFilter.toLowerCase() === r.name.toLowerCase();
               return (
                 <button
                   key={r.name}
                   onClick={() => setRecruiterFilter(isSelected ? 'all' : r.name)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                     isSelected
-                      ? 'bg-cyan-500/30 border-cyan-400 text-white shadow-[0_0_12px_rgba(6,182,212,0.3)]'
-                      : 'bg-slate-900/60 border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-white'
+                      ? 'bg-cyan-500/30 border-cyan-400 text-white shadow-[0_0_15px_rgba(6,182,212,0.4)] scale-105'
+                      : 'bg-slate-900/70 border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-white hover:bg-slate-850'
                   }`}
                 >
-                  <span className={`w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center ${
-                    idx === 0 ? 'bg-amber-400 text-slate-950' : idx === 1 ? 'bg-slate-300 text-slate-950' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-700 text-slate-300'
+                  <span className={`w-5 h-5 rounded-full text-[11px] font-black flex items-center justify-center shadow-sm ${
+                    idx === 0 
+                      ? 'bg-gradient-to-br from-amber-300 to-amber-500 text-slate-950 font-bold' 
+                      : idx === 1 
+                      ? 'bg-gradient-to-br from-slate-200 to-slate-400 text-slate-950 font-bold' 
+                      : idx === 2 
+                      ? 'bg-gradient-to-br from-amber-600 to-amber-800 text-white font-bold' 
+                      : 'bg-slate-800 text-slate-300 border border-white/10'
                   }`}>
-                    {idx + 1}
+                    {idx === 0 ? '1' : idx === 1 ? '2' : idx === 2 ? '3' : idx + 1}
                   </span>
-                  <span className="font-semibold">{r.name}</span>
-                  <span className="px-1.5 py-0.5 rounded-md bg-white/10 text-[10px] font-mono font-bold text-cyan-300">
+                  <span className="font-bold tracking-tight">{r.name}</span>
+                  <span className="px-2 py-0.5 rounded-md bg-white/10 text-[10.5px] font-mono font-bold text-cyan-300 border border-white/5">
                     {r.total}
                   </span>
                 </button>
@@ -635,12 +607,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                 <User className="w-4 h-4 text-indigo-400" />
                 <span>Candidate Submissions</span>
               </h2>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-slate-300 font-mono font-bold">
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/10 text-slate-200 font-mono font-bold border border-white/10">
                 {filteredCandidates.length} matches
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Status: <span className="text-indigo-300 font-medium capitalize">{statusFilter === 'all' ? 'All' : statusFilter}</span>
+            <p className="text-xs text-slate-400 mt-1">
+              Status: <span className="text-indigo-300 font-medium capitalize">{statusFilter === 'all' ? 'All (Historical)' : statusFilter}</span>
               {' • '}
               Period: <span className="text-indigo-300 font-medium">
                 {startDate && endDate 
@@ -650,7 +622,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               {recruiterFilter !== 'all' && (
                 <>
                   {' • '}
-                  Recruiter: <span className="text-cyan-300 font-medium">{recruiterFilter}</span>
+                  Recruiter: <span className="text-cyan-300 font-bold">{recruiterFilter}</span>
                 </>
               )}
             </p>
@@ -658,13 +630,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
           {/* Search Input */}
           <div className="relative min-w-[260px] md:w-80">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
               placeholder="Search candidate, recruiter or IP..."
-              className="w-full pl-9 pr-8 py-2 bg-slate-900/60 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+              className="w-full pl-10 pr-8 py-2.5 bg-slate-900/70 border border-white/15 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all shadow-inner"
             />
             {searchQuery && (
               <button
@@ -682,14 +654,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
           
           {/* Quick Date Presets */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-slate-500 text-[11px] font-semibold uppercase mr-1 flex items-center gap-1">
+            <span className="text-slate-400 text-[11px] font-bold uppercase mr-1 flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-indigo-400" /> Filter Date:
             </span>
             <button
               onClick={() => handleQuickPreset('today')}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                 startDate === new Date().toISOString().split('T')[0] && endDate === new Date().toISOString().split('T')[0]
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-indigo-600 text-white shadow-[0_0_12px_rgba(99,102,241,0.35)]'
                   : 'bg-white/5 hover:bg-white/10 text-slate-300'
               }`}
             >
@@ -697,27 +669,27 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
             </button>
             <button
               onClick={() => handleQuickPreset('yesterday')}
-              className="px-2.5 py-1 rounded-lg font-semibold bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer"
+              className="px-3 py-1.5 rounded-lg font-semibold bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer"
             >
               Yesterday
             </button>
             <button
               onClick={() => handleQuickPreset('week')}
-              className="px-2.5 py-1 rounded-lg font-semibold bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer"
+              className="px-3 py-1.5 rounded-lg font-semibold bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer"
             >
               Last 7 Days
             </button>
             <button
               onClick={() => handleQuickPreset('month')}
-              className="px-2.5 py-1 rounded-lg font-semibold bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer"
+              className="px-3 py-1.5 rounded-lg font-semibold bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer"
             >
               Last 30 Days
             </button>
             <button
               onClick={() => handleQuickPreset('all')}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                 !startDate && !endDate && periodFilter === 'all'
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-indigo-600 text-white shadow-[0_0_12px_rgba(99,102,241,0.35)]'
                   : 'bg-white/5 hover:bg-white/10 text-slate-300'
               }`}
             >
@@ -727,28 +699,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
           {/* Custom Date Pickers */}
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 bg-slate-900/60 border border-white/10 px-2.5 py-1 rounded-xl">
-              <span className="text-[10px] text-slate-400 uppercase font-mono">From</span>
+            <div className="flex items-center gap-1.5 bg-slate-900/70 border border-white/15 px-3 py-1.5 rounded-xl shadow-inner">
+              <span className="text-[10px] text-slate-400 uppercase font-mono font-bold">From</span>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => { setStartDate(e.target.value); setPeriodFilter('custom'); setCurrentPage(1); }}
-                className="bg-transparent text-white text-xs focus:outline-none [color-scheme:dark]"
+                className="bg-transparent text-white text-xs focus:outline-none [color-scheme:dark] cursor-pointer"
               />
             </div>
-            <div className="flex items-center gap-1.5 bg-slate-900/60 border border-white/10 px-2.5 py-1 rounded-xl">
-              <span className="text-[10px] text-slate-400 uppercase font-mono">To</span>
+            <div className="flex items-center gap-1.5 bg-slate-900/70 border border-white/15 px-3 py-1.5 rounded-xl shadow-inner">
+              <span className="text-[10px] text-slate-400 uppercase font-mono font-bold">To</span>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => { setEndDate(e.target.value); setPeriodFilter('custom'); setCurrentPage(1); }}
-                className="bg-transparent text-white text-xs focus:outline-none [color-scheme:dark]"
+                className="bg-transparent text-white text-xs focus:outline-none [color-scheme:dark] cursor-pointer"
               />
             </div>
             {(startDate || endDate) && (
               <button
                 onClick={() => { setStartDate(''); setEndDate(''); setPeriodFilter('all'); }}
-                className="p-1.5 text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-lg cursor-pointer transition-colors"
                 title="Clear date range"
               >
                 <X className="w-3.5 h-3.5" />
@@ -760,20 +732,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         {/* Status Filter Tabs */}
         <div className="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-white/5 text-xs">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-slate-500 text-[11px] font-semibold uppercase mr-1">Status:</span>
+            <span className="text-slate-400 text-[11px] font-bold uppercase mr-1">Status:</span>
             {(['pending', 'approved', 'rejected', 'all'] as StatusFilter[]).map((st) => (
               <button
                 key={st}
                 onClick={() => { setStatusFilter(st); setCurrentPage(1); }}
-                className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer capitalize text-xs ${
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer capitalize text-xs ${
                   statusFilter === st
                     ? st === 'pending'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
                       : st === 'approved' 
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' 
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-[0_0_12px_rgba(16,185,129,0.25)]' 
                       : st === 'rejected' 
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold' 
-                      : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-bold'
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.25)]' 
+                      : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 shadow-[0_0_12px_rgba(99,102,241,0.25)]'
                     : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
                 }`}
               >
@@ -797,10 +769,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         ) : filteredCandidates.length === 0 ? (
           <div className="text-center py-16 px-4">
             <User className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-            <h3 className="text-base font-bold text-white mb-1">No candidates found</h3>
+            <h3 className="text-base font-bold text-white mb-1">No candidate records found</h3>
             <p className="text-xs text-slate-400 max-w-md mx-auto font-light">
               {statusFilter === 'pending'
-                ? "No pending resumes waiting for approval right now."
+                ? "No pending resumes waiting for approval. (Pending submissions automatically decline after 5 minutes of inactivity)."
                 : searchQuery 
                 ? `No submissions matched "${searchQuery}". Try clearing the search query.` 
                 : `There are no candidate submissions under "${statusFilter}".`}
@@ -808,7 +780,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
             {(statusFilter !== 'pending' || periodFilter !== 'all' || startDate || endDate || recruiterFilter !== 'all' || searchQuery) && (
               <button
                 onClick={() => { setStatusFilter('pending'); setPeriodFilter('all'); setStartDate(''); setEndDate(''); setRecruiterFilter('all'); setSearchQuery(''); }}
-                className="mt-4 px-3 py-1.5 bg-white/10 hover:bg-white/15 rounded-lg text-xs font-semibold text-slate-200 transition-colors cursor-pointer"
+                className="mt-4 px-3.5 py-1.5 bg-white/10 hover:bg-white/15 rounded-lg text-xs font-semibold text-slate-200 transition-colors cursor-pointer"
               >
                 Reset to Pending Submissions
               </button>
@@ -821,41 +793,44 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                 key={candidate.id}
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="py-4 px-2 sm:px-3 hover:bg-white/[0.02] rounded-xl transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 group"
+                className="py-4 px-3 hover:bg-white/[0.025] rounded-xl transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 group"
               >
                 {/* Candidate Info */}
                 <div className="flex items-start sm:items-center gap-3.5">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
                     candidate.status === 'approved'
-                      ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
+                      ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
                       : candidate.status === 'rejected'
-                      ? 'bg-rose-500/10 border-rose-500/25 text-rose-400'
-                      : 'bg-amber-500/10 border-amber-500/25 text-amber-400'
+                      ? 'bg-rose-500/10 border-rose-500/25 text-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.15)]'
+                      : 'bg-amber-500/10 border-amber-500/25 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
                   }`}>
                     <User className="w-5 h-5" />
                   </div>
 
                   <div>
                     {/* Candidate Name & Recruiter Pill */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-white font-bold text-sm tracking-wide">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="text-white font-extrabold text-[14px] tracking-wide">
                         {candidate.candidate_name || 'Candidate Submission'}
                       </span>
                       
                       {/* Recruiter Badge */}
-                      <span className="flex items-center gap-1 text-[11px] font-semibold text-cyan-300 bg-cyan-950/50 px-2 py-0.5 rounded-md border border-cyan-500/30">
-                        <UserCheck className="w-3 h-3 text-cyan-400" />
-                        <span>Recruiter: <strong className="text-cyan-200">{candidate.recruiter_name || 'Direct Recruiter'}</strong></span>
+                      <span className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-300 bg-cyan-950/60 px-2.5 py-0.5 rounded-lg border border-cyan-500/30 shadow-sm">
+                        <UserCheck className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Recruiter: <strong className="text-white">{candidate.recruiter_name || 'Direct Recruiter'}</strong></span>
                       </span>
 
                       {/* Status Tag */}
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
                         candidate.status === 'approved'
-                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
                           : candidate.status === 'rejected'
-                          ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
-                          : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                          ? 'bg-rose-500/15 text-rose-300 border-rose-500/35'
+                          : 'bg-amber-500/15 text-amber-300 border-amber-500/35'
                       }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          candidate.status === 'approved' ? 'bg-emerald-400 animate-pulse' : candidate.status === 'rejected' ? 'bg-rose-400' : 'bg-amber-400 animate-pulse'
+                        }`} />
                         {candidate.status === 'rejected' ? 'Declined' : candidate.status}
                       </span>
                     </div>
@@ -887,32 +862,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                   </div>
                 </div>
 
-                {/* Right Action Controls */}
+                {/* Right Action Controls - Approve/Decline for Pending only. NO DELETE BUTTON anywhere! */}
                 <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
                   {candidate.status === 'pending' && (
                     <>
                       <button
                         onClick={() => handleReject(candidate.id)}
-                        className="px-3.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer active:scale-95"
+                        className="px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer active:scale-95 shadow-sm"
                       >
                         Decline
                       </button>
                       <button
                         onClick={() => handleApprove(candidate.id)}
-                        className="btn-2026-neon px-4 py-1.5 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer active:scale-95"
+                        className="btn-2026-neon px-5 py-2 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer active:scale-95 shadow-[0_0_20px_rgba(16,185,129,0.35)]"
                       >
                         Approve
                       </button>
                     </>
                   )}
-
-                  <button
-                    onClick={() => handleDeleteCandidate(candidate.id)}
-                    className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
-                    title="Delete record"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
                 </div>
               </motion.div>
             ))}
@@ -925,10 +892,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
             <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+              className={`flex items-center gap-1 px-3.5 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
                 currentPage === 1 
                   ? 'border-white/5 text-slate-600 cursor-not-allowed' 
-                  : 'border-white/15 text-slate-200 hover:bg-white/10 cursor-pointer'
+                  : 'border-white/15 text-slate-200 hover:bg-white/10 cursor-pointer active:scale-95'
               }`}
             >
               <ChevronLeft className="w-3.5 h-3.5" /> Previous
@@ -941,10 +908,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
             <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+              className={`flex items-center gap-1 px-3.5 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
                 currentPage === totalPages 
                   ? 'border-white/5 text-slate-600 cursor-not-allowed' 
-                  : 'border-white/15 text-slate-200 hover:bg-white/10 cursor-pointer'
+                  : 'border-white/15 text-slate-200 hover:bg-white/10 cursor-pointer active:scale-95'
               }`}
             >
               Next <ChevronRight className="w-3.5 h-3.5" />

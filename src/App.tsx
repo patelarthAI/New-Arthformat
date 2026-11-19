@@ -83,16 +83,18 @@ const App: React.FC = () => {
   const [ocrText, setOcrText] = useState<string>('');
   const [backendStatus, setBackendStatus] = useState<any>(null);
   
-  // Recruiter identification states (tracks who submits resumes for approval)
-  const [recruiterName, setRecruiterName] = useState<string>(() => {
-    return safeStorage.getItem('recruiter_name') || '';
-  });
+  // Recruiter identification states (always asked per submission, never stored)
   const [showRecruiterModal, setShowRecruiterModal] = useState<boolean>(false);
   const [recruiterInput, setRecruiterInput] = useState<string>('');
   const [recruiterInputError, setRecruiterInputError] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    // Purge any stored recruiter name so it always prompts fresh
+    safeStorage.removeItem('recruiter_name');
+  }, []);
 
   useEffect(() => {
     if (pendingResumeId) {
@@ -189,13 +191,26 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Poll for approval status
+  // Poll for approval status with a hard 5-minute ceiling (stops polling to prevent loading server/DB)
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
 
     if (appState === AppState.WAITING_APPROVAL && pendingResumeId && !showAdmin) {
+      const pollStartTime = Date.now();
+      const MAX_WAIT_MS = 5 * 60 * 1000; // 5 minutes ceiling
       console.log("Polling for approval status for resume:", pendingResumeId);
+
       intervalId = setInterval(async () => {
+        // Enforce hard 5-minute stop so client stops polling and doesn't load Vercel/Firebase
+        if (Date.now() - pollStartTime >= MAX_WAIT_MS) {
+          clearInterval(intervalId);
+          setPendingResumeId(null);
+          safeStorage.removeItem('pendingResumeId');
+          setErrorMsg("Authorization request timed out after 5 minutes and was automatically declined to prevent server load. Please resubmit when your administrator is ready.");
+          setAppState(AppState.ERROR);
+          return;
+        }
+
         try {
           const res = await fetch(`/api/resumes/${pendingResumeId}/status?_t=${Date.now()}`, {
             headers: {
@@ -206,12 +221,10 @@ const App: React.FC = () => {
           });
           if (res.ok) {
             const data = await res.json();
-            console.log("Approval status response:", data);
             if (data.status === 'approved') {
               clearInterval(intervalId);
               setPendingResumeId(null);
               safeStorage.removeItem('pendingResumeId');
-              // Restore content from backend if we lost it due to refresh
               if (!stagedContent && data.content) {
                 setStagedContent(data.content);
               }
@@ -220,10 +233,10 @@ const App: React.FC = () => {
               clearInterval(intervalId);
               setPendingResumeId(null);
               safeStorage.removeItem('pendingResumeId');
-              if (data.content?.auto_rejected) {
-                setErrorMsg("Your resume submission timed out (2 minutes) and was automatically rejected.");
+              if (data.auto_rejected || data.rejection_reason?.includes('Expired')) {
+                setErrorMsg("Your resume submission timed out (5 minutes) and was automatically declined to prevent server load.");
               } else {
-                setErrorMsg("Your resume submission was rejected by the administrator.");
+                setErrorMsg("Your resume submission was declined by the administrator.");
               }
               setAppState(AppState.ERROR);
             }
@@ -231,7 +244,7 @@ const App: React.FC = () => {
         } catch (err) {
           console.error("Error checking resume status:", err);
         }
-      }, 3000); // Check every 3 seconds
+      }, 4000); // 4-second poll interval balances speed with low database load
     }
 
     return () => {
@@ -620,19 +633,20 @@ const App: React.FC = () => {
       setRecruiterInputError("Recruiter Name is required. Submissions cannot proceed without identifying the recruiter.");
       return;
     }
-    safeStorage.setItem('recruiter_name', trimmed);
-    setRecruiterName(trimmed);
+    // Never persist recruiter name in localStorage so every submission asks fresh
     setShowRecruiterModal(false);
+    setRecruiterInput('');
+    setRecruiterInputError('');
     handleSubmitForApproval(trimmed);
   };
 
-  const handleSubmitForApproval = async (overrideRecruiter?: string) => {
+  const handleSubmitForApproval = async (recruiterNameParam?: string) => {
     if (!stagedContent) return;
     
-    // Enforce recruiter identification: "without name it should not proceed"
-    const currentRecruiter = (overrideRecruiter || recruiterName).trim();
+    // Always enforce recruiter identification: "without name it should not proceed"
+    const currentRecruiter = (recruiterNameParam || '').trim();
     if (!currentRecruiter) {
-      setRecruiterInput(recruiterName);
+      setRecruiterInput('');
       setRecruiterInputError('');
       setShowRecruiterModal(true);
       return;
@@ -1200,34 +1214,13 @@ const App: React.FC = () => {
                         className="glassmorphic-card rounded-[24px] p-8 lg:p-10 flex flex-col items-center justify-center text-center w-full min-h-[220px] lg:min-h-[260px]"
                       >
                         <div className="w-full max-w-[600px] mx-auto flex flex-col items-center justify-center flex-1 py-2">
-                          <div className="w-14 h-14 bg-emerald-500/10 rounded-xl flex items-center justify-center mb-5 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+                          <div className="w-14 h-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center mb-5 border border-emerald-500/25 shadow-[0_0_25px_rgba(16,185,129,0.2)]">
                             <CheckCircle className="w-7 h-7 text-emerald-400" />
                           </div>
-                          <h2 className="text-xl font-bold text-white mb-2 font-display">File Successfully Loaded</h2>
-                          <p className="text-slate-400 mb-4 text-xs leading-relaxed max-w-sm">
-                            We've successfully staged <span className="text-indigo-400 font-mono font-medium">"{fileName}"</span>. Ready to extract and reformat with absolute style representation.
+                          <h2 className="text-xl md:text-2xl font-bold text-white mb-2 font-display">Document Ready for Formatting</h2>
+                          <p className="text-slate-400 mb-6 text-xs leading-relaxed max-w-sm">
+                            <span className="text-indigo-400 font-mono font-medium">"{fileName}"</span> is verified. Click below to enter your recruiter name and submit for admin authorization.
                           </p>
-
-                          {/* Recruiter Identifier Display */}
-                          <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 text-xs mb-5 w-full max-w-sm">
-                            <div className="flex items-center gap-1.5 overflow-hidden">
-                              <UserCheck className="w-4 h-4 text-cyan-400 shrink-0" />
-                              <span className="truncate">
-                                Submitting as: <strong className="text-white">{recruiterName.trim() || 'Required before submission'}</strong>
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRecruiterInput(recruiterName);
-                                setRecruiterInputError('');
-                                setShowRecruiterModal(true);
-                              }}
-                              className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 hover:text-white underline cursor-pointer shrink-0"
-                            >
-                              {recruiterName.trim() ? 'Change' : 'Set Name'}
-                            </button>
-                          </div>
                           
                           <div className="flex gap-3 w-full justify-center">
                             <button 
@@ -1237,10 +1230,14 @@ const App: React.FC = () => {
                               Cancel
                             </button>
                             <button 
-                              onClick={() => handleSubmitForApproval()}
-                              className="btn-2026-neon px-6 py-3 text-white font-bold text-[10px] uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                              onClick={() => {
+                                setRecruiterInput('');
+                                setRecruiterInputError('');
+                                setShowRecruiterModal(true);
+                              }}
+                              className="btn-2026-neon px-7 py-3 text-white font-bold text-[10.5px] uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer active:scale-95"
                             >
-                              <ArrowRight className="w-3.5 h-3.5" />
+                              <UserCheck className="w-4 h-4 text-white" />
                               Format Resume
                             </button>
                           </div>
