@@ -509,7 +509,7 @@ export const generateResumePDF = async (
       }
     },
     defaultStyle: {
-      font: customFont ? getStandardPDFFont(customFont) : 'Roboto',
+      font: customFont ? getStandardPDFFont(customFont) : 'Helvetica',
       lineHeight: 1
     }
   };

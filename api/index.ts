@@ -37,7 +37,7 @@ console.log("Express JSON middleware loaded with 50mb limit");
 app.get("/api/health", async (req, res) => {
   const pool = getKeyPool();
   const reqModel = req.query.model as string;
-  const testModels = reqModel ? [reqModel] : ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"];
+  const testModels = reqModel ? [reqModel] : ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-3.5-flash"];
   const modelResults: Record<string, any> = {};
 
   if (req.query.test === "true" && pool.length > 0) {

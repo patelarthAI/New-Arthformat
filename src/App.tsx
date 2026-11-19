@@ -38,8 +38,33 @@ interface StagedContent {
 }
 
 const App: React.FC = () => {
-  const [appState, setAppState] = useState<AppState>(AppState.IDLE);
-  const [fileName, setFileName] = useState<string>('');
+  const [stagedContent, setStagedContent] = useState<StagedContent | null>(() => {
+    try {
+      const saved = safeStorage.getItem('stagedContent');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [pendingResumeId, setPendingResumeId] = useState<string | null>(() => {
+    return safeStorage.getItem('pendingResumeId');
+  });
+  const [appState, setAppState] = useState<AppState>(() => {
+    const pendingId = safeStorage.getItem('pendingResumeId');
+    const savedStaged = safeStorage.getItem('stagedContent');
+    if (pendingId && savedStaged) {
+      return AppState.WAITING_APPROVAL;
+    }
+    return AppState.IDLE;
+  });
+  const [fileName, setFileName] = useState<string>(() => {
+    try {
+      const saved = safeStorage.getItem('stagedContent');
+      return saved ? (JSON.parse(saved).fileName || '') : '';
+    } catch {
+      return '';
+    }
+  });
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [retryCountdown, setRetryCountdown] = useState<number>(0); // 0 = not retrying
@@ -52,12 +77,8 @@ const App: React.FC = () => {
   });
   const [usePro, setUsePro] = useState<boolean>(false);
   const [stats, setStats] = useState(getUsageStats(usePro));
-  const [stagedContent, setStagedContent] = useState<StagedContent | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [ocrText, setOcrText] = useState<string>('');
-  const [pendingResumeId, setPendingResumeId] = useState<string | null>(() => {
-    return safeStorage.getItem('pendingResumeId');
-  });
   const [backendStatus, setBackendStatus] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -69,6 +90,18 @@ const App: React.FC = () => {
       safeStorage.removeItem('pendingResumeId');
     }
   }, [pendingResumeId]);
+
+  useEffect(() => {
+    if (stagedContent) {
+      try {
+        safeStorage.setItem('stagedContent', JSON.stringify(stagedContent));
+      } catch (e) {
+        console.warn("Could not cache stagedContent to storage:", e);
+      }
+    } else {
+      safeStorage.removeItem('stagedContent');
+    }
+  }, [stagedContent]);
 
   useEffect(() => {
     fetch(`/api/health?_t=${Date.now()}`, {
@@ -115,7 +148,12 @@ const App: React.FC = () => {
             pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
             console.log("[Optimization] PDFjs parser and worker preloaded successfully.");
           } catch (workerErr) {
-            console.warn("[Optimization] Failed to preload PDFJS worker:", workerErr);
+            try {
+              const pdfWorkerMin = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+              pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerMin;
+            } catch {
+              pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version || '5.5.207'}/build/pdf.worker.min.mjs`;
+            }
           }
         }).catch(err => {
           console.warn("[Optimization] Failed to preload PDFJS:", err);
@@ -144,7 +182,7 @@ const App: React.FC = () => {
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
 
-    if (appState === AppState.WAITING_APPROVAL && pendingResumeId) {
+    if (appState === AppState.WAITING_APPROVAL && pendingResumeId && !showAdmin) {
       console.log("Polling for approval status for resume:", pendingResumeId);
       intervalId = setInterval(async () => {
         try {
@@ -161,6 +199,7 @@ const App: React.FC = () => {
             if (data.status === 'approved') {
               clearInterval(intervalId);
               setPendingResumeId(null);
+              safeStorage.removeItem('pendingResumeId');
               // Restore content from backend if we lost it due to refresh
               if (!stagedContent && data.content) {
                 setStagedContent(data.content);
@@ -169,6 +208,7 @@ const App: React.FC = () => {
             } else if (data.status === 'rejected') {
               clearInterval(intervalId);
               setPendingResumeId(null);
+              safeStorage.removeItem('pendingResumeId');
               if (data.content?.auto_rejected) {
                 setErrorMsg("Your resume submission timed out (2 minutes) and was automatically rejected.");
               } else {
@@ -186,7 +226,7 @@ const App: React.FC = () => {
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [appState, pendingResumeId]);
+  }, [appState, pendingResumeId, showAdmin]);
 
   const handleCancelProcessing = useCallback(() => {
     if (abortControllerRef.current) {
@@ -356,8 +396,19 @@ const App: React.FC = () => {
         try {
           const arrayBuffer = await file.arrayBuffer();
           const pdfjsLib = await import('pdfjs-dist');
-          const pdfWorker = (await import('pdfjs-dist/build/pdf.worker.mjs?url')).default;
-          pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+          if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+            try {
+              const pdfWorker = (await import('pdfjs-dist/build/pdf.worker.mjs?url')).default;
+              pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+            } catch {
+              try {
+                const pdfWorkerMin = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+                pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerMin;
+              } catch {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version || '5.5.207'}/build/pdf.worker.min.mjs`;
+              }
+            }
+          }
           
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           let fullText = '';

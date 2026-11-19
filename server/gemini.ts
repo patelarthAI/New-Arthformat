@@ -132,20 +132,23 @@ export const getKeyPool = (): string[] => {
 
 // Standard (free-tier) model pool — tried in priority order
 const FALLBACK_MODELS = [
-  "gemini-3.5-flash-lite",  // 🟢 PRIMARY: 500 RPD, 15 RPM, 100% healthy on all keys
-  "gemini-3.6-flash",       // 🟢 FULL FLASH: Verified healthy across keys
-  "gemini-3.1-flash-lite",  // ⚡ ULTRA-FAST: 500 RPD, ~400ms latency
-  "gemini-3.8-flash",       // 🟡 State-of-the-art: 20 RPD cap (resets daily)
-  "gemini-3.5-flash",       // 🟡 20 RPD cap (resets daily)
+  "gemini-2.5-flash",       // 🟢 HIGH RELIABILITY: Fast, resilient & high quality
+  "gemini-2.0-flash",       // 🟢 HIGH SPEED: Low latency
+  "gemini-1.5-flash",       // 🟢 STABLE FALLBACK: Proven broad availability
+  "gemini-3.5-flash",       // 🟡 Active preview tier
+  "gemini-3.8-flash",       // 🟡 State-of-the-art
+  "gemini-3.5-flash-lite",  // ⚡ Lightweight
+  "gemini-3.1-flash-lite",  // ⚡ Ultra-fast
 ];
 
 // Pro model pool — enables deep reasoning when requested
 const PRO_MODELS = [
-  "gemini-3.5-flash-lite",  // 🟢 PRIMARY
-  "gemini-3.6-flash",       // 🟢 FULL FLASH
-  "gemini-3.1-flash-lite",  // ⚡ ULTRA-FAST
+  "gemini-2.5-pro",         // 🧠 REASONING: Top-tier precision
+  "gemini-2.5-flash",       // 🟢 HIGH RELIABILITY
+  "gemini-2.0-flash",       // 🟢 HIGH SPEED
   "gemini-3.8-flash",       // 🟡 BACKUP
-  "gemini-3.1-pro-preview", // 🧠 REASONING: Complex JD matching & restructuring
+  "gemini-3.1-pro-preview", // 🧠 REASONING
+  "gemini-3.5-flash",       // 🟡 BACKUP
 ];
 
 // In-memory extraction cache to preserve free quota across repeated user clicks
@@ -215,7 +218,7 @@ async function withModelFallback<T>(
         const result = await Promise.race([
           operation(modelId, apiKey),
           new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error(`MODEL_TIMEOUT: ${modelId} exceeded 12s`)), 12000)
+            setTimeout(() => reject(new Error(`MODEL_TIMEOUT: ${modelId} exceeded 30s`)), 30000)
           )
         ]);
 
@@ -712,7 +715,7 @@ CRITICAL MANDATORY RULES:
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "qwen/qwen3.8-27b",
+        model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Extract this resume verbatim:\n\n${text}` }
@@ -794,7 +797,7 @@ CRITICAL RULES:
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "qwen/qwen3.8-27b",
+        model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `USER INSTRUCTIONS:\n${instruction}${jobContext}\n\nORIGINAL DATA:\n${JSON.stringify(data)}` }
@@ -841,7 +844,7 @@ CRITICAL RULES:
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "qwen/qwen3.8-27b",
+        model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Correct spelling and grammar in this JSON resume data:\n\n${JSON.stringify(data)}` }
@@ -901,7 +904,7 @@ No markdown backticks, no conversation.`;
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "qwen/qwen3.8-27b",
+        model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Audit this resume data:\n\n${JSON.stringify(data)}` }
@@ -947,7 +950,7 @@ Return ONLY valid JSON with this format: { "suggestions": ["option 1", "option 2
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "qwen/qwen3.8-27b",
+        model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Instruction: "${instruction}"\n\nOriginal Text: "${text}"` }
@@ -1722,43 +1725,117 @@ export const rewritePhraseBackend = async (
   }
 };
 
+export const performOcrWithGroq = async (
+  base64: string,
+  mimeType: string,
+  apiKey: string
+): Promise<string> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+  // Normalise image MIME type for Groq Vision
+  const effectiveMime = mimeType === 'application/pdf' ? 'image/jpeg' : mimeType;
+
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey.trim()}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "llama-3.2-11b-vision-preview",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Perform high-fidelity OCR on this resume or document image. Extract all text content verbatim, preserving the order, layout, headings, and bullet points. Do not omit, summarize, or alter any details. Do not add any introductory or concluding remarks, just return the extracted text."
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:${effectiveMime};base64,${base64}`
+                }
+              }
+            ]
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 8192
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Groq Vision returned HTTP ${res.status}: ${errText.slice(0, 100)}`);
+    }
+
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || "";
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 export const performOcrBackend = async (
   base64: string,
   mimeType: string,
   usePro: boolean = false
 ): Promise<string> => {
-  return withModelFallback(async (modelId, apiKey) => {
-    const ai = new GoogleGenAI({ 
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
-      }
-    });
-
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              data: base64,
-              mimeType: mimeType,
-            },
-          },
-          {
-            text: "Perform high-fidelity OCR on this resume or document image. Extract all text content verbatim, preserving the order, layout, headings, and bullet points. Do not omit, summarize, or alter any details. Do not add any introductory or concluding remarks, just return the extracted text.",
+  try {
+    return await withModelFallback(async (modelId, apiKey) => {
+      const ai = new GoogleGenAI({ 
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
           }
-        ]
-      },
-      config: {
-        maxOutputTokens: 8192,
-        temperature: 0.1,
-      }
-    });
+        }
+      });
 
-    return response.text || "";
-  }, "OCR", usePro);
+      const response = await ai.models.generateContent({
+        model: modelId,
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                data: base64,
+                mimeType: mimeType,
+              },
+            },
+            {
+              text: "Perform high-fidelity OCR on this resume or document image. Extract all text content verbatim, preserving the order, layout, headings, and bullet points. Do not omit, summarize, or alter any details. Do not add any introductory or concluding remarks, just return the extracted text.",
+            }
+          ]
+        },
+        config: {
+          maxOutputTokens: 8192,
+          temperature: 0.1,
+        }
+      });
+
+      return response.text || "";
+    }, "OCR", usePro);
+  } catch (geminiError: any) {
+    const groqKey = getGroqApiKey();
+    if (groqKey) {
+      console.warn(`[performOcr] Gemini OCR failed (${geminiError.message}). Initiating Groq Vision failover...`);
+      try {
+        const ocrText = await performOcrWithGroq(base64, mimeType, groqKey);
+        if (ocrText && ocrText.trim().length > 10) {
+          console.log("[performOcr] Groq Vision successfully completed OCR.");
+          return ocrText;
+        }
+      } catch (groqErr: any) {
+        console.error("[performOcr] Groq Vision OCR error:", groqErr.message);
+      }
+    }
+    throw geminiError;
+  }
 };
 

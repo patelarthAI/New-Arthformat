@@ -191,37 +191,41 @@ export const performAutoCleanup = async () => {
 
     console.log(`[Firebase Auto-Cleanup] Starting cleanup routine. Threshold date (24h): ${thresholdISO}`);
 
-    // 1. Delete resumes older than 24 hours
+    // 1. Delete resumes older than 24 hours (filter in-memory to prevent requiring composite index)
     const resumesCol = collection(dbInstance, 'resumes');
     const oldResumesQuery = query(
       resumesCol, 
-      where('system_secret', '==', SYSTEM_SECRET),
-      where('created_at', '<', thresholdISO)
+      where('system_secret', '==', SYSTEM_SECRET)
     );
     const oldResumesSnap = await getDocs(oldResumesQuery);
     
     let deletedCount = 0;
     for (const d of oldResumesSnap.docs) {
-      await deleteDoc(d.ref);
-      deletedCount++;
+      const createdAt = d.data().created_at;
+      if (createdAt && createdAt < thresholdISO) {
+        await deleteDoc(d.ref);
+        deletedCount++;
+      }
     }
     if (deletedCount > 0) {
       console.log(`[Firebase Auto-Cleanup] Deleted ${deletedCount} resumes older than 24 hours.`);
     }
 
-    // 2. Delete activity logs older than 24 hours
+    // 2. Delete activity logs older than 24 hours (filter in-memory to prevent requiring composite index)
     const logsCol = collection(dbInstance, 'activity_logs');
     const oldLogsQuery = query(
       logsCol, 
-      where('system_secret', '==', SYSTEM_SECRET),
-      where('created_at', '<', thresholdISO)
+      where('system_secret', '==', SYSTEM_SECRET)
     );
     const oldLogsSnap = await getDocs(oldLogsQuery);
     
     let deletedLogsCount = 0;
     for (const d of oldLogsSnap.docs) {
-      await deleteDoc(d.ref);
-      deletedLogsCount++;
+      const createdAt = d.data().created_at;
+      if (createdAt && createdAt < thresholdISO) {
+        await deleteDoc(d.ref);
+        deletedLogsCount++;
+      }
     }
     if (deletedLogsCount > 0) {
       console.log(`[Firebase Auto-Cleanup] Deleted ${deletedLogsCount} activity logs older than 24 hours.`);

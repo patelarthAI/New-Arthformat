@@ -19,8 +19,12 @@ import {
   getUsageStatsBackend,
   updateResumeBackend,
   rewritePhraseBackend,
-  performOcrBackend
+  performOcrBackend,
+  getKeyPool,
+  getGroqApiKey,
+  getHuggingFaceApiKey
 } from "./server/gemini";
+import { GoogleGenAI } from "@google/genai";
 
 const app = express();
 const PORT = 3000;
@@ -31,14 +35,58 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 console.log("Express JSON middleware loaded with 50mb limit");
 
-// Health check
-app.get("/api/health", (req, res) => {
+// Health check and model connectivity diagnostic
+app.get("/api/health", async (req, res) => {
+  const pool = getKeyPool();
+  const reqModel = req.query.model as string;
+  const testModels = reqModel ? [reqModel] : ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-3.5-flash"];
+  const modelResults: Record<string, any> = {};
+
+  if (req.query.test === "true" && pool.length > 0) {
+    await Promise.all(pool.map(async (apiKey, k) => {
+      const keyLabel = `Key_${k + 1}`;
+      modelResults[keyLabel] = {};
+      const ai = new GoogleGenAI({ apiKey });
+      for (const m of testModels) {
+        try {
+          const resp = await ai.models.generateContent({
+            model: m,
+            contents: "hi",
+            config: { maxOutputTokens: 5 }
+          });
+          modelResults[keyLabel][m] = "OK: " + (resp.text || "").trim().slice(0, 30);
+        } catch (err: any) {
+          const errMsg = err.message || err.toString();
+          if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+            modelResults[keyLabel][m] = "RATE_LIMITED_TODAY";
+          } else if (errMsg.includes("API key not valid")) {
+            modelResults[keyLabel][m] = "INVALID_API_KEY";
+          } else {
+            modelResults[keyLabel][m] = errMsg.slice(0, 100);
+          }
+        }
+      }
+    }));
+  }
+
   res.json({ 
     status: "ok", 
     env: process.env.NODE_ENV,
-    hasApiKey: !!(process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY)
+    keyCount: pool.length,
+    hasApiKey: pool.length > 0,
+    hasGroqKey: !!getGroqApiKey(),
+    hasHfKey: !!getHuggingFaceApiKey(),
+    ...(req.query.test === "true" ? { results: modelResults } : {})
   });
 });
+
+// Helper for consistent Gemini error responses
+const handleGeminiError = (res: express.Response, endpoint: string, err: any, defaultMsg: string) => {
+  console.error(`Error in ${endpoint}:`, err);
+  const errMsg = err?.message || String(err) || defaultMsg;
+  const isRateLimit = errMsg.startsWith("RATE_LIMITED:") || err?.status === 429 || errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED");
+  res.status(isRateLimit ? 429 : 500).json({ error: errMsg });
+};
 
 // Gemini API proxies
 app.post("/api/gemini/extract", async (req, res) => {
@@ -47,8 +95,7 @@ app.post("/api/gemini/extract", async (req, res) => {
     const data = await extractResumeDataBackend(payload, usePro);
     res.json(data);
   } catch (err: any) {
-    console.error("Error in /api/gemini/extract:", err);
-    res.status(500).json({ error: err.message || "Failed to extract resume data" });
+    handleGeminiError(res, "/api/gemini/extract", err, "Failed to extract resume data");
   }
 });
 
@@ -58,8 +105,7 @@ app.post("/api/gemini/analyze-grammar", async (req, res) => {
     const issues = await analyzeGrammarBackend(data, format, usePro);
     res.json(issues);
   } catch (err: any) {
-    console.error("Error in /api/gemini/analyze-grammar:", err);
-    res.status(500).json({ error: err.message || "Failed to analyze grammar" });
+    handleGeminiError(res, "/api/gemini/analyze-grammar", err, "Failed to analyze grammar");
   }
 });
 
@@ -69,8 +115,7 @@ app.post("/api/gemini/check-spelling", async (req, res) => {
     const corrected = await checkSpellingBackend(data, format, usePro);
     res.json(corrected);
   } catch (err: any) {
-    console.error("Error in /api/gemini/check-spelling:", err);
-    res.status(500).json({ error: err.message || "Failed to check spelling" });
+    handleGeminiError(res, "/api/gemini/check-spelling", err, "Failed to check spelling");
   }
 });
 
@@ -80,8 +125,7 @@ app.post("/api/gemini/update-resume", async (req, res) => {
     const updated = await updateResumeBackend(data, instruction, targetJobDescription, format, usePro);
     res.json(updated);
   } catch (err: any) {
-    console.error("Error in /api/gemini/update-resume:", err);
-    res.status(500).json({ error: err.message || "Failed to update resume data" });
+    handleGeminiError(res, "/api/gemini/update-resume", err, "Failed to update resume data");
   }
 });
 
@@ -91,8 +135,7 @@ app.post("/api/gemini/rewrite-phrase", async (req, res) => {
     const suggestions = await rewritePhraseBackend(text, instruction, usePro);
     res.json(suggestions);
   } catch (err: any) {
-    console.error("Error in /api/gemini/rewrite-phrase:", err);
-    res.status(500).json({ error: err.message || "Failed to rewrite phrase" });
+    handleGeminiError(res, "/api/gemini/rewrite-phrase", err, "Failed to rewrite phrase");
   }
 });
 
@@ -878,6 +921,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 async function startDevServer() {
   if (!process.env.VERCEL) {
+    let viteLoaded = false;
     // Vite middleware for development
     if (process.env.NODE_ENV !== "production") {
       try {
@@ -888,12 +932,15 @@ async function startDevServer() {
           appType: "spa",
         });
         app.use(vite.middlewares);
+        viteLoaded = true;
         console.log("Vite middleware loaded successfully");
       } catch (e) {
-        console.error("Failed to load Vite middleware:", e);
+        console.error("Failed to load Vite middleware, falling back to dist:", e);
       }
-    } else {
-      // Serve static files in production
+    }
+    
+    if (!viteLoaded) {
+      // Serve static files in production or as fallback
       app.use(express.static(path.join(process.cwd(), "dist")));
       app.get("*all", (req, res) => {
         res.sendFile(path.join(process.cwd(), "dist", "index.html"));

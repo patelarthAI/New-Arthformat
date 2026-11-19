@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckCircle, 
@@ -73,6 +73,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     declined: { today: 0, week: 0, month: 0, allTime: 0 }
   });
 
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const handleLoginSuccess = (password: string) => {
     safeStorage.setItem('adminPassword', password);
     setAdminPassword(password);
@@ -92,7 +100,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
           'Cache-Control': 'no-cache, no-store, must-revalidate'
         }
       });
-      if (response.ok) {
+      if (response.ok && isMountedRef.current) {
         const data = await response.json();
         setStats({
           pendingCount: data.pendingCount || 0,
@@ -118,8 +126,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const fetchCandidates = async () => {
     if (!adminPassword) return;
     try {
-      setLoading(true);
-      setError(null);
+      if (isMountedRef.current) {
+        setLoading(true);
+        setError(null);
+      }
       
       const queryParams = new URLSearchParams();
       if (statusFilter !== 'all') queryParams.append('status', statusFilter);
@@ -142,12 +152,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
       }
 
       const data = await response.json();
-      setCandidates(data.resumes || []);
-      fetchStats().catch(console.error);
+      if (isMountedRef.current) {
+        setCandidates(data.resumes || []);
+        fetchStats().catch(console.error);
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to load candidates');
+      if (isMountedRef.current) {
+        setError(err.message || 'Failed to load candidates');
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
