@@ -283,11 +283,15 @@ const getDeviceInfoFromUA = (ua: string): string => {
 // API Route for submitting a resume (STRICT ZERO-RESUME-STORAGE: stores lightweight candidate metadata only, NEVER resume body)
 app.post("/api/submit", async (req, res) => {
   try {
-    const { content, userId, candidateName: inputName, fileName: inputFileName } = req.body;
+    const { content, userId, candidateName: inputName, fileName: inputFileName, recruiterName: inputRecruiter } = req.body;
     
     if (!content && !inputName && !inputFileName) {
       return res.status(400).json({ error: "Submission metadata is required" });
     }
+
+    const recruiterName = typeof inputRecruiter === 'string' && inputRecruiter.trim().length > 0
+      ? inputRecruiter.trim().slice(0, 80)
+      : 'Direct Recruiter';
 
     const uid = typeof userId === 'string' && userId.trim().length > 0 ? userId.trim() : null;
     
@@ -332,6 +336,7 @@ app.post("/api/submit", async (req, res) => {
         const insertData: any = {
           id: resumeRef.id,
           candidate_name: candidateName,
+          recruiter_name: recruiterName,
           status: 'pending',
           ip_address: ip,
           device_info: deviceInfo,
@@ -348,7 +353,7 @@ app.post("/api/submit", async (req, res) => {
         const logData: any = {
           id: logRef.id,
           action: 'resume_submitted',
-          details: { resume_id: resumeRef.id, candidate_name: candidateName },
+          details: { resume_id: resumeRef.id, candidate_name: candidateName, recruiter_name: recruiterName },
           ip_address: ip,
           device_info: deviceInfo,
           created_at: new Date().toISOString()
@@ -371,6 +376,7 @@ app.post("/api/submit", async (req, res) => {
           id: resumeId, 
           user_id: uid, 
           candidate_name: candidateName,
+          recruiter_name: recruiterName,
           status: 'pending', 
           ip_address: ip, 
           device_info: deviceInfo, 
@@ -393,6 +399,7 @@ app.post("/api/submit", async (req, res) => {
         id: resumeId, 
         user_id: uid, 
         candidate_name: candidateName,
+        recruiter_name: recruiterName,
         status: 'pending', 
         ip_address: ip, 
         device_info: deviceInfo, 
@@ -436,12 +443,13 @@ app.post("/api/admin/verify", (req, res) => {
   }
 });
 
-// API Route for fetching resumes (Admin Dashboard - supports status & period filtering)
+// API Route for fetching resumes (Admin Dashboard - supports status, recruiter, date range & period filtering)
 app.get("/api/resumes", checkAdmin, async (req, res) => {
   try {
-    const { status, period } = req.query;
+    const { status, period, startDate, endDate, recruiter } = req.query;
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
     const weekStart = now.getTime() - 7 * 24 * 60 * 60 * 1000;
     const monthStart = now.getTime() - 30 * 24 * 60 * 60 * 1000;
     
@@ -468,9 +476,11 @@ app.get("/api/resumes", checkAdmin, async (req, res) => {
     let records = rawList.map(r => {
       let curStatus = (r.rejected || r.content?.rejected || r.status === 'rejected') ? 'rejected' : (r.status || 'pending');
       const candidateName = r.candidate_name || r.content?.name || r.name || 'Candidate Submission';
+      const recruiterName = r.recruiter_name || r.recruiterName || r.content?.recruiterName || 'Direct Recruiter';
       return {
         id: r.id,
         candidate_name: candidateName,
+        recruiter_name: recruiterName,
         status: curStatus,
         ip_address: r.ip_address || 'Unknown IP',
         device_info: r.device_info || '',
@@ -485,21 +495,45 @@ app.get("/api/resumes", checkAdmin, async (req, res) => {
       records = records.filter(r => r.status === status);
     }
 
-    // 2. Period Filter
-    if (period && period !== 'all' && typeof period === 'string') {
-      records = records.filter(r => {
-        let tsStr = r.created_at;
-        if (r.status === 'approved' && r.approved_at) tsStr = r.approved_at;
-        else if (r.status === 'rejected' && r.rejected_at) tsStr = r.rejected_at;
-        const time = tsStr ? new Date(tsStr).getTime() : 0;
+    // 2. Date Range & Period Filter
+    records = records.filter(r => {
+      let tsStr = r.created_at;
+      if (r.status === 'approved' && r.approved_at) tsStr = r.approved_at;
+      else if (r.status === 'rejected' && r.rejected_at) tsStr = r.rejected_at;
+      const time = tsStr ? new Date(tsStr).getTime() : 0;
+
+      // Custom Start Date filter
+      if (startDate && typeof startDate === 'string') {
+        const startTs = new Date(startDate).getTime();
+        if (!isNaN(startTs) && time < startTs) return false;
+      }
+
+      // Custom End Date filter (inclusive to end of day)
+      if (endDate && typeof endDate === 'string') {
+        const endObj = new Date(endDate);
+        endObj.setHours(23, 59, 59, 999);
+        const endTs = endObj.getTime();
+        if (!isNaN(endTs) && time > endTs) return false;
+      }
+
+      // Preset Period Filter
+      if (period && period !== 'all' && typeof period === 'string') {
         if (period === 'day') return time >= todayStart;
+        if (period === 'yesterday') return time >= yesterdayStart && time < todayStart;
         if (period === 'week') return time >= weekStart;
         if (period === 'month') return time >= monthStart;
-        return true;
-      });
+      }
+
+      return true;
+    });
+
+    // 3. Recruiter Filter (if requested)
+    if (recruiter && typeof recruiter === 'string' && recruiter.trim() !== '' && recruiter !== 'all') {
+      const q = recruiter.toLowerCase().trim();
+      records = records.filter(r => (r.recruiter_name || '').toLowerCase().includes(q));
     }
 
-    // 3. Sort by most recent timestamp descending
+    // 4. Sort by most recent timestamp descending
     records.sort((a, b) => {
       const tA = new Date(a.approved_at || a.rejected_at || a.created_at).getTime();
       const tB = new Date(b.approved_at || b.rejected_at || b.created_at).getTime();
@@ -508,6 +542,7 @@ app.get("/api/resumes", checkAdmin, async (req, res) => {
 
     res.status(200).json({ 
       resumes: records, 
+      totalCount: records.length,
       usingDatabase, 
       dbError: dbErrorMsg, 
       projectId: firebaseConfig.projectId 
@@ -699,24 +734,37 @@ app.get("/api/admin/stats", checkAdmin, async (req, res) => {
       rawList = inMemoryResumes;
     }
 
+    const recruiterMap: Record<string, { name: string; total: number; approved: number; pending: number; rejected: number }> = {};
+
     rawList.forEach((r: any) => {
       const curStatus = (r.rejected || r.content?.rejected || r.status === 'rejected') ? 'rejected' : (r.status || 'pending');
+      const recName = (r.recruiter_name || r.recruiterName || r.content?.recruiterName || 'Direct Recruiter').trim();
+      if (!recruiterMap[recName]) {
+        recruiterMap[recName] = { name: recName, total: 0, approved: 0, pending: 0, rejected: 0 };
+      }
+      recruiterMap[recName].total++;
+
       if (curStatus === 'pending') {
         pendingCount++;
+        recruiterMap[recName].pending++;
       } else if (curStatus === 'approved') {
         approvedAllTime++;
+        recruiterMap[recName].approved++;
         const ts = r.approved_at ? new Date(r.approved_at).getTime() : (r.created_at ? new Date(r.created_at).getTime() : 0);
         if (ts >= todayStart) approvedToday++;
         if (ts >= weekStart) approvedWeek++;
         if (ts >= monthStart) approvedMonth++;
       } else if (curStatus === 'rejected') {
         declinedAllTime++;
+        recruiterMap[recName].rejected++;
         const ts = r.rejected_at ? new Date(r.rejected_at).getTime() : (r.created_at ? new Date(r.created_at).getTime() : 0);
         if (ts >= todayStart) declinedToday++;
         if (ts >= weekStart) declinedWeek++;
         if (ts >= monthStart) declinedMonth++;
       }
     });
+
+    const topRecruiters = Object.values(recruiterMap).sort((a, b) => b.total - a.total);
 
     res.json({
       pendingCount,
@@ -732,6 +780,7 @@ app.get("/api/admin/stats", checkAdmin, async (req, res) => {
         month: declinedMonth,
         allTime: declinedAllTime
       },
+      topRecruiters,
       // Backward compatibility aliases
       approvedCount: approvedAllTime,
       rejectedCount: declinedAllTime,

@@ -5,6 +5,7 @@ import {
   XCircle, 
   Clock, 
   User, 
+  UserCheck,
   Search, 
   RefreshCw, 
   Trash2, 
@@ -12,8 +13,12 @@ import {
   Calendar, 
   AlertTriangle,
   Filter,
-  Check,
-  X
+  Check, 
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Award,
+  BarChart3
 } from 'lucide-react';
 import Login from './Login';
 import { safeStorage } from '@/utils/safeStorage';
@@ -21,12 +26,21 @@ import { safeStorage } from '@/utils/safeStorage';
 export interface CandidateRecord {
   id: string;
   candidate_name: string;
+  recruiter_name?: string;
   status: 'pending' | 'approved' | 'rejected';
   ip_address: string;
   device_info?: string;
   created_at: string;
   approved_at?: string | null;
   rejected_at?: string | null;
+}
+
+export interface RecruiterStat {
+  name: string;
+  total: number;
+  approved: number;
+  pending: number;
+  rejected: number;
 }
 
 export interface DashboardStats {
@@ -43,14 +57,17 @@ export interface DashboardStats {
     month: number;
     allTime: number;
   };
+  topRecruiters?: RecruiterStat[];
 }
 
-export type TimePeriod = 'all' | 'day' | 'week' | 'month';
+export type TimePeriod = 'all' | 'day' | 'week' | 'month' | 'custom';
 export type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
 
 interface AdminDashboardProps {
   onClose?: () => void;
 }
+
+const PAGE_SIZE = 20;
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [adminPassword, setAdminPassword] = useState<string | null>(() => {
@@ -61,16 +78,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Filters
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  // Default to 'pending' as requested: only pending resumes show while approving
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
   const [periodFilter, setPeriodFilter] = useState<TimePeriod>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [recruiterFilter, setRecruiterFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Pagination to prevent Chrome DOM freeze
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Stats
   const [stats, setStats] = useState<DashboardStats>({
     pendingCount: 0,
     approved: { today: 0, week: 0, month: 0, allTime: 0 },
-    declined: { today: 0, week: 0, month: 0, allTime: 0 }
+    declined: { today: 0, week: 0, month: 0, allTime: 0 },
+    topRecruiters: []
   });
 
   const isMountedRef = useRef(true);
@@ -115,7 +139,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
             week: data.declined?.week || 0,
             month: data.declined?.month || 0,
             allTime: data.declined?.allTime ?? (data.rejectedCount || 0)
-          }
+          },
+          topRecruiters: data.topRecruiters || []
         });
       }
     } catch (err) {
@@ -133,7 +158,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
       
       const queryParams = new URLSearchParams();
       if (statusFilter !== 'all') queryParams.append('status', statusFilter);
-      if (periodFilter !== 'all') queryParams.append('period', periodFilter);
+      if (periodFilter !== 'all' && periodFilter !== 'custom') queryParams.append('period', periodFilter);
+      if (startDate) queryParams.append('startDate', startDate);
+      if (endDate) queryParams.append('endDate', endDate);
+      if (recruiterFilter !== 'all') queryParams.append('recruiter', recruiterFilter);
       queryParams.append('_t', Date.now().toString());
 
       const response = await fetch(`/api/resumes?${queryParams.toString()}`, {
@@ -154,6 +182,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
       const data = await response.json();
       if (isMountedRef.current) {
         setCandidates(data.resumes || []);
+        setCurrentPage(1); // Reset to page 1 on new query
         fetchStats().catch(console.error);
       }
     } catch (err: any) {
@@ -173,7 +202,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     } else {
       setLoading(false);
     }
-  }, [adminPassword, statusFilter, periodFilter]);
+  }, [adminPassword, statusFilter, periodFilter, startDate, endDate, recruiterFilter]);
 
   const handleApprove = async (candidateId: string) => {
     if (!adminPassword) return;
@@ -257,21 +286,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     }
   };
 
-  // Filter candidates by client search term (candidate name or IP address)
+  // Filter candidates by client search term (candidate name, recruiter name, or IP address)
   const filteredCandidates = useMemo(() => {
     if (!searchQuery.trim()) return candidates;
     const query = searchQuery.toLowerCase().trim();
     return candidates.filter(c => 
       (c.candidate_name && c.candidate_name.toLowerCase().includes(query)) ||
+      (c.recruiter_name && c.recruiter_name.toLowerCase().includes(query)) ||
       (c.ip_address && c.ip_address.toLowerCase().includes(query)) ||
       (c.device_info && c.device_info.toLowerCase().includes(query))
     );
   }, [candidates, searchQuery]);
 
+  // Paginated candidates to prevent DOM overload and browser freeze
+  const totalPages = Math.ceil(filteredCandidates.length / PAGE_SIZE) || 1;
+  const paginatedCandidates = useMemo(() => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    return filteredCandidates.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredCandidates, currentPage]);
+
   // Click card helper: select period & status
   const selectMetric = (period: TimePeriod, status: StatusFilter) => {
     setPeriodFilter(period);
     setStatusFilter(status);
+    setStartDate('');
+    setEndDate('');
+    setCurrentPage(1);
   };
 
   // Format date helper
@@ -291,6 +331,38 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     }
   };
 
+  // Quick preset helper
+  const handleQuickPreset = (preset: 'today' | 'yesterday' | 'week' | 'month' | 'all') => {
+    const now = new Date();
+    setCurrentPage(1);
+    if (preset === 'today') {
+      const todayStr = now.toISOString().split('T')[0];
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+      setPeriodFilter('custom');
+    } else if (preset === 'yesterday') {
+      const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const yStr = y.toISOString().split('T')[0];
+      setStartDate(yStr);
+      setEndDate(yStr);
+      setPeriodFilter('custom');
+    } else if (preset === 'week') {
+      const w = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      setStartDate(w.toISOString().split('T')[0]);
+      setEndDate(now.toISOString().split('T')[0]);
+      setPeriodFilter('custom');
+    } else if (preset === 'month') {
+      const m = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      setStartDate(m.toISOString().split('T')[0]);
+      setEndDate(now.toISOString().split('T')[0]);
+      setPeriodFilter('custom');
+    } else {
+      setStartDate('');
+      setEndDate('');
+      setPeriodFilter('all');
+    }
+  };
+
   if (!adminPassword) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
@@ -299,13 +371,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     <div className="w-full max-w-7xl mx-auto p-4 md:p-6 text-slate-100 font-sans">
       
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-5 border-b border-white/10">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-5 border-b border-white/10">
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5 font-display">
             Admin Dashboard
           </h1>
           <p className="text-slate-400 text-xs mt-1">
-            Real-time candidate approval & decline tracking
+            Real-time candidate approval & recruiter formatting tracker
           </p>
         </div>
 
@@ -353,22 +425,48 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         </div>
       )}
 
-      {/* Analytics Metric Cards: Day, Week, Month & All-Time */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* Top Metrics Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         
+        {/* Pending Review Card (Primary focus when approving) */}
+        <div className={`glassmorphic-card rounded-2xl p-5 border transition-all flex flex-col justify-between ${
+          statusFilter === 'pending'
+            ? 'border-amber-500/50 bg-amber-500/[0.08] shadow-[0_0_20px_rgba(245,158,11,0.15)]'
+            : 'border-white/[0.06] bg-white/[0.015]'
+        }`}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Clock className="w-4 h-4 text-amber-400 animate-pulse" /> Pending Approvals
+            </span>
+            <span className="text-[10px] text-amber-400/80 font-mono font-bold bg-amber-500/20 px-2 py-0.5 rounded-full">
+              Action Required
+            </span>
+          </div>
+          <div className="mt-2">
+            <div className="text-3xl font-black text-amber-300">{stats.pendingCount}</div>
+            <p className="text-[11px] text-slate-400 mt-1">Resumes awaiting review</p>
+          </div>
+          <button
+            onClick={() => { setStatusFilter('pending'); setPeriodFilter('all'); setStartDate(''); setEndDate(''); }}
+            className="mt-3 w-full py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer"
+          >
+            View Pending Only
+          </button>
+        </div>
+
         {/* Today Card */}
         <div className="glassmorphic-card rounded-2xl p-5 border border-white/[0.06] bg-white/[0.015] flex flex-col justify-between">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-indigo-400" /> Today
             </span>
-            <span className="text-[10px] text-slate-500 font-mono">Day Count</span>
+            <span className="text-[10px] text-slate-500 font-mono">24 Hours</span>
           </div>
           
           <div className="grid grid-cols-2 gap-2 mt-1">
             <button
               onClick={() => selectMetric('day', 'approved')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                 periodFilter === 'day' && statusFilter === 'approved'
                   ? 'bg-emerald-500/20 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
                   : 'bg-emerald-500/5 border-emerald-500/15 hover:bg-emerald-500/10'
@@ -377,13 +475,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
                 <Check className="w-3 h-3" /> Approved
               </div>
-              <div className="text-2xl font-black text-emerald-300 mt-1">{stats.approved.today}</div>
-              <div className="text-[9px] text-emerald-400/60 mt-0.5">Click to view</div>
+              <div className="text-xl font-black text-emerald-300 mt-1">{stats.approved.today}</div>
             </button>
 
             <button
               onClick={() => selectMetric('day', 'rejected')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                 periodFilter === 'day' && statusFilter === 'rejected'
                   ? 'bg-rose-500/20 border-rose-500/50 shadow-[0_0_15px_rgba(244,63,94,0.2)]'
                   : 'bg-rose-500/5 border-rose-500/15 hover:bg-rose-500/10'
@@ -392,8 +489,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               <div className="text-[10px] font-semibold text-rose-400 uppercase tracking-wider flex items-center gap-1">
                 <X className="w-3 h-3" /> Declined
               </div>
-              <div className="text-2xl font-black text-rose-300 mt-1">{stats.declined.today}</div>
-              <div className="text-[9px] text-rose-400/60 mt-0.5">Click to view</div>
+              <div className="text-xl font-black text-rose-300 mt-1">{stats.declined.today}</div>
             </button>
           </div>
         </div>
@@ -410,7 +506,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
           <div className="grid grid-cols-2 gap-2 mt-1">
             <button
               onClick={() => selectMetric('week', 'approved')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                 periodFilter === 'week' && statusFilter === 'approved'
                   ? 'bg-emerald-500/20 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
                   : 'bg-emerald-500/5 border-emerald-500/15 hover:bg-emerald-500/10'
@@ -419,13 +515,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
                 <Check className="w-3 h-3" /> Approved
               </div>
-              <div className="text-2xl font-black text-emerald-300 mt-1">{stats.approved.week}</div>
-              <div className="text-[9px] text-emerald-400/60 mt-0.5">Click to view</div>
+              <div className="text-xl font-black text-emerald-300 mt-1">{stats.approved.week}</div>
             </button>
 
             <button
               onClick={() => selectMetric('week', 'rejected')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                 periodFilter === 'week' && statusFilter === 'rejected'
                   ? 'bg-rose-500/20 border-rose-500/50 shadow-[0_0_15px_rgba(244,63,94,0.2)]'
                   : 'bg-rose-500/5 border-rose-500/15 hover:bg-rose-500/10'
@@ -434,99 +529,100 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               <div className="text-[10px] font-semibold text-rose-400 uppercase tracking-wider flex items-center gap-1">
                 <X className="w-3 h-3" /> Declined
               </div>
-              <div className="text-2xl font-black text-rose-300 mt-1">{stats.declined.week}</div>
-              <div className="text-[9px] text-rose-400/60 mt-0.5">Click to view</div>
+              <div className="text-xl font-black text-rose-300 mt-1">{stats.declined.week}</div>
             </button>
           </div>
         </div>
 
-        {/* This Month Card */}
+        {/* All-Time Card */}
         <div className="glassmorphic-card rounded-2xl p-5 border border-white/[0.06] bg-white/[0.015] flex flex-col justify-between">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-indigo-400" /> This Month
+              <BarChart3 className="w-3.5 h-3.5 text-indigo-400" /> All-Time Records
             </span>
-            <span className="text-[10px] text-slate-500 font-mono">Last 30 Days</span>
+            <span className="text-[10px] text-slate-500 font-mono">Total Formatted</span>
           </div>
-          
+
           <div className="grid grid-cols-2 gap-2 mt-1">
             <button
-              onClick={() => selectMetric('month', 'approved')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                periodFilter === 'month' && statusFilter === 'approved'
-                  ? 'bg-emerald-500/20 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+              onClick={() => selectMetric('all', 'approved')}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                periodFilter === 'all' && statusFilter === 'approved'
+                  ? 'bg-emerald-500/20 border-emerald-500/50'
                   : 'bg-emerald-500/5 border-emerald-500/15 hover:bg-emerald-500/10'
               }`}
             >
-              <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                <Check className="w-3 h-3" /> Approved
-              </div>
-              <div className="text-2xl font-black text-emerald-300 mt-1">{stats.approved.month}</div>
-              <div className="text-[9px] text-emerald-400/60 mt-0.5">Click to view</div>
-            </button>
-
-            <button
-              onClick={() => selectMetric('month', 'rejected')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                periodFilter === 'month' && statusFilter === 'rejected'
-                  ? 'bg-rose-500/20 border-rose-500/50 shadow-[0_0_15px_rgba(244,63,94,0.2)]'
-                  : 'bg-rose-500/5 border-rose-500/15 hover:bg-rose-500/10'
-              }`}
-            >
-              <div className="text-[10px] font-semibold text-rose-400 uppercase tracking-wider flex items-center gap-1">
-                <X className="w-3 h-3" /> Declined
-              </div>
-              <div className="text-2xl font-black text-rose-300 mt-1">{stats.declined.month}</div>
-              <div className="text-[9px] text-rose-400/60 mt-0.5">Click to view</div>
-            </button>
-          </div>
-        </div>
-
-        {/* All-Time & Pending Review Card */}
-        <div className="glassmorphic-card rounded-2xl p-5 border border-white/[0.06] bg-white/[0.015] flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-amber-400" /> Overall Status
-            </span>
-            <span className="text-[10px] text-slate-500 font-mono">All Records</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 mt-1">
-            <button
-              onClick={() => selectMetric('all', 'pending')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                statusFilter === 'pending'
-                  ? 'bg-amber-500/20 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
-                  : 'bg-amber-500/5 border-amber-500/15 hover:bg-amber-500/10'
-              }`}
-            >
-              <div className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1">
-                <Clock className="w-3 h-3" /> Pending
-              </div>
-              <div className="text-2xl font-black text-amber-300 mt-1">{stats.pendingCount}</div>
-              <div className="text-[9px] text-amber-400/60 mt-0.5">Awaiting review</div>
+              <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">Approved</div>
+              <div className="text-xl font-black text-emerald-300 mt-1">{stats.approved.allTime}</div>
             </button>
 
             <button
               onClick={() => selectMetric('all', 'all')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                 periodFilter === 'all' && statusFilter === 'all'
-                  ? 'bg-indigo-500/20 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.2)]'
+                  ? 'bg-indigo-500/20 border-indigo-500/50'
                   : 'bg-indigo-500/5 border-indigo-500/15 hover:bg-indigo-500/10'
               }`}
             >
-              <div className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider flex items-center gap-1">
-                Total
-              </div>
-              <div className="text-2xl font-black text-indigo-300 mt-1">{stats.approved.allTime + stats.declined.allTime}</div>
-              <div className="text-[9px] text-indigo-400/60 mt-0.5">
-                {stats.approved.allTime} apr / {stats.declined.allTime} dec
-              </div>
+              <div className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">Total Resumes</div>
+              <div className="text-xl font-black text-indigo-300 mt-1">{stats.approved.allTime + stats.declined.allTime + stats.pendingCount}</div>
             </button>
           </div>
         </div>
 
       </div>
+
+      {/* Recruiter Leaderboard Bar (Tracks who submits the most resumes) */}
+      {stats.topRecruiters && stats.topRecruiters.length > 0 && (
+        <div className="glassmorphic-card rounded-2xl p-4 border border-cyan-500/20 bg-cyan-950/20 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <Award className="w-4 h-4 text-cyan-400" />
+              <span className="text-xs font-bold text-cyan-300 uppercase tracking-wider">
+                Recruiter Formatting Leaderboard
+              </span>
+              <span className="text-[10px] text-slate-400">
+                (Click recruiter name to filter candidates)
+              </span>
+            </div>
+            {recruiterFilter !== 'all' && (
+              <button
+                onClick={() => setRecruiterFilter('all')}
+                className="text-[11px] text-cyan-400 hover:text-white underline cursor-pointer"
+              >
+                Clear Recruiter Filter (Filtering: {recruiterFilter})
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+            {stats.topRecruiters.map((r, idx) => {
+              const isSelected = recruiterFilter.toLowerCase() === r.name.toLowerCase();
+              return (
+                <button
+                  key={r.name}
+                  onClick={() => setRecruiterFilter(isSelected ? 'all' : r.name)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                    isSelected
+                      ? 'bg-cyan-500/30 border-cyan-400 text-white shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                      : 'bg-slate-900/60 border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-white'
+                  }`}
+                >
+                  <span className={`w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                    idx === 0 ? 'bg-amber-400 text-slate-950' : idx === 1 ? 'bg-slate-300 text-slate-950' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-700 text-slate-300'
+                  }`}>
+                    {idx + 1}
+                  </span>
+                  <span className="font-semibold">{r.name}</span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-white/10 text-[10px] font-mono font-bold text-cyan-300">
+                    {r.total}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Drill-Down Section: Search, Filters & Candidate Records */}
       <div className="glassmorphic-card rounded-2xl p-5 border border-white/[0.08] bg-white/[0.01]">
@@ -540,15 +636,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                 <span>Candidate Submissions</span>
               </h2>
               <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-slate-300 font-mono font-bold">
-                {filteredCandidates.length}
+                {filteredCandidates.length} matches
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Viewing: <span className="text-indigo-300 font-medium capitalize">{statusFilter === 'all' ? 'All Statuses' : statusFilter}</span>
+              Status: <span className="text-indigo-300 font-medium capitalize">{statusFilter === 'all' ? 'All' : statusFilter}</span>
               {' • '}
-              <span className="text-indigo-300 font-medium capitalize">
-                {periodFilter === 'day' ? 'Today' : periodFilter === 'week' ? 'This Week' : periodFilter === 'month' ? 'This Month' : 'All Time'}
+              Period: <span className="text-indigo-300 font-medium">
+                {startDate && endDate 
+                  ? `${startDate} to ${endDate}` 
+                  : periodFilter === 'day' ? 'Today' : periodFilter === 'week' ? 'This Week' : periodFilter === 'month' ? 'This Month' : 'All Time'}
               </span>
+              {recruiterFilter !== 'all' && (
+                <>
+                  {' • '}
+                  Recruiter: <span className="text-cyan-300 font-medium">{recruiterFilter}</span>
+                </>
+              )}
             </p>
           </div>
 
@@ -558,8 +662,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by candidate name or IP..."
+              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+              placeholder="Search candidate, recruiter or IP..."
               className="w-full pl-9 pr-8 py-2 bg-slate-900/60 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
             />
             {searchQuery && (
@@ -573,54 +677,114 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
           </div>
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-white/5 text-xs">
+        {/* Date Filter & Preset Controls */}
+        <div className="py-3.5 border-b border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs">
           
-          {/* Status Filter Tabs */}
+          {/* Quick Date Presets */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-slate-500 text-[11px] font-semibold uppercase mr-1 flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-indigo-400" /> Filter Date:
+            </span>
+            <button
+              onClick={() => handleQuickPreset('today')}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                startDate === new Date().toISOString().split('T')[0] && endDate === new Date().toISOString().split('T')[0]
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white/5 hover:bg-white/10 text-slate-300'
+              }`}
+            >
+              Today
+            </button>
+            <button
+              onClick={() => handleQuickPreset('yesterday')}
+              className="px-2.5 py-1 rounded-lg font-semibold bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer"
+            >
+              Yesterday
+            </button>
+            <button
+              onClick={() => handleQuickPreset('week')}
+              className="px-2.5 py-1 rounded-lg font-semibold bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer"
+            >
+              Last 7 Days
+            </button>
+            <button
+              onClick={() => handleQuickPreset('month')}
+              className="px-2.5 py-1 rounded-lg font-semibold bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer"
+            >
+              Last 30 Days
+            </button>
+            <button
+              onClick={() => handleQuickPreset('all')}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                !startDate && !endDate && periodFilter === 'all'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white/5 hover:bg-white/10 text-slate-300'
+              }`}
+            >
+              All Time
+            </button>
+          </div>
+
+          {/* Custom Date Pickers */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 bg-slate-900/60 border border-white/10 px-2.5 py-1 rounded-xl">
+              <span className="text-[10px] text-slate-400 uppercase font-mono">From</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => { setStartDate(e.target.value); setPeriodFilter('custom'); setCurrentPage(1); }}
+                className="bg-transparent text-white text-xs focus:outline-none [color-scheme:dark]"
+              />
+            </div>
+            <div className="flex items-center gap-1.5 bg-slate-900/60 border border-white/10 px-2.5 py-1 rounded-xl">
+              <span className="text-[10px] text-slate-400 uppercase font-mono">To</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => { setEndDate(e.target.value); setPeriodFilter('custom'); setCurrentPage(1); }}
+                className="bg-transparent text-white text-xs focus:outline-none [color-scheme:dark]"
+              />
+            </div>
+            {(startDate || endDate) && (
+              <button
+                onClick={() => { setStartDate(''); setEndDate(''); setPeriodFilter('all'); }}
+                className="p-1.5 text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg cursor-pointer"
+                title="Clear date range"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Status Filter Tabs */}
+        <div className="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-white/5 text-xs">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-slate-500 text-[11px] font-semibold uppercase mr-1">Status:</span>
-            {(['all', 'pending', 'approved', 'rejected'] as StatusFilter[]).map((st) => (
+            {(['pending', 'approved', 'rejected', 'all'] as StatusFilter[]).map((st) => (
               <button
                 key={st}
-                onClick={() => setStatusFilter(st)}
+                onClick={() => { setStatusFilter(st); setCurrentPage(1); }}
                 className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer capitalize text-xs ${
                   statusFilter === st
-                    ? st === 'approved' 
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' 
+                    ? st === 'pending'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold'
+                      : st === 'approved' 
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold' 
                       : st === 'rejected' 
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' 
-                      : st === 'pending'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                      : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold' 
+                      : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-bold'
                     : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
                 }`}
               >
-                {st === 'rejected' ? 'Declined' : st}
+                {st === 'pending' ? 'Pending (Default)' : st === 'rejected' ? 'Declined' : st === 'all' ? 'All (Historical)' : st}
               </button>
             ))}
           </div>
 
-          {/* Timeframe Period Filter Tabs */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-slate-500 text-[11px] font-semibold uppercase mr-1">Period:</span>
-            {[
-              { id: 'all', label: 'All Time' },
-              { id: 'day', label: 'Today' },
-              { id: 'week', label: 'This Week' },
-              { id: 'month', label: 'This Month' }
-            ].map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setPeriodFilter(p.id as TimePeriod)}
-                className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer text-xs ${
-                  periodFilter === p.id
-                    ? 'bg-white/15 text-white border border-white/20'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
+          {/* Showing Count */}
+          <div className="text-[11px] text-slate-400 font-mono">
+            Showing {filteredCandidates.length > 0 ? (currentPage - 1) * PAGE_SIZE + 1 : 0} - {Math.min(currentPage * PAGE_SIZE, filteredCandidates.length)} of {filteredCandidates.length}
           </div>
         </div>
 
@@ -635,22 +799,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
             <User className="w-12 h-12 text-slate-600 mx-auto mb-3" />
             <h3 className="text-base font-bold text-white mb-1">No candidates found</h3>
             <p className="text-xs text-slate-400 max-w-md mx-auto font-light">
-              {searchQuery 
+              {statusFilter === 'pending'
+                ? "No pending resumes waiting for approval right now."
+                : searchQuery 
                 ? `No submissions matched "${searchQuery}". Try clearing the search query.` 
-                : `There are no candidate submissions under "${statusFilter}" for "${periodFilter}".`}
+                : `There are no candidate submissions under "${statusFilter}".`}
             </p>
-            {(statusFilter !== 'all' || periodFilter !== 'all' || searchQuery) && (
+            {(statusFilter !== 'pending' || periodFilter !== 'all' || startDate || endDate || recruiterFilter !== 'all' || searchQuery) && (
               <button
-                onClick={() => { setStatusFilter('all'); setPeriodFilter('all'); setSearchQuery(''); }}
+                onClick={() => { setStatusFilter('pending'); setPeriodFilter('all'); setStartDate(''); setEndDate(''); setRecruiterFilter('all'); setSearchQuery(''); }}
                 className="mt-4 px-3 py-1.5 bg-white/10 hover:bg-white/15 rounded-lg text-xs font-semibold text-slate-200 transition-colors cursor-pointer"
               >
-                Reset All Filters
+                Reset to Pending Submissions
               </button>
             )}
           </div>
         ) : (
           <div className="divide-y divide-white/[0.04] mt-2">
-            {filteredCandidates.map((candidate) => (
+            {paginatedCandidates.map((candidate) => (
               <motion.div
                 key={candidate.id}
                 initial={{ opacity: 0, y: 5 }}
@@ -670,12 +836,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                   </div>
 
                   <div>
-                    {/* Candidate Name */}
+                    {/* Candidate Name & Recruiter Pill */}
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-white font-bold text-sm tracking-wide">
                         {candidate.candidate_name || 'Candidate Submission'}
                       </span>
                       
+                      {/* Recruiter Badge */}
+                      <span className="flex items-center gap-1 text-[11px] font-semibold text-cyan-300 bg-cyan-950/50 px-2 py-0.5 rounded-md border border-cyan-500/30">
+                        <UserCheck className="w-3 h-3 text-cyan-400" />
+                        <span>Recruiter: <strong className="text-cyan-200">{candidate.recruiter_name || 'Direct Recruiter'}</strong></span>
+                      </span>
+
                       {/* Status Tag */}
                       <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
                         candidate.status === 'approved'
@@ -744,6 +916,39 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                 </div>
               </motion.div>
             ))}
+          </div>
+        )}
+
+        {/* Pagination Bar */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between pt-4 mt-4 border-t border-white/10 text-xs">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                currentPage === 1 
+                  ? 'border-white/5 text-slate-600 cursor-not-allowed' 
+                  : 'border-white/15 text-slate-200 hover:bg-white/10 cursor-pointer'
+              }`}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> Previous
+            </button>
+
+            <span className="text-slate-400 font-mono">
+              Page <strong className="text-white font-bold">{currentPage}</strong> of <strong className="text-white font-bold">{totalPages}</strong>
+            </span>
+
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                currentPage === totalPages 
+                  ? 'border-white/5 text-slate-600 cursor-not-allowed' 
+                  : 'border-white/15 text-slate-200 hover:bg-white/10 cursor-pointer'
+              }`}
+            >
+              Next <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
 

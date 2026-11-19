@@ -27,7 +27,9 @@ import {
   Mail,
   Unlock,
   Scan,
-  XCircle
+  XCircle,
+  UserCheck,
+  X
 } from 'lucide-react';
 
 interface StagedContent {
@@ -80,6 +82,15 @@ const App: React.FC = () => {
   const [showAdmin, setShowAdmin] = useState(false);
   const [ocrText, setOcrText] = useState<string>('');
   const [backendStatus, setBackendStatus] = useState<any>(null);
+  
+  // Recruiter identification states (tracks who submits resumes for approval)
+  const [recruiterName, setRecruiterName] = useState<string>(() => {
+    return safeStorage.getItem('recruiter_name') || '';
+  });
+  const [showRecruiterModal, setShowRecruiterModal] = useState<boolean>(false);
+  const [recruiterInput, setRecruiterInput] = useState<string>('');
+  const [recruiterInputError, setRecruiterInputError] = useState<string>('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -602,9 +613,31 @@ const App: React.FC = () => {
     }
   }, [selectedFormat, usePro]);
 
-  const handleSubmitForApproval = async () => {
+  const handleConfirmRecruiterModal = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = recruiterInput.trim();
+    if (!trimmed) {
+      setRecruiterInputError("Recruiter Name is required. Submissions cannot proceed without identifying the recruiter.");
+      return;
+    }
+    safeStorage.setItem('recruiter_name', trimmed);
+    setRecruiterName(trimmed);
+    setShowRecruiterModal(false);
+    handleSubmitForApproval(trimmed);
+  };
+
+  const handleSubmitForApproval = async (overrideRecruiter?: string) => {
     if (!stagedContent) return;
     
+    // Enforce recruiter identification: "without name it should not proceed"
+    const currentRecruiter = (overrideRecruiter || recruiterName).trim();
+    if (!currentRecruiter) {
+      setRecruiterInput(recruiterName);
+      setRecruiterInputError('');
+      setShowRecruiterModal(true);
+      return;
+    }
+
     setAppState(AppState.PROCESSING);
     try {
       // Determine candidate name without sending any resume content to the server
@@ -620,7 +653,7 @@ const App: React.FC = () => {
         }
       }
 
-      // STRICT ZERO RESUME STORAGE: Send ONLY candidateName & fileName metadata — never resume text or body
+      // STRICT ZERO RESUME STORAGE: Send ONLY candidateName, fileName & recruiterName metadata — never resume text or body
       const response = await fetch('/api/submit', {
         method: 'POST',
         headers: {
@@ -628,7 +661,8 @@ const App: React.FC = () => {
         },
         body: JSON.stringify({
           candidateName,
-          fileName: stagedContent.fileName
+          fileName: stagedContent.fileName,
+          recruiterName: currentRecruiter
         }),
       });
 
@@ -1170,9 +1204,30 @@ const App: React.FC = () => {
                             <CheckCircle className="w-7 h-7 text-emerald-400" />
                           </div>
                           <h2 className="text-xl font-bold text-white mb-2 font-display">File Successfully Loaded</h2>
-                          <p className="text-slate-400 mb-6 text-xs leading-relaxed max-w-sm">
+                          <p className="text-slate-400 mb-4 text-xs leading-relaxed max-w-sm">
                             We've successfully staged <span className="text-indigo-400 font-mono font-medium">"{fileName}"</span>. Ready to extract and reformat with absolute style representation.
                           </p>
+
+                          {/* Recruiter Identifier Display */}
+                          <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 text-xs mb-5 w-full max-w-sm">
+                            <div className="flex items-center gap-1.5 overflow-hidden">
+                              <UserCheck className="w-4 h-4 text-cyan-400 shrink-0" />
+                              <span className="truncate">
+                                Submitting as: <strong className="text-white">{recruiterName.trim() || 'Required before submission'}</strong>
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRecruiterInput(recruiterName);
+                                setRecruiterInputError('');
+                                setShowRecruiterModal(true);
+                              }}
+                              className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 hover:text-white underline cursor-pointer shrink-0"
+                            >
+                              {recruiterName.trim() ? 'Change' : 'Set Name'}
+                            </button>
+                          </div>
                           
                           <div className="flex gap-3 w-full justify-center">
                             <button 
@@ -1182,7 +1237,7 @@ const App: React.FC = () => {
                               Cancel
                             </button>
                             <button 
-                              onClick={handleSubmitForApproval}
+                              onClick={() => handleSubmitForApproval()}
                               className="btn-2026-neon px-6 py-3 text-white font-bold text-[10px] uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
                             >
                               <ArrowRight className="w-3.5 h-3.5" />
@@ -1324,6 +1379,90 @@ const App: React.FC = () => {
             )}
           </>
         )}
+
+        {/* Recruiter Identification Modal (Required: without name it should not proceed) */}
+        <AnimatePresence>
+          {showRecruiterModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                className="glassmorphic-card w-full max-w-md p-6 rounded-2xl border border-cyan-500/30 bg-[#070b1e]/95 shadow-[0_0_50px_rgba(6,182,212,0.25)] text-left"
+              >
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                      <UserCheck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-white font-display">Recruiter Identification</h3>
+                      <p className="text-[11px] text-slate-400">Required before submitting for approval</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowRecruiterModal(false)}
+                    className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/5 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleConfirmRecruiterModal} className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Your Full Name or Recruiter ID <span className="text-rose-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={recruiterInput}
+                        onChange={(e) => {
+                          setRecruiterInput(e.target.value);
+                          if (recruiterInputError) setRecruiterInputError('');
+                        }}
+                        placeholder="e.g., Sarah Jenkins, Alex M., Tech Recruiter"
+                        className={`w-full px-3.5 py-2.5 bg-slate-900/90 border rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none transition-all ${
+                          recruiterInputError 
+                            ? 'border-rose-500/80 focus:ring-2 focus:ring-rose-500/30' 
+                            : 'border-white/15 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20'
+                        }`}
+                      />
+                    </div>
+                    {recruiterInputError ? (
+                      <p className="text-rose-400 text-[11px] font-medium mt-1.5 flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        {recruiterInputError}
+                      </p>
+                    ) : (
+                      <p className="text-slate-400 text-[10px] mt-1.5">
+                        This name is logged with your submission so management can track which recruiter requested formatting.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => setShowRecruiterModal(false)}
+                      className="btn-2026-secondary px-4 py-2 text-xs font-semibold rounded-xl text-slate-300 hover:text-white cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn-2026-neon px-5 py-2 text-xs font-bold text-white rounded-xl uppercase tracking-wider shadow-lg flex items-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Confirm & Submit
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
