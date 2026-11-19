@@ -134,7 +134,8 @@ export const getKeyPool = (): string[] => {
 const FALLBACK_MODELS = [
   "gemini-2.5-flash",       // 🟢 HIGH RELIABILITY: Fast, resilient & high quality
   "gemini-2.0-flash",       // 🟢 HIGH SPEED: Low latency
-  "gemini-1.5-flash",       // 🟢 STABLE FALLBACK: Proven broad availability
+  "gemini-1.5-flash",       // 🟢 STABLE FALLBACK: Proven broad availability & independent quota
+  "gemini-2.0-flash-lite",  // ⚡ ULTRA-FAST: Lightweight fallback
   "gemini-3.5-flash",       // 🟡 Active preview tier
   "gemini-3.8-flash",       // 🟡 State-of-the-art
   "gemini-3.5-flash-lite",  // ⚡ Lightweight
@@ -144,12 +145,15 @@ const FALLBACK_MODELS = [
 // Pro model pool — enables deep reasoning when requested
 const PRO_MODELS = [
   "gemini-2.5-pro",         // 🧠 REASONING: Top-tier precision
+  "gemini-1.5-pro",         // 🧠 PRO FALLBACK: High reasoning capability
   "gemini-2.5-flash",       // 🟢 HIGH RELIABILITY
   "gemini-2.0-flash",       // 🟢 HIGH SPEED
-  "gemini-3.8-flash",       // 🟡 BACKUP
   "gemini-3.1-pro-preview", // 🧠 REASONING
   "gemini-3.5-flash",       // 🟡 BACKUP
 ];
+
+// Per-model cooldown tracking so exhausting one model (e.g. 2.5-flash) NEVER blocks other models (2.0-flash, 1.5-flash, etc.)
+const modelCooldownMap = new Map<string, number>();
 
 // In-memory extraction cache to preserve free quota across repeated user clicks
 const extractionCache = new Map<string, { data: ResumeData; timestamp: number }>();
@@ -167,31 +171,45 @@ async function withModelFallback<T>(
   }
 
   const now = Date.now();
-  // Fast check: Are all Gemini keys daily exhausted?
-  const allDailyExhausted = pool.length > 0 && pool.every(k => {
-    const h = getKeyHealth(k);
-    return h.isDailyExhausted && now < h.cooldownUntil;
+  const models = usePro ? PRO_MODELS : FALLBACK_MODELS;
+
+  // Fast check: Only fail fast if ALL models in the pool are confirmed exhausted or disabled
+  const allModelsExhausted = models.every(m => {
+    const cd = modelCooldownMap.get(m) || 0;
+    return disabledModels.has(m) || (now < cd);
   });
 
-  if (allDailyExhausted) {
-    console.warn(`[${operationName}] Circuit Breaker: All Gemini keys are DAILY_EXHAUSTED. Fast-failing to external failover...`);
-    throw new Error("GEMINI_DAILY_EXHAUSTED: All Gemini API keys have reached their daily request limit.");
+  const allKeysInvalid = pool.length > 0 && pool.every(k => getKeyHealth(k).isInvalid);
+  if (allKeysInvalid) {
+    throw new Error("API Key Error: All Gemini API keys are invalid or unauthorized. Please verify your GEMINI_API_KEY.");
   }
 
-  const models = usePro ? PRO_MODELS : FALLBACK_MODELS;
+  if (allModelsExhausted) {
+    console.warn(`[${operationName}] Circuit Breaker: All ${models.length} Gemini models are currently cooling down. Failing over to backup engines...`);
+    throw new Error("RATE_LIMITED: All primary Gemini models are temporarily at capacity. Retrying or failing over...");
+  }
+
   let lastError: any;
   let totalAttempts = 0;
-  const maxAttempts = 10;
+  const maxAttempts = 16;
   let allRateLimited = true;
 
   for (const modelId of models) {
     if (disabledModels.has(modelId)) continue;
+    
+    // Check if this specific model is in temporary cooldown (e.g. daily limit for this model)
+    const modelCd = modelCooldownMap.get(modelId) || 0;
+    if (now < modelCd) {
+      console.log(`[${operationName}] Model ${modelId} is in cooldown until ${new Date(modelCd).toLocaleTimeString()}. Trying next model.`);
+      continue;
+    }
+
     let skipModelToNext = false;
 
-    // Filter keys into available candidates
+    // Filter keys into available candidates (keys that are not permanently invalid)
     const availableKeys = pool.filter(k => {
       const h = getKeyHealth(k);
-      return !h.isInvalid && (!h.isDailyExhausted || Date.now() >= h.cooldownUntil);
+      return !h.isInvalid;
     });
 
     if (availableKeys.length === 0) continue;
@@ -203,7 +221,7 @@ async function withModelFallback<T>(
       const apiKey = availableKeys[keyIndex];
       const health = getKeyHealth(apiKey);
 
-      // If key is temporarily in cooldown (e.g. RPM 60s or 503), check if another key is ready
+      // If key is temporarily in short cooldown (e.g. 30s RPM), check if another key is ready
       if (Date.now() < health.cooldownUntil) {
         const hasReadyKey = availableKeys.some(k => Date.now() >= getKeyHealth(k).cooldownUntil);
         if (hasReadyKey) {
@@ -222,7 +240,7 @@ async function withModelFallback<T>(
           )
         ]);
 
-        // SUCCESS: Reset circuit breaker for this key
+        // SUCCESS: Reset consecutive failures and update success metrics
         health.consecutiveFailures = 0;
         health.cooldownUntil = 0;
         health.lastSuccess = Date.now();
@@ -287,25 +305,29 @@ async function withModelFallback<T>(
 
         if (isRateLimit) {
           rateLimitHits++;
-          const isDaily =
+          // Only true daily limit errors should trigger a long cooldown on this specific model
+          const isExplicitDailyCap =
             lowerError.includes("per day") ||
-            lowerError.includes("daily") ||
-            health.consecutiveFailures >= 3;
+            lowerError.includes("requestsperday") ||
+            lowerError.includes("daily quota") ||
+            (lowerError.includes("quota exceeded") && lowerError.includes("day"));
 
-          if (isDaily) {
-            health.isDailyExhausted = true;
-            health.cooldownUntil = getMidnightUTCTimestamp();
-            console.warn(`[${operationName}] Key ${getKeyId(apiKey)} hit DAILY cap. Cooldown until UTC midnight.`);
+          if (isExplicitDailyCap) {
+            modelCooldownMap.set(modelId, getMidnightUTCTimestamp());
+            console.warn(`[${operationName}] Model ${modelId} reached daily limit. Cooldown until UTC midnight. Immediately trying next model in pool...`);
+            skipModelToNext = true;
+            break; // Break key loop to immediately try next model!
           } else {
-            health.cooldownUntil = Date.now() + 65_000;
-            console.warn(`[${operationName}] Key ${getKeyId(apiKey)} rate-limited (RPM). Cooldown 65s.`);
+            // Standard RPM rate limit (e.g. 15 requests/min) — short 30-second cooldown
+            health.cooldownUntil = Date.now() + 30_000;
+            console.warn(`[${operationName}] Model ${modelId} hit RPM rate limit with key ${getKeyId(apiKey)}. Cooldown 30s. Trying alternative model/key...`);
+            continue;
           }
-          continue;
         }
 
         if (isServerError) {
-          health.cooldownUntil = Date.now() + 35_000 + Math.floor(Math.random() * 15_000);
-          console.warn(`[${operationName}] Key ${getKeyId(apiKey)} hit 503/timeout. Cooldown 35-50s.`);
+          health.cooldownUntil = Date.now() + 25_000;
+          console.warn(`[${operationName}] Model ${modelId} hit 503/timeout with key ${getKeyId(apiKey)}. Cooldown 25s.`);
           continue;
         }
 
