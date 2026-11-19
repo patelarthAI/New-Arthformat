@@ -1007,16 +1007,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl"
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 15 }}
-              className="glassmorphic-card rounded-[24px] border border-rose-500/30 max-w-lg w-full p-6 text-white shadow-[0_0_50px_rgba(244,63,94,0.25)] relative overflow-hidden"
+              className="bg-slate-950/95 rounded-[28px] border border-rose-500/25 max-w-lg w-full p-6 text-white shadow-[0_0_60px_rgba(244,63,94,0.2)] relative overflow-hidden"
             >
-              {/* Top Accent Line */}
-              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-500" />
+              {/* Top Accent Gradient Bar */}
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-500 via-amber-500 to-indigo-500" />
 
               {/* Close Button */}
               <button
@@ -1027,50 +1027,45 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                     setMasterCleanSuccess('');
                   }
                 }}
-                className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                className="absolute top-5 right-5 p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
 
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.2)]">
+              {/* Modal Header */}
+              <div className="flex items-center gap-3.5 mb-5">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500/20 to-amber-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.25)]">
                   <ShieldAlert className="w-6 h-6 text-rose-400" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
-                    Master Storage & Memory Clean
+                    Database Storage Cleanup
                   </h3>
                   <p className="text-xs text-rose-300/80">
-                    Restricted Super-Admin Zone &bull; Reclaims Firestore Memory
+                    Super-Admin Authorization &bull; Reclaims Database Storage
                   </p>
                 </div>
               </div>
 
-              {/* Security Alert Banner */}
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200/90 text-xs mb-5 flex items-start gap-2.5">
-                <Lock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <div className="leading-relaxed">
-                  <strong>Protected Access:</strong> Because the standard admin password is shared with recruiters for daily approvals, database memory purging requires your <strong>Master Passcode</strong> to prevent unauthorized wipes.
-                </div>
-              </div>
-
-              {/* Scope Selector */}
+              {/* Cleanup Scope Selection */}
               <div className="space-y-2 mb-5">
-                <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
                   Select Cleanup Scope
                 </label>
                 
+                {/* Option 1: Purge Processed History (Recommended) */}
                 <div 
                   onClick={() => setMasterCleanMode('processed')}
-                  className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
                     masterCleanMode === 'processed' 
-                      ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.2)]' 
+                      ? 'bg-indigo-950/40 border-indigo-500/80 text-white shadow-[0_0_20px_rgba(99,102,241,0.2)]' 
                       : 'bg-slate-900/40 border-white/10 text-slate-300 hover:border-white/20'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-xs flex items-center gap-2">
-                      🧹 Purge Approved & Declined History <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono font-bold">Recommended</span>
+                      🧹 Purge Approved & Declined History
+                      <span className="text-[9.5px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">Recommended</span>
                     </span>
                     <input 
                       type="radio" 
@@ -1080,16 +1075,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                       className="accent-indigo-500" 
                     />
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1 pl-6">
-                    Frees up 95%+ Firestore memory by deleting old formatted resumes. Current <strong>Pending approvals remain untouched</strong>.
+                  <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                    Clears completed resumes and frees database memory. Active <strong>pending submissions stay safe</strong>.
                   </p>
                 </div>
 
+                {/* Option 2: Complete Factory Purge */}
                 <div 
                   onClick={() => setMasterCleanMode('all')}
-                  className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
                     masterCleanMode === 'all' 
-                      ? 'bg-rose-950/40 border-rose-500 text-white shadow-[0_0_15px_rgba(244,63,94,0.2)]' 
+                      ? 'bg-rose-950/40 border-rose-500/80 text-white shadow-[0_0_20px_rgba(244,63,94,0.2)]' 
                       : 'bg-slate-900/40 border-white/10 text-slate-300 hover:border-white/20'
                   }`}
                 >
@@ -1105,22 +1101,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                       className="accent-rose-500" 
                     />
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1 pl-6">
-                    Permanently deletes all candidate names, resumes, recruiter logs, and history in chunks to reset Firestore storage to 0.
+                  <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                    Completely erases all candidate records, names, activity logs, and counters to reset database to 0.
                   </p>
                 </div>
 
+                {/* Option 3: Declined Only */}
                 <div 
                   onClick={() => setMasterCleanMode('declined')}
-                  className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
                     masterCleanMode === 'declined' 
-                      ? 'bg-amber-950/30 border-amber-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.2)]' 
+                      ? 'bg-amber-950/30 border-amber-500/80 text-white shadow-[0_0_20px_rgba(245,158,11,0.2)]' 
                       : 'bg-slate-900/40 border-white/10 text-slate-300 hover:border-white/20'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-xs flex items-center gap-2 text-amber-300">
-                      ⏱️ Purge Expired & Declined Submissions Only
+                      ⏱️ Purge Expired & Declined Only
                     </span>
                     <input 
                       type="radio" 
@@ -1130,23 +1127,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                       className="accent-amber-500" 
                     />
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1 pl-6">
-                    Removes all 5-minute timed-out and rejected submissions.
+                  <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                    Removes all 5-minute timed-out and rejected candidate entries.
                   </p>
                 </div>
               </div>
 
               {/* Master Passcode Input */}
               <div className="mb-5">
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <KeyRound className="w-3.5 h-3.5 text-rose-400" />
-                    Enter Master Passcode
-                  </label>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    Owner Security Key
-                  </span>
-                </div>
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                  <KeyRound className="w-3.5 h-3.5 text-rose-400" />
+                  Enter Master Passcode
+                </label>
                 
                 <div className="relative">
                   <input
@@ -1157,25 +1149,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                       setMasterKeyError('');
                     }}
                     placeholder="Enter Master Passcode..."
-                    className="w-full bg-slate-950/80 border border-white/15 focus:border-rose-400 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none pr-10 font-mono transition-colors"
+                    className="w-full bg-slate-900/80 border border-white/15 focus:border-rose-400 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none pr-11 font-mono transition-colors shadow-inner"
                   />
                   <button
                     type="button"
                     onClick={() => setShowMasterKey(prev => !prev)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
                   >
                     {showMasterKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Default passcode: <code className="text-rose-300 bg-rose-500/10 px-1 py-0.5 rounded font-mono">arth#master2026</code> or configured in <code className="text-slate-300 font-mono">MASTER_ADMIN_KEY</code>.
-                </p>
               </div>
 
               {/* Error Alert */}
               {masterCleanError && (
-                <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs mb-4 flex items-center gap-2">
+                <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs mb-4 flex items-center gap-2.5">
                   <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
                   <span>{masterCleanError}</span>
                 </div>
@@ -1183,14 +1171,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
               {/* Success Alert */}
               {masterCleanSuccess && (
-                <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs mb-4 flex items-center gap-2">
+                <div className="p-3.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs mb-4 flex items-center gap-2.5">
                   <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" />
                   <span>{masterCleanSuccess}</span>
                 </div>
               )}
 
               {/* Modal Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="flex items-center justify-end gap-3 pt-1">
                 <button
                   type="button"
                   disabled={masterCleanLoading}
@@ -1199,7 +1187,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                     setMasterKeyError('');
                     setMasterCleanSuccess('');
                   }}
-                  className="px-4 py-2.5 rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
+                  className="px-5 py-2.5 rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
@@ -1208,7 +1196,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                   type="button"
                   disabled={masterCleanLoading || !masterKeyInput.trim()}
                   onClick={handleExecuteMasterClean}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-white transition-all shadow-lg cursor-pointer ${
+                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-white transition-all shadow-lg cursor-pointer ${
                     masterCleanLoading || !masterKeyInput.trim()
                       ? 'bg-rose-900/50 border border-rose-500/20 text-rose-300 cursor-not-allowed opacity-50'
                       : 'bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 border border-rose-400/30 shadow-[0_0_20px_rgba(244,63,94,0.35)] active:scale-95'

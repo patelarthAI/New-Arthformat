@@ -11,7 +11,7 @@ import fs from "fs";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-import { db, isFirebaseConfigured, performAutoCleanup, firebaseConfig } from "./server/firebase";
+import { db, isFirebaseConfigured, performAutoCleanup, firebaseConfig, purgeFirestoreData } from "./server/firebase";
 import { 
   extractResumeDataBackend, 
   analyzeGrammarBackend, 
@@ -443,8 +443,8 @@ const isMasterAuthorized = (req: express.Request): boolean => {
   if (!candidate || !candidate.trim()) return false;
 
   const envMasterKey = (process.env.MASTER_ADMIN_KEY || process.env.MASTER_KEY || '').trim();
-  // Valid master keys: configured in environment variables OR built-in owner security passcodes
-  const validKeys = [envMasterKey, 'arth#master2026', 'master2026', 'arthmaster'].filter(Boolean);
+  // Valid master keys: Arth1606 (primary), case-insensitive fallback, and env variable
+  const validKeys = ['Arth1606', 'arth1606', envMasterKey].filter(Boolean);
 
   return validKeys.some(vk => timingSafeCompare(candidate.trim(), vk));
 };
@@ -718,55 +718,14 @@ app.post("/api/admin/purge", checkAdmin, async (req, res) => {
     }
     await saveInMemoryResumes();
 
-    // 2. Clean Firestore database if configured (chunked in batches of 400 to prevent 500-limit failure)
+    // 2. Clean Firestore database if configured
     const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
     if (useDatabase) {
       try {
-        const snapshot = await db.collection('resumes').get();
-        if (!snapshot.empty) {
-          let docsToDelete = snapshot.docs;
-          if (mode === 'processed') {
-            docsToDelete = docsToDelete.filter(d => {
-              const data = d.data() || {};
-              const curStatus = (data.rejected || data.content?.rejected || data.status === 'rejected') ? 'rejected' : (data.status || 'pending');
-              return curStatus === 'approved' || curStatus === 'rejected';
-            });
-          } else if (mode === 'declined') {
-            docsToDelete = docsToDelete.filter(d => {
-              const data = d.data() || {};
-              const curStatus = (data.rejected || data.content?.rejected || data.status === 'rejected') ? 'rejected' : (data.status || 'pending');
-              return curStatus === 'rejected';
-            });
-          }
-
-          // Chunk deletion in batches of 400 (well within Firestore 500-op limit)
-          for (let i = 0; i < docsToDelete.length; i += 400) {
-            const chunk = docsToDelete.slice(i, i + 400);
-            const batch = db.batch();
-            chunk.forEach(doc => batch.delete(doc.ref));
-            await batch.commit();
-          }
-          deletedCount = Math.max(deletedCount, docsToDelete.length);
-        }
-
-        // Also purge activity_logs if full wipe
-        if (mode === 'all') {
-          try {
-            const logSnapshot = await db.collection('activity_logs').get();
-            if (!logSnapshot.empty) {
-              for (let i = 0; i < logSnapshot.docs.length; i += 400) {
-                const chunk = logSnapshot.docs.slice(i, i + 400);
-                const batch = db.batch();
-                chunk.forEach(doc => batch.delete(doc.ref));
-                await batch.commit();
-              }
-            }
-          } catch (logErr: any) {
-            console.warn("Activity log purge error:", logErr.message);
-          }
-        }
+        const firestoreDeleted = await purgeFirestoreData(mode);
+        deletedCount = Math.max(deletedCount, firestoreDeleted);
       } catch (dbErr: any) {
-        console.error("Firestore chunked purge error:", dbErr);
+        console.error("Firestore purge error:", dbErr);
         return res.status(500).json({ error: "Firestore purge failed: " + dbErr.message });
       }
     }

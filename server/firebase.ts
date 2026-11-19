@@ -8,6 +8,7 @@ import {
   getDocs, 
   updateDoc, 
   deleteDoc, 
+  writeBatch,
   query, 
   where,
   orderBy,
@@ -155,6 +156,7 @@ class QueryBuilder {
     return {
       docs: snap.docs.map(d => ({
         id: d.id,
+        ref: d.ref,
         data: () => d.data()
       }))
     };
@@ -174,6 +176,32 @@ class QueryBuilder {
 class CollectionBuilder {
   collection(collectionName: string) {
     return new QueryBuilder(collectionName);
+  }
+
+  batch() {
+    const dbInstance = getFirestoreDb();
+    if (!dbInstance) throw new Error("Firestore is not initialized");
+    const b = writeBatch(dbInstance);
+    return {
+      delete(ref: any) {
+        if (ref && ref.ref) {
+          b.delete(ref.ref);
+        } else if (ref) {
+          b.delete(ref);
+        }
+      },
+      set(ref: any, data: any) {
+        const actualRef = ref?.ref || ref;
+        b.set(actualRef, { ...data, system_secret: SYSTEM_SECRET });
+      },
+      update(ref: any, data: any) {
+        const actualRef = ref?.ref || ref;
+        b.update(actualRef, { ...data, system_secret: SYSTEM_SECRET });
+      },
+      async commit() {
+        await b.commit();
+      }
+    };
   }
 }
 
@@ -253,5 +281,56 @@ export const performAutoCleanup = async () => {
     console.log(`[Firebase Auto-Cleanup] Routine completed successfully.`);
   } catch (error: any) {
     console.error(`[Firebase Auto-Cleanup] Error during routine:`, error.message);
+  }
+};
+
+export const purgeFirestoreData = async (mode: 'all' | 'processed' | 'declined' = 'all'): Promise<number> => {
+  if (!isFirebaseConfigured()) return 0;
+  const dbInstance = getFirestoreDb();
+  if (!dbInstance) return 0;
+
+  try {
+    let deletedCount = 0;
+    const resumesCol = collection(dbInstance, 'resumes');
+    const q = query(resumesCol, where('system_secret', '==', SYSTEM_SECRET));
+    const snap = await getDocs(q);
+
+    const docsToDelete = snap.docs.filter(d => {
+      if (mode === 'all') return true;
+      const data = d.data() || {};
+      const curStatus = (data.rejected || data.content?.rejected || data.status === 'rejected') ? 'rejected' : (data.status || 'pending');
+      if (mode === 'processed') return curStatus === 'approved' || curStatus === 'rejected';
+      if (mode === 'declined') return curStatus === 'rejected';
+      return false;
+    });
+
+    for (let i = 0; i < docsToDelete.length; i += 400) {
+      const chunk = docsToDelete.slice(i, i + 400);
+      const b = writeBatch(dbInstance);
+      chunk.forEach(d => b.delete(d.ref));
+      await b.commit();
+      deletedCount += chunk.length;
+    }
+
+    if (mode === 'all') {
+      try {
+        const logsCol = collection(dbInstance, 'activity_logs');
+        const logsQ = query(logsCol, where('system_secret', '==', SYSTEM_SECRET));
+        const logsSnap = await getDocs(logsQ);
+        for (let i = 0; i < logsSnap.docs.length; i += 400) {
+          const chunk = logsSnap.docs.slice(i, i + 400);
+          const b = writeBatch(dbInstance);
+          chunk.forEach(d => b.delete(d.ref));
+          await b.commit();
+        }
+      } catch (logErr: any) {
+        console.warn("Failed to purge activity_logs:", logErr.message);
+      }
+    }
+
+    return deletedCount;
+  } catch (err: any) {
+    console.error("purgeFirestoreData error:", err);
+    throw err;
   }
 };
