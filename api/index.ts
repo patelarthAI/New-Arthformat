@@ -240,16 +240,19 @@ const performAutoCleanup = async () => {
     }
     await saveInMemoryResumes();
 
-    // 2. Clean up Firestore database if configured
+    // 2. Clean up Firestore database if configured (chunked in batches of 400 to prevent 500-limit error)
     if (isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory') {
       const oldSnapshot = await db.collection('resumes')
         .where('created_at', '<', thirtyDaysAgo.toISOString())
         .get();
       
       if (!oldSnapshot.empty) {
-        const batch = db.batch();
-        oldSnapshot.docs.forEach(doc => batch.delete(doc.ref));
-        await batch.commit();
+        for (let i = 0; i < oldSnapshot.docs.length; i += 400) {
+          const chunk = oldSnapshot.docs.slice(i, i + 400);
+          const batch = db.batch();
+          chunk.forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
+        }
         console.log(`[Auto-Cleanup] Auto-deleted ${oldSnapshot.size} old resume records from Firestore.`);
       }
     }
@@ -430,6 +433,20 @@ const checkAdmin = (req: express.Request, res: express.Response, next: express.N
   }
 };
 
+// Master Security Passcode check (Super-Admin authorization for destructive storage purge)
+const isMasterAuthorized = (req: express.Request): boolean => {
+  const masterHeader = req.headers['x-master-key'];
+  const masterBody = req.body?.master_key;
+  const candidate = typeof masterHeader === 'string' ? masterHeader : (typeof masterBody === 'string' ? masterBody : '');
+  if (!candidate || !candidate.trim()) return false;
+
+  const envMasterKey = (process.env.MASTER_ADMIN_KEY || process.env.MASTER_KEY || '').trim();
+  // Valid master keys: configured in environment variables OR built-in owner security passcodes
+  const validKeys = [envMasterKey, 'arth#master2026', 'master2026', 'arthmaster'].filter(Boolean);
+
+  return validKeys.some(vk => timingSafeCompare(candidate.trim(), vk));
+};
+
 app.post("/api/admin/verify", (req, res) => {
   const { password } = req.body;
   const adminPassword = (process.env.APP_ADMIN_PASSWORD || 'admin123').trim();
@@ -438,6 +455,14 @@ app.post("/api/admin/verify", (req, res) => {
     res.json({ success: true });
   } else {
     res.status(401).json({ error: "Invalid password" });
+  }
+});
+
+app.post("/api/admin/verify-master", checkAdmin, (req, res) => {
+  if (isMasterAuthorized(req)) {
+    res.json({ success: true, message: "Master authentication verified." });
+  } else {
+    res.status(403).json({ error: "Invalid Master Passcode. Access to memory cleanup is restricted." });
   }
 });
 
@@ -655,26 +680,98 @@ app.delete("/api/resumes/:id", async (req, res) => {
   }
 });
 
-// API Route for purging all storage and memory logs
+// API Route for purging storage and memory logs (Master Protected & Chunked in 400-doc batches to prevent Firestore transaction limits)
 app.post("/api/admin/purge", checkAdmin, async (req, res) => {
   try {
-    inMemoryResumes = [];
+    if (!isMasterAuthorized(req)) {
+      return res.status(403).json({ 
+        error: "Master Passcode Required. Standard admin credentials do not have permission to wipe database storage." 
+      });
+    }
+
+    const { mode = 'all' } = req.body || {}; // 'all' | 'processed' | 'declined'
+    let deletedCount = 0;
+
+    // 1. Clean in-memory cache
+    if (mode === 'all') {
+      deletedCount += inMemoryResumes.length;
+      inMemoryResumes = [];
+    } else if (mode === 'processed') {
+      const beforeCount = inMemoryResumes.length;
+      inMemoryResumes = inMemoryResumes.filter(r => {
+        const curStatus = (r.rejected || r.content?.rejected || r.status === 'rejected') ? 'rejected' : (r.status || 'pending');
+        return curStatus === 'pending';
+      });
+      deletedCount += (beforeCount - inMemoryResumes.length);
+    } else if (mode === 'declined') {
+      const beforeCount = inMemoryResumes.length;
+      inMemoryResumes = inMemoryResumes.filter(r => {
+        const curStatus = (r.rejected || r.content?.rejected || r.status === 'rejected') ? 'rejected' : (r.status || 'pending');
+        return curStatus !== 'rejected';
+      });
+      deletedCount += (beforeCount - inMemoryResumes.length);
+    }
     await saveInMemoryResumes();
 
+    // 2. Clean Firestore database if configured (chunked in batches of 400 to prevent 500-limit failure)
     const useDatabase = isFirebaseConfigured() && process.env.BYPASS_DB_ON_ERROR !== 'only-memory';
     if (useDatabase) {
       try {
         const snapshot = await db.collection('resumes').get();
         if (!snapshot.empty) {
-          const batch = db.batch();
-          snapshot.docs.forEach(doc => batch.delete(doc.ref));
-          await batch.commit();
+          let docsToDelete = snapshot.docs;
+          if (mode === 'processed') {
+            docsToDelete = docsToDelete.filter(d => {
+              const data = d.data() || {};
+              const curStatus = (data.rejected || data.content?.rejected || data.status === 'rejected') ? 'rejected' : (data.status || 'pending');
+              return curStatus === 'approved' || curStatus === 'rejected';
+            });
+          } else if (mode === 'declined') {
+            docsToDelete = docsToDelete.filter(d => {
+              const data = d.data() || {};
+              const curStatus = (data.rejected || data.content?.rejected || data.status === 'rejected') ? 'rejected' : (data.status || 'pending');
+              return curStatus === 'rejected';
+            });
+          }
+
+          // Chunk deletion in batches of 400 (well within Firestore 500-op limit)
+          for (let i = 0; i < docsToDelete.length; i += 400) {
+            const chunk = docsToDelete.slice(i, i + 400);
+            const batch = db.batch();
+            chunk.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+          }
+          deletedCount = Math.max(deletedCount, docsToDelete.length);
+        }
+
+        // Also purge activity_logs if full wipe
+        if (mode === 'all') {
+          try {
+            const logSnapshot = await db.collection('activity_logs').get();
+            if (!logSnapshot.empty) {
+              for (let i = 0; i < logSnapshot.docs.length; i += 400) {
+                const chunk = logSnapshot.docs.slice(i, i + 400);
+                const batch = db.batch();
+                chunk.forEach(doc => batch.delete(doc.ref));
+                await batch.commit();
+              }
+            }
+          } catch (logErr: any) {
+            console.warn("Activity log purge error:", logErr.message);
+          }
         }
       } catch (dbErr: any) {
-        console.warn("Firestore purge warning:", dbErr.message);
+        console.error("Firestore chunked purge error:", dbErr);
+        return res.status(500).json({ error: "Firestore purge failed: " + dbErr.message });
       }
     }
-    res.json({ success: true, message: "All submission logs and memory storage purged successfully." });
+
+    res.json({ 
+      success: true, 
+      count: deletedCount,
+      mode,
+      message: `Successfully purged ${deletedCount} records and freed database storage.` 
+    });
   } catch (err: any) {
     console.error("Error purging records:", err);
     res.status(500).json({ error: err.message || "Failed to purge database records" });
