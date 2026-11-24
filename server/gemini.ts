@@ -132,20 +132,18 @@ export const getKeyPool = (): string[] => {
 
 // Standard (free-tier) model pool — tried in priority order
 const FALLBACK_MODELS = [
-  "gemini-2.0-flash",       // 🟢 PRIMARY: High speed & official GA model
-  "gemini-1.5-flash",       // 🟢 STABLE WORKHORSE: Broad availability & independent cluster
-  "gemini-2.0-flash-lite",  // ⚡ ULTRA-FAST: 30 RPM, lightweight resilient fallback
-  "gemini-1.5-flash-8b",    // ⚡ HIGH-THROUGHPUT: Fast fallback
-  "gemini-2.5-flash",       // 🟡 Active preview tier
-  "gemini-1.5-pro",         // 🧠 PRO FALLBACK: Deep reasoning
+  "gemini-3.5-flash-lite",  // 🟢 PRIMARY: 100% verified live & active across all keys
+  "gemini-3.6-flash",       // 🟢 HIGH CAPACITY: Full-power flash
+  "gemini-3.1-flash-lite",  // ⚡ ULTRA-FAST: Resilient lightweight fallback
+  "gemini-3.5-flash",       // 🟡 Active preview tier
+  "gemini-3.8-flash",       // 🟡 State-of-the-art
 ];
 
 // Pro model pool — enables deep reasoning when requested
 const PRO_MODELS = [
-  "gemini-1.5-pro",         // 🧠 PRO: Proven deep reasoning
-  "gemini-2.5-pro",         // 🧠 ADVANCED REASONING: Top-tier precision
-  "gemini-2.0-flash",       // 🟢 HIGH SPEED & QUALITY
-  "gemini-1.5-flash",       // 🟢 STABLE FALLBACK
+  "gemini-3.1-pro-preview", // 🧠 PRO: Proven deep reasoning
+  "gemini-3.5-flash-lite",  // 🟢 HIGH RELIABILITY FALLBACK
+  "gemini-3.6-flash",       // 🟢 HIGH SPEED & QUALITY
 ];
 
 // Per-model cooldown tracking so exhausting one model (e.g. 2.5-flash) NEVER blocks other models (2.0-flash, 1.5-flash, etc.)
@@ -366,7 +364,7 @@ async function withModelFallback<T>(
   const lowerLastError = errorString.toLowerCase();
   const isTimeout = errorString.includes("MODEL_TIMEOUT") || lowerLastError.includes("timeout");
 
-  if (isActualRateLimit && allRateLimited) {
+  if (isActualRateLimit) {
     const isGoogleOutage = errorString.includes("503") || errorString.includes("experiencing high demand") || errorString.includes("overloaded");
     if (isGoogleOutage) {
       throw new Error(
@@ -378,7 +376,7 @@ async function withModelFallback<T>(
     );
   }
 
-  if (isTimeout && allRateLimited) {
+  if (isTimeout) {
     throw new Error(
       "RATE_LIMITED: AI models are taking longer than usual to respond. Please retry in a moment."
     );
@@ -392,7 +390,8 @@ async function withModelFallback<T>(
     throw new Error("API Key Error: One or more Gemini API keys are invalid. Please check your Vercel environment variables.");
   }
 
-  throw new Error("Processing Interrupted: We encountered an unexpected issue while analyzing your resume. Retrying or failing over...");
+  const cleanError = lastError?.message || errorString || "Unknown processing issue";
+  throw new Error(`Processing Interrupted: ${cleanError}`);
 }
 
 
