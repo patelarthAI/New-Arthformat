@@ -88,8 +88,8 @@ const handleGeminiError = (res: express.Response, endpoint: string, err: any, de
   res.status(isRateLimit ? 429 : 500).json({ error: errMsg });
 };
 
-// Gemini API proxies
-app.post("/api/gemini/extract", async (req, res) => {
+// Gemini API proxies (supporting both /api/gemini/* and /api/* aliases)
+app.post(["/api/gemini/extract", "/api/extract"], async (req, res) => {
   try {
     const { payload, usePro } = req.body;
     const data = await extractResumeDataBackend(payload, usePro);
@@ -99,7 +99,7 @@ app.post("/api/gemini/extract", async (req, res) => {
   }
 });
 
-app.post("/api/gemini/analyze-grammar", async (req, res) => {
+app.post(["/api/gemini/analyze-grammar", "/api/analyze-grammar"], async (req, res) => {
   try {
     const { data, format, usePro } = req.body;
     const issues = await analyzeGrammarBackend(data, format, usePro);
@@ -109,7 +109,7 @@ app.post("/api/gemini/analyze-grammar", async (req, res) => {
   }
 });
 
-app.post("/api/gemini/check-spelling", async (req, res) => {
+app.post(["/api/gemini/check-spelling", "/api/check-spelling"], async (req, res) => {
   try {
     const { data, format, usePro } = req.body;
     const corrected = await checkSpellingBackend(data, format, usePro);
@@ -119,7 +119,7 @@ app.post("/api/gemini/check-spelling", async (req, res) => {
   }
 });
 
-app.post("/api/gemini/update-resume", async (req, res) => {
+app.post(["/api/gemini/update-resume", "/api/update-resume"], async (req, res) => {
   try {
     const { data, instruction, targetJobDescription, format, usePro } = req.body;
     const updated = await updateResumeBackend(data, instruction, targetJobDescription, format, usePro);
@@ -129,7 +129,7 @@ app.post("/api/gemini/update-resume", async (req, res) => {
   }
 });
 
-app.post("/api/gemini/rewrite-phrase", async (req, res) => {
+app.post(["/api/gemini/rewrite-phrase", "/api/rewrite-phrase"], async (req, res) => {
   try {
     const { text, instruction, usePro } = req.body;
     const suggestions = await rewritePhraseBackend(text, instruction, usePro);
@@ -139,7 +139,7 @@ app.post("/api/gemini/rewrite-phrase", async (req, res) => {
   }
 });
 
-app.get("/api/gemini/stats", (req, res) => {
+app.get(["/api/gemini/stats", "/api/stats"], (req, res) => {
   try {
     const usePro = req.query.usePro === 'true';
     const stats = getUsageStatsBackend(usePro);
@@ -149,7 +149,7 @@ app.get("/api/gemini/stats", (req, res) => {
   }
 });
 
-app.post("/api/ocr", async (req, res) => {
+app.post(["/api/ocr", "/api/gemini/ocr"], async (req, res) => {
   try {
     const { base64, mimeType, usePro } = req.body;
     if (!base64 || !mimeType) {

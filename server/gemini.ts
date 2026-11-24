@@ -132,24 +132,20 @@ export const getKeyPool = (): string[] => {
 
 // Standard (free-tier) model pool — tried in priority order
 const FALLBACK_MODELS = [
-  "gemini-2.5-flash",       // 🟢 HIGH RELIABILITY: Fast, resilient & high quality
-  "gemini-2.0-flash",       // 🟢 HIGH SPEED: Low latency
-  "gemini-1.5-flash",       // 🟢 STABLE FALLBACK: Proven broad availability & independent quota
-  "gemini-2.0-flash-lite",  // ⚡ ULTRA-FAST: Lightweight fallback
-  "gemini-3.5-flash",       // 🟡 Active preview tier
-  "gemini-3.8-flash",       // 🟡 State-of-the-art
-  "gemini-3.5-flash-lite",  // ⚡ Lightweight
-  "gemini-3.1-flash-lite",  // ⚡ Ultra-fast
+  "gemini-2.0-flash",       // 🟢 PRIMARY: High speed & official GA model
+  "gemini-1.5-flash",       // 🟢 STABLE WORKHORSE: Broad availability & independent cluster
+  "gemini-2.0-flash-lite",  // ⚡ ULTRA-FAST: 30 RPM, lightweight resilient fallback
+  "gemini-1.5-flash-8b",    // ⚡ HIGH-THROUGHPUT: Fast fallback
+  "gemini-2.5-flash",       // 🟡 Active preview tier
+  "gemini-1.5-pro",         // 🧠 PRO FALLBACK: Deep reasoning
 ];
 
 // Pro model pool — enables deep reasoning when requested
 const PRO_MODELS = [
-  "gemini-2.5-pro",         // 🧠 REASONING: Top-tier precision
-  "gemini-1.5-pro",         // 🧠 PRO FALLBACK: High reasoning capability
-  "gemini-2.5-flash",       // 🟢 HIGH RELIABILITY
-  "gemini-2.0-flash",       // 🟢 HIGH SPEED
-  "gemini-3.1-pro-preview", // 🧠 REASONING
-  "gemini-3.5-flash",       // 🟡 BACKUP
+  "gemini-1.5-pro",         // 🧠 PRO: Proven deep reasoning
+  "gemini-2.5-pro",         // 🧠 ADVANCED REASONING: Top-tier precision
+  "gemini-2.0-flash",       // 🟢 HIGH SPEED & QUALITY
+  "gemini-1.5-flash",       // 🟢 STABLE FALLBACK
 ];
 
 // Per-model cooldown tracking so exhausting one model (e.g. 2.5-flash) NEVER blocks other models (2.0-flash, 1.5-flash, etc.)
@@ -185,13 +181,14 @@ async function withModelFallback<T>(
   }
 
   if (allModelsExhausted) {
-    console.warn(`[${operationName}] Circuit Breaker: All ${models.length} Gemini models are currently cooling down. Failing over to backup engines...`);
-    throw new Error("RATE_LIMITED: All primary Gemini models are temporarily at capacity. Retrying or failing over...");
+    // Never allow a temporary cooldown to freeze the engine completely — reset the primary model and attempt recovery
+    console.warn(`[${operationName}] Circuit Breaker: All models cooling down. Auto-resetting primary model ${models[0]} to attempt immediate recovery...`);
+    modelCooldownMap.delete(models[0]);
   }
 
   let lastError: any;
   let totalAttempts = 0;
-  const maxAttempts = 16;
+  const maxAttempts = 24;
   let allRateLimited = true;
 
   for (const modelId of models) {
@@ -276,7 +273,8 @@ async function withModelFallback<T>(
           errorString.includes("Internal Server Error") ||
           errorString.includes("Service Unavailable") ||
           errorString.includes("UNAVAILABLE") ||
-          errorString.includes("experiencing high demand") ||
+          errorString.includes("overloaded") ||
+          errorString.includes("high demand") ||
           lowerError.includes("model_timeout");
 
         const isModelNotFound =
@@ -318,17 +316,29 @@ async function withModelFallback<T>(
             skipModelToNext = true;
             break; // Break key loop to immediately try next model!
           } else {
-            // Standard RPM rate limit (e.g. 15 requests/min) — short 30-second cooldown
+            // Standard RPM rate limit (e.g. 15 requests/min) — short 30-second cooldown on this key
             health.cooldownUntil = Date.now() + 30_000;
-            console.warn(`[${operationName}] Model ${modelId} hit RPM rate limit with key ${getKeyId(apiKey)}. Cooldown 30s. Trying alternative model/key...`);
+            console.warn(`[${operationName}] Model ${modelId} hit RPM rate limit with key ${getKeyId(apiKey)}. Cooldown 30s. Checking alternative keys/models...`);
+
+            // Check if there are other keys ready for this model
+            const otherKeysReady = availableKeys.some(k => k !== apiKey && Date.now() >= getKeyHealth(k).cooldownUntil);
+            if (!otherKeysReady) {
+              console.warn(`[${operationName}] All keys currently cooling down on ${modelId}. Immediately trying next model in pool...`);
+              skipModelToNext = true;
+              break;
+            }
             continue;
           }
         }
 
         if (isServerError) {
-          health.cooldownUntil = Date.now() + 25_000;
-          console.warn(`[${operationName}] Model ${modelId} hit 503/timeout with key ${getKeyId(apiKey)}. Cooldown 25s.`);
-          continue;
+          // Google 503 / 500 / overloaded / UNAVAILABLE is a MODEL-level capacity issue, NOT an API key issue.
+          // Do NOT penalize the key's cooldown so that the key can immediately be used on the next model!
+          // Put the model on a short cooldown (45 seconds), and immediately jump to the next model in the pool!
+          modelCooldownMap.set(modelId, Date.now() + 45_000);
+          console.warn(`[${operationName}] Model ${modelId} hit 503/server error/high demand. Cooldown 45s on ${modelId}. Immediately switching to next model in pool...`);
+          skipModelToNext = true;
+          break; // Break key loop immediately to hop to next model!
         }
 
         allRateLimited = false;
@@ -350,16 +360,17 @@ async function withModelFallback<T>(
     errorString.includes("RESOURCE_EXHAUSTED") ||
     errorString.includes("Quota exceeded") ||
     errorString.includes("GEMINI_DAILY_EXHAUSTED") ||
-    errorString.includes("experiencing high demand");
+    errorString.includes("experiencing high demand") ||
+    errorString.includes("overloaded");
 
   const lowerLastError = errorString.toLowerCase();
   const isTimeout = errorString.includes("MODEL_TIMEOUT") || lowerLastError.includes("timeout");
 
   if (isActualRateLimit && allRateLimited) {
-    const isGoogleOutage = errorString.includes("503") || errorString.includes("experiencing high demand");
+    const isGoogleOutage = errorString.includes("503") || errorString.includes("experiencing high demand") || errorString.includes("overloaded");
     if (isGoogleOutage) {
       throw new Error(
-        "RATE_LIMITED: Google's AI servers are currently experiencing high demand across all regions. This is a temporary Google infrastructure issue — please retry in 30-60 seconds."
+        "RATE_LIMITED: Google AI clusters are experiencing high demand across regions. Please retry in a few seconds."
       );
     }
     throw new Error(
@@ -369,7 +380,7 @@ async function withModelFallback<T>(
 
   if (isTimeout && allRateLimited) {
     throw new Error(
-      "RATE_LIMITED: AI models are not responding right now (Google infrastructure load). Please retry in 30-60 seconds."
+      "RATE_LIMITED: AI models are taking longer than usual to respond. Please retry in a moment."
     );
   }
 
@@ -487,7 +498,7 @@ const saveResumeTool: FunctionDeclaration = {
         }
       }
     },
-    required: ["fullName", "experience", "education", "customSections"],
+    required: ["fullName"],
   },
 };
 
@@ -1248,6 +1259,9 @@ STRICT DATA EXTRACTOR DIRECTIVE:
 
     if (data) {
        if (!data.contactInfo) data.contactInfo = {};
+       if (!data.experience) data.experience = [];
+       if (!data.education) data.education = [];
+       if (!data.customSections) data.customSections = [];
 
        // Clean bullets
        if (data.summary) {

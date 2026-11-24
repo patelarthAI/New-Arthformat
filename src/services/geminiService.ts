@@ -27,13 +27,13 @@ const GOOGLE_OUTAGE_PHRASES = [
   "google's ai servers",
 ];
 
-// Client-side retry with countdown — runs in browser, no timeout issues, supports user abort
+// Client-side retry with countdown — runs in browser, supports auto-failover and user abort
 async function fetchWithRetry(
   url: string,
   init: RequestInit,
   onCountdown?: (secondsLeft: number) => void,
   maxRetries = 2,
-  retryDelaySec = 8,
+  retryDelaySec = 5,
   signal?: AbortSignal
 ): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -47,26 +47,18 @@ async function fetchWithRetry(
 
     const errorData = await response.clone().json().catch(() => ({}));
     const errorMsg: string = errorData.error || "";
-    const lowerMsg = errorMsg.toLowerCase();
 
     const isRateLimit =
       errorMsg.startsWith(RATE_LIMIT_PREFIX) ||
       response.status === 429 ||
-      response.status === 503;
+      response.status === 503 ||
+      response.status === 504;
 
-    // FAST-FAIL: If this is a Google-wide outage, stop retrying immediately.
-    // Waiting 8s × 2 = 16s just to get the same "all regions down" error is pointless.
-    const isGoogleOutage = GOOGLE_OUTAGE_PHRASES.some(phrase => lowerMsg.includes(phrase));
-    if (isGoogleOutage) {
-      console.warn("[geminiService] Google-wide outage detected — skipping retries:", errorMsg);
-      return response; // Return immediately so caller shows the error
-    }
-
-    // If not a rate limit error, or we've exhausted retries, give up
+    // If not a rate limit / temporary server load error, or we've exhausted retries, give up
     if (!isRateLimit || attempt >= maxRetries) return response;
 
-    // Rate limited — count down then retry
-    console.log(`[geminiService] Rate limited (${url}). Waiting ${retryDelaySec}s before retry ${attempt + 1}/${maxRetries}...`);
+    // Rate limited / high demand — count down then retry automatically
+    console.log(`[geminiService] High load or rate limited (${url}). Waiting ${retryDelaySec}s before retry ${attempt + 1}/${maxRetries}...`);
     for (let s = retryDelaySec; s > 0; s--) {
       if (signal?.aborted) {
         throw new DOMException("Extraction cancelled by user", "AbortError");
