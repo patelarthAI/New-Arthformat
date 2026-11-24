@@ -131,12 +131,13 @@ export const getKeyPool = (): string[] => {
 // ──────────────────────────────────────────────────────────────────
 
 // Standard (free-tier) model pool — tried in priority order
+// Prioritize the two 500-RPD / 15-RPM models first (4,000 total RPD across 4 keys) before touching 20-RPD models
 const FALLBACK_MODELS = [
-  "gemini-3.5-flash-lite",  // 🟢 PRIMARY: 100% verified live & active across all keys
-  "gemini-3.6-flash",       // 🟢 HIGH CAPACITY: Full-power flash
-  "gemini-3.1-flash-lite",  // ⚡ ULTRA-FAST: Resilient lightweight fallback
-  "gemini-3.5-flash",       // 🟡 Active preview tier
-  "gemini-3.8-flash",       // 🟡 State-of-the-art
+  "gemini-3.5-flash-lite",  // 🟢 PRIMARY: 500 RPD, 15 RPM/key (2,000 RPD across 4 keys)
+  "gemini-3.1-flash-lite",  // 🟢 SECONDARY: 500 RPD, 15 RPM/key (2,000 RPD across 4 keys)
+  "gemini-3.6-flash",       // 🟡 OVERFLOW: 20 RPD/key full-power flash
+  "gemini-3.8-flash",       // 🟡 OVERFLOW: 20 RPD/key state-of-the-art
+  "gemini-3.5-flash",       // 🟡 OVERFLOW: 20 RPD/key active tier
 ];
 
 // Pro model pool — enables deep reasoning when requested
