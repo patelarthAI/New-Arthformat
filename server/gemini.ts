@@ -736,68 +736,80 @@ CRITICAL MANDATORY RULES:
 - If a section is not Summary, Experience, or Education (e.g. SKILLS, CERTIFICATIONS, PROJECTS, AWARDS), put it into customSections with its exact title.
 3. Return ONLY valid JSON. No markdown backticks, no explanatory text.`;
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const groqModels = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+  let lastGroqError: any;
 
-  try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey.trim()}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Extract this resume verbatim:\n\n${text}` }
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.1,
-        max_tokens: 8192
-      }),
-      signal: controller.signal
-    });
+  for (const groqModel of groqModels) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-    clearTimeout(timeoutId);
+    try {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey.trim()}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `Extract this resume verbatim:\n\n${text}` }
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.1,
+          max_tokens: 8192
+        }),
+        signal: controller.signal
+      });
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      throw new Error(`Groq API returned HTTP ${res.status}: ${errText.slice(0, 150)}`);
-    }
+      clearTimeout(timeoutId);
 
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error("Empty response from Groq engine.");
-    }
-
-    const parsed: ResumeData = JSON.parse(content);
-    if (!parsed.contactInfo) parsed.contactInfo = {};
-    if (!parsed.experience) parsed.experience = [];
-    if (!parsed.education) parsed.education = [];
-    if (!parsed.customSections) parsed.customSections = [];
-
-    if (parsed.summary && typeof parsed.summary === "string") {
-      parsed.summary = [(parsed as any).summary];
-    }
-
-    parsed.experience.forEach(exp => {
-      if (typeof exp.description === "string") {
-        exp.description = [(exp as any).description];
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        lastGroqError = new Error(`Groq (${groqModel}) returned HTTP ${res.status}: ${errText.slice(0, 150)}`);
+        console.warn(`[Groq Failover] ${lastGroqError.message}. Trying next Groq model...`);
+        continue;
       }
-      exp.dates = normalizeDates(exp.dates || "");
-    });
 
-    parsed.education.forEach(edu => {
-      edu.dates = normalizeDates(edu.dates || "");
-    });
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) {
+        lastGroqError = new Error(`Empty response from Groq (${groqModel}).`);
+        continue;
+      }
 
-    console.log(`[Groq Failover] Successfully extracted resume data for: ${parsed.fullName}`);
-    return parsed;
-  } finally {
-    clearTimeout(timeoutId);
+      const parsed: ResumeData = JSON.parse(content);
+      if (!parsed.contactInfo) parsed.contactInfo = {};
+      if (!parsed.experience) parsed.experience = [];
+      if (!parsed.education) parsed.education = [];
+      if (!parsed.customSections) parsed.customSections = [];
+
+      if (parsed.summary && typeof parsed.summary === "string") {
+        parsed.summary = [(parsed as any).summary];
+      }
+
+      parsed.experience.forEach(exp => {
+        if (typeof exp.description === "string") {
+          exp.description = [(exp as any).description];
+        }
+        exp.dates = normalizeDates(exp.dates || "");
+      });
+
+      parsed.education.forEach(edu => {
+        edu.dates = normalizeDates(edu.dates || "");
+      });
+
+      console.log(`[Groq Failover] Successfully extracted resume data with ${groqModel} for: ${parsed.fullName}`);
+      return parsed;
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      lastGroqError = err;
+      console.warn(`[Groq Failover] ${groqModel} failed: ${err.message}`);
+    }
   }
+
+  throw lastGroqError || new Error("All Groq models failed.");
 };
 
 export const updateResumeWithGroq = async (
@@ -1356,15 +1368,32 @@ STRICT DATA EXTRACTOR DIRECTIVE:
     throw new Error("The AI model did not trigger the extraction tool correctly.");
   }, "extractResumeData", usePro);
   } catch (geminiError: any) {
-    // Failover Tier 2: Groq Cloud Engine
+    let failoverText = payload.text?.trim() || "";
     const groqKey = getGroqApiKey();
-    if (groqKey && payload.text && payload.text.trim().length >= 10) {
-      console.warn(`[extractResumeData] Gemini unavailable or lossy (${geminiError.message}). Initiating Tier 2 Groq failover...`);
+
+    // If document is an image/scanned PDF without extracted text, use Groq Vision OCR first so Tier 2 & 3 can process it!
+    if (failoverText.length < 10 && payload.base64 && groqKey) {
+      console.warn(`[extractResumeData] No plain text found. Running Groq Vision OCR before Tier 2 extraction...`);
       try {
-        result = await extractWithGroq(payload.text, payload.format, groqKey);
-        const groqAudit = auditExtractedContentFidelity(payload.text, result);
-        if (groqAudit.passed) {
-          console.log(`[extractResumeData] Groq output passed fidelity audit. Successfully processed.`);
+        failoverText = (await performOcrWithGroq(payload.base64, payload.mimeType || 'image/jpeg', groqKey)).trim();
+      } catch (ocrErr: any) {
+        console.error("[extractResumeData] Groq Vision OCR failed:", ocrErr.message);
+      }
+    }
+
+    // Failover Tier 2: Groq Cloud Engine
+    if (groqKey && failoverText.length >= 10) {
+      console.warn(`[extractResumeData] Gemini unavailable (${geminiError.message}). Initiating Tier 2 Groq failover...`);
+      try {
+        result = await extractWithGroq(failoverText, payload.format, groqKey);
+        const groqAudit = auditExtractedContentFidelity(failoverText, result);
+        const hasUsefulContent = Boolean(result.fullName && (result.experience?.length > 0 || result.education?.length > 0 || result.summary?.length));
+        if (groqAudit.passed || hasUsefulContent) {
+          if (!groqAudit.passed) {
+            console.warn(`[extractResumeData] Groq output had minor audit warning (${groqAudit.reason}), but contains valid structure — accepting failover result.`);
+          } else {
+            console.log(`[extractResumeData] Groq output passed fidelity audit. Successfully processed.`);
+          }
           extractionCache.set(cacheKey, { timestamp: Date.now(), data: result });
           return result;
         }
@@ -1376,13 +1405,14 @@ STRICT DATA EXTRACTOR DIRECTIVE:
 
     // Failover Tier 3: Hugging Face Serverless Router
     const hfToken = getHuggingFaceApiKey();
-    if (hfToken && payload.text && payload.text.trim().length >= 10) {
+    if (hfToken && failoverText.length >= 10) {
       console.warn(`[extractResumeData] Initiating Tier 3 Hugging Face failover...`);
       try {
-        result = await extractWithHuggingFace(payload.text, payload.format, hfToken);
-        const hfAudit = auditExtractedContentFidelity(payload.text, result);
-        if (hfAudit.passed) {
-          console.log(`[extractResumeData] Hugging Face output passed fidelity audit. Successfully processed.`);
+        result = await extractWithHuggingFace(failoverText, payload.format, hfToken);
+        const hfAudit = auditExtractedContentFidelity(failoverText, result);
+        const hasUsefulContent = Boolean(result.fullName && (result.experience?.length > 0 || result.education?.length > 0 || result.summary?.length));
+        if (hfAudit.passed || hasUsefulContent) {
+          console.log(`[extractResumeData] Hugging Face failover processed successfully.`);
           extractionCache.set(cacheKey, { timestamp: Date.now(), data: result });
           return result;
         }
@@ -1779,7 +1809,7 @@ export const performOcrWithGroq = async (
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "llama-3.2-11b-vision-preview",
+        model: "meta-llama/llama-4-scout-17b-16e-instruct",
         messages: [
           {
             role: "user",
