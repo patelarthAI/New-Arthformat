@@ -198,11 +198,14 @@ const App: React.FC = () => {
     if (appState === AppState.WAITING_APPROVAL && pendingResumeId && !showAdmin) {
       const pollStartTime = Date.now();
       const MAX_WAIT_MS = 5 * 60 * 1000; // 5 minutes ceiling
+      let isHandlingResolution = false;
       console.log("Polling for approval status for resume:", pendingResumeId);
 
       intervalId = setInterval(async () => {
+        if (isHandlingResolution) return;
         // Enforce hard 5-minute stop so client stops polling and doesn't load Vercel/Firebase
         if (Date.now() - pollStartTime >= MAX_WAIT_MS) {
+          isHandlingResolution = true;
           clearInterval(intervalId);
           setPendingResumeId(null);
           safeStorage.removeItem('pendingResumeId');
@@ -219,9 +222,10 @@ const App: React.FC = () => {
               'Expires': '0'
             }
           });
-          if (res.ok) {
+          if (res.ok && !isHandlingResolution) {
             const data = await res.json();
             if (data.status === 'approved') {
+              isHandlingResolution = true;
               clearInterval(intervalId);
               setPendingResumeId(null);
               safeStorage.removeItem('pendingResumeId');
@@ -230,6 +234,7 @@ const App: React.FC = () => {
               }
               processApprovedResume(stagedContent || data.content);
             } else if (data.status === 'rejected') {
+              isHandlingResolution = true;
               clearInterval(intervalId);
               setPendingResumeId(null);
               safeStorage.removeItem('pendingResumeId');

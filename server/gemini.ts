@@ -53,7 +53,8 @@ const getKeyHealth = (key: string): KeyHealth => {
   return health;
 };
 
-let currentKeyIndex = 0;
+// Randomize initial key offset on cold start so Vercel serverless instances spread load evenly across all keys
+let currentKeyIndex = Math.floor(Math.random() * 100);
 let totalRequests = 0;
 let rateLimitHits = 0;
 
@@ -150,8 +151,17 @@ const PRO_MODELS = [
 // Per-model cooldown tracking so exhausting one model (e.g. 2.5-flash) NEVER blocks other models (2.0-flash, 1.5-flash, etc.)
 const modelCooldownMap = new Map<string, number>();
 
-// In-memory extraction cache to preserve free quota across repeated user clicks
+// Per-(model, key) RPM cooldown tracking so a 429 on one model never locks out that key on other models
+const keyModelCooldownMap = new Map<string, number>();
+const getKeyModelCooldown = (modelId: string, apiKey: string): number =>
+  keyModelCooldownMap.get(`${modelId}:${apiKey}`) || 0;
+const setKeyModelCooldown = (modelId: string, apiKey: string, until: number): void => {
+  keyModelCooldownMap.set(`${modelId}:${apiKey}`, until);
+};
+
+// In-memory extraction cache & in-flight deduplication to preserve free quota across repeated/concurrent clicks
 const extractionCache = new Map<string, { data: ResumeData; timestamp: number }>();
+const inFlightExtractions = new Map<string, Promise<ResumeData>>();
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 async function withModelFallback<T>(
@@ -217,9 +227,9 @@ async function withModelFallback<T>(
       const apiKey = availableKeys[keyIndex];
       const health = getKeyHealth(apiKey);
 
-      // If key is temporarily in short cooldown (e.g. 30s RPM), check if another key is ready
-      if (Date.now() < health.cooldownUntil) {
-        const hasReadyKey = availableKeys.some(k => Date.now() >= getKeyHealth(k).cooldownUntil);
+      // If this (model, key) pair is temporarily in short cooldown (e.g. 30s RPM), check if another key is ready for this model
+      if (Date.now() < getKeyModelCooldown(modelId, apiKey)) {
+        const hasReadyKey = availableKeys.some(k => Date.now() >= getKeyModelCooldown(modelId, k));
         if (hasReadyKey) {
           continue; // Pick a ready key first
         }
@@ -232,7 +242,7 @@ async function withModelFallback<T>(
         const result = await Promise.race([
           operation(modelId, apiKey),
           new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error(`MODEL_TIMEOUT: ${modelId} exceeded 30s`)), 30000)
+            setTimeout(() => reject(new Error(`MODEL_TIMEOUT: ${modelId} exceeded 15s`)), 15000)
           )
         ]);
 
@@ -257,7 +267,6 @@ async function withModelFallback<T>(
           errorString.includes("RESOURCE_EXHAUSTED");
 
         const isInvalidKey =
-          errorStatus === 400 ||
           errorStatus === 403 ||
           errorStatus === 401 ||
           errorString.includes("API key not valid") ||
@@ -315,12 +324,12 @@ async function withModelFallback<T>(
             skipModelToNext = true;
             break; // Break key loop to immediately try next model!
           } else {
-            // Standard RPM rate limit (e.g. 15 requests/min) — short 30-second cooldown on this key
-            health.cooldownUntil = Date.now() + 30_000;
-            console.warn(`[${operationName}] Model ${modelId} hit RPM rate limit with key ${getKeyId(apiKey)}. Cooldown 30s. Checking alternative keys/models...`);
+            // Standard RPM rate limit (e.g. 15 requests/min) — short 30-second cooldown on this (model, key) pair ONLY
+            setKeyModelCooldown(modelId, apiKey, Date.now() + 30_000);
+            console.warn(`[${operationName}] Model ${modelId} hit RPM rate limit with key ${getKeyId(apiKey)}. Cooldown 30s on (${modelId}, key). Checking alternative keys/models...`);
 
-            // Check if there are other keys ready for this model
-            const otherKeysReady = availableKeys.some(k => k !== apiKey && Date.now() >= getKeyHealth(k).cooldownUntil);
+            // Check if there are other keys ready for THIS model
+            const otherKeysReady = availableKeys.some(k => k !== apiKey && Date.now() >= getKeyModelCooldown(modelId, k));
             if (!otherKeysReady) {
               console.warn(`[${operationName}] All keys currently cooling down on ${modelId}. Immediately trying next model in pool...`);
               skipModelToNext = true;
@@ -341,6 +350,11 @@ async function withModelFallback<T>(
         }
 
         allRateLimited = false;
+        // On model output defect / fidelity / 400 parameter issue, hop to next model instead of burning all keys on the same model
+        if (errorString.includes("MODEL_FIDELITY_FAILURE") || errorString.includes("MODEL_DEFECT") || errorStatus === 400) {
+          skipModelToNext = true;
+          break;
+        }
         continue;
       }
     }
@@ -737,12 +751,16 @@ CRITICAL MANDATORY RULES:
 - If a section is not Summary, Experience, or Education (e.g. SKILLS, CERTIFICATIONS, PROJECTS, AWARDS), put it into customSections with its exact title.
 3. Return ONLY valid JSON. No markdown backticks, no explanatory text.`;
 
-  const groqModels = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+  const groqModels = [
+    "meta-llama/llama-4-scout-17b-16e-instruct", // 30K TPM on Groq free tier
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant"
+  ];
   let lastGroqError: any;
 
   for (const groqModel of groqModels) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
     try {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -1164,6 +1182,15 @@ export const extractResumeDataBackend = async (
     return JSON.parse(JSON.stringify(cached.data));
   }
 
+  // Deduplicate concurrent identical requests so double-clicks / retries share one single AI call
+  const existingFlight = inFlightExtractions.get(cacheKey);
+  if (existingFlight) {
+    console.log(`[extractResumeData] Deduplicating concurrent request for key: ${cacheKey.substring(0, 40)}...`);
+    const sharedResult = await existingFlight;
+    return JSON.parse(JSON.stringify(sharedResult));
+  }
+
+  const runExtraction = async (): Promise<ResumeData> => {
   let result: ResumeData;
   try {
     result = await withModelFallback(async (modelId, apiKey) => {
@@ -1232,6 +1259,9 @@ export const extractResumeDataBackend = async (
       config: {
         maxOutputTokens: 8192,
         temperature: 0.15,
+        thinkingConfig: {
+          thinkingLevel: usePro ? ThinkingLevel.MEDIUM : ThinkingLevel.LOW,
+        },
         systemInstruction: `
 STRICT DATA EXTRACTOR DIRECTIVE:
 1. ZERO ALTERATION: You are strictly FORBIDDEN from changing, rephrasing, rewriting, polishing, summarizing, or modifying ANY words, bullet points, or sentences. Preserve 100% exact verbatim original text.
@@ -1428,6 +1458,13 @@ STRICT DATA EXTRACTOR DIRECTIVE:
 
   extractionCache.set(cacheKey, { timestamp: Date.now(), data: result });
   return result;
+  };
+
+  const flightPromise = runExtraction().finally(() => {
+    inFlightExtractions.delete(cacheKey);
+  });
+  inFlightExtractions.set(cacheKey, flightPromise);
+  return flightPromise;
 };
 
 export const analyzeGrammarBackend = async (data: ResumeData, format: ResumeFormat, usePro: boolean = false): Promise<GrammarIssue[]> => {
@@ -1486,6 +1523,9 @@ export const analyzeGrammarBackend = async (data: ResumeData, format: ResumeForm
         config: {
           maxOutputTokens: 8192,
           temperature: 0.15,
+          thinkingConfig: {
+            thinkingLevel: usePro ? ThinkingLevel.MEDIUM : ThinkingLevel.LOW,
+          },
           systemInstruction: `
   ACT AS A SMART RESUME COACH. You are allowed to fix objective spelling and grammar errors, and provide high-impact stylistic improvements. You MUST strictly enforce the rule against using first-person pronouns (I, me, my, we, etc.) in resumes. You are forbidden from hallucinating facts, changing metrics, or altering dates.
   `,
@@ -1559,6 +1599,9 @@ export const checkSpellingBackend = async (data: ResumeData, format: ResumeForma
         config: {
           maxOutputTokens: 8192,
           temperature: 0.15,
+          thinkingConfig: {
+            thinkingLevel: usePro ? ThinkingLevel.MEDIUM : ThinkingLevel.LOW,
+          },
           systemInstruction: `
   ACT AS A STRICT PROOFREADER. You are only allowed to fix clear, objective spelling and grammar errors. 
   - You are strictly forbidden from summarizing, rephrasing, shortening, or deleting any experiences, bullet points, or sections. 
@@ -1670,6 +1713,9 @@ export const updateResumeBackend = async (
         config: {
           maxOutputTokens: 8192,
           temperature: 0.15,
+          thinkingConfig: {
+            thinkingLevel: usePro ? ThinkingLevel.MEDIUM : ThinkingLevel.LOW,
+          },
           systemInstruction: `
   ACT AS AN EXPERT RESUME EDITOR. Modify the JSON resume data strictly following the user's instructions. 
   - You are forbidden from summarizing, shortening, deleting, or omitting any experiences, custom sections, or bullet points unless the user explicitly instructs you to do so.
@@ -1753,6 +1799,9 @@ export const rewritePhraseBackend = async (
         config: {
           maxOutputTokens: 8192,
           temperature: 0.3,
+          thinkingConfig: {
+            thinkingLevel: usePro ? ThinkingLevel.MEDIUM : ThinkingLevel.LOW,
+          },
           systemInstruction: `
   ACT AS AN EXECUTIVE RESUME COACH. Provide 3 high-impact direct replacement options matching the style instruction. Use the 'save_rewrite_suggestions' tool.
   `,
@@ -1882,6 +1931,9 @@ export const performOcrBackend = async (
         config: {
           maxOutputTokens: 8192,
           temperature: 0.1,
+          thinkingConfig: {
+            thinkingLevel: ThinkingLevel.LOW,
+          },
         }
       });
 
